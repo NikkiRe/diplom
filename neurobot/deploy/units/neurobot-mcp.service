@@ -1,0 +1,30 @@
+# Агентский MCP-сервер по streamable HTTP (пакет 1 — ros_mcp_server лаборатории с патчем neurobot, пишет во вход
+# исполнителя /cmd_vel_agent, а не в /cmd_vel; или прокси лаборатории с патчем — к её воркерам neurobot-labworker@).
+# ROS-окружение не нужно: сервер ходит в граф через rosbridge или воркер. Готовность — ExecStartPost:
+# initialize + tools/list. При остановке патч сам шлёт ноль (atexit).
+[Unit]
+Description=neurobot: MCP-сервер робота (HTTP)
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+After=neurobot-rosbridge.service
+@AFTER_LABWORKERS@
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=@USER@
+Group=@GROUP@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1
+ExecStartPre=@PREFIX@/bin/neurobot precheck mcp
+ExecStart=@PREFIX@/bin/neurobot-run --var NEUROBOT_MCP_CMD
+ExecStartPost=@PREFIX@/bin/neurobot wait-mcp
+Restart=always
+RestartSec=1
+TimeoutStartSec=60
+TimeoutStopSec=10
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target

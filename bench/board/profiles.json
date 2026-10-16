@@ -1,0 +1,165 @@
+{
+  "format": "board-profiles/1",
+  "memory": {
+    "levels_mib": [1024, 512, 256, 128, 96, 64, 48, 32, 24, 16],
+    "gomemlimit_pct": 45
+  },
+  "cpu": {
+    "quota_pct": [400, 200, 100, 50, 25, 10, 5],
+    "cores": [4, 2, 1],
+    "period_ms": 20
+  },
+  "tasks_max": 256,
+  "disk": {
+    "nvme": {
+      "source": "без ограничений: io.max не задаётся, скорость — виртуального диска ВМ"
+    },
+    "sd-good": {
+      "source": "SD Association: шина UHS-I SDR50/DDR50 — 50 МБ/с (sdcard.org, Bus Speed); U3 — не менее 30 МБ/с последовательной записи (Speed Class); A1 — не менее 1500/500 IOPS чтения/записи блоками 4 КиБ (Application Performance Class; A2 требует поддержки командной очереди хостом)",
+      "rbps": 50000000,
+      "wbps": 30000000,
+      "riops": 1500,
+      "wiops": 500
+    },
+    "sd-slow": {
+      "source": "SD Association: шина High Speed — 25 МБ/с, Class 10 — 10 МБ/с записи; IOPS без класса A не гарантируются — 1000/100 допущение",
+      "rbps": 25000000,
+      "wbps": 10000000,
+      "riops": 1000,
+      "wiops": 100
+    },
+    "sd-awful": {
+      "source": "SD Association: шина Default Speed — 12,5 МБ/с, Class 4 — 4 МБ/с записи; IOPS 300/20 — допущение (дешёвая карта без класса A)",
+      "rbps": 12500000,
+      "wbps": 4000000,
+      "riops": 300,
+      "wiops": 20
+    }
+  },
+  "net": {
+    "queue": {
+      "ms": 1000,
+      "min_packets": 64,
+      "max_packets": 10000,
+      "source": "очередь узкого места сверх задержки — 1 с при скорости профиля: сотовые сети держат буферы на секунды RTT (Jiang et al., Tackling Bufferbloat in 3G/4G Networks, IMC 2012, doi:10.1145/2398776.2398810); значения 1 с, 64 и 10000 пакетов — допущение. Мелкая очередь (100 мс) на стенде давала хвостовые потери, на которых TCP прокси Lima срывался: одна и та же загрузка 3,7 МБ по 4g — от 2,8 до 102 с (README, «Решения»)"
+    },
+    "schedule_min_step_s": 0.1,
+    "profiles": {
+      "lan": {
+        "source": "Gigabit Ethernet (порт Jetson Nano Developer Kit); задержка и потери не добавляются — остаётся база стенда",
+        "down": {"rate_kbit": 1000000},
+        "up": {"rate_kbit": 1000000}
+      },
+      "wifi": {
+        "source": "допущение: 802.11n 2,4 ГГц 1×1 у точки доступа (канальная скорость MCS7 — 65 Мбит/с, полезная — около половины), RTT 6 ± 4 мс",
+        "down": {"rate_kbit": 30000, "delay_ms": 3, "jitter_ms": 2},
+        "up": {"rate_kbit": 30000, "delay_ms": 3, "jitter_ms": 2}
+      },
+      "wifi-weak": {
+        "source": "допущение: край зоны покрытия (MCS0–1), RTT 30 ± 20 мс, 1 % потерь, оставшихся после повторов MAC",
+        "down": {"rate_kbit": 4000, "delay_ms": 15, "jitter_ms": 10, "loss_pct": 1},
+        "up": {"rate_kbit": 2000, "delay_ms": 15, "jitter_ms": 10, "loss_pct": 1}
+      },
+      "4g": {
+        "source": "WebPageTest, settings/connectivity.ini.sample, профиль LTE: 12/12 Мбит/с, RTT 70 мс, без потерь",
+        "down": {"rate_kbit": 12000, "delay_ms": 35},
+        "up": {"rate_kbit": 12000, "delay_ms": 35}
+      },
+      "3g": {
+        "source": "WebPageTest, settings/connectivity.ini.sample, профиль 3G: 1,6 Мбит/с / 768 кбит/с, RTT 300 мс",
+        "down": {"rate_kbit": 1600, "delay_ms": 150},
+        "up": {"rate_kbit": 768, "delay_ms": 150}
+      },
+      "slow-3g": {
+        "source": "WebPageTest, settings/connectivity.ini.sample, профиль 3GSlow: 400/400 кбит/с, RTT 400 мс",
+        "down": {"rate_kbit": 400, "delay_ms": 200},
+        "up": {"rate_kbit": 400, "delay_ms": 200}
+      },
+      "edge": {
+        "source": "WebPageTest, settings/connectivity.ini.sample, профиль Edge: 240/200 кбит/с, RTT 840 мс",
+        "down": {"rate_kbit": 240, "delay_ms": 420},
+        "up": {"rate_kbit": 200, "delay_ms": 420}
+      },
+      "gprs": {
+        "source": "3GPP TS 43.064: CS-2 — 12,0 кбит/с на слот без заголовков RLC/MAC; TS 45.002, класс мультислота 10 в режиме 3+2 — 36/24 кбит/с; RTT ≈ 1000 мс — Chakravorty, Cartwright, Pratt, Practical Experience with TCP over GPRS, IEEE GLOBECOM 2002",
+        "down": {"rate_kbit": 36, "delay_ms": 500},
+        "up": {"rate_kbit": 24, "delay_ms": 500}
+      },
+      "lossy": {
+        "source": "скорость и RTT — как 4g; потери пачками по модели Гилберта–Эллиотта (netem loss gemodel, tc-netem(8)): p = 1 %, r = 30 %, 1−h = 70 %, 1−k = 0 % — допущение (в среднем ≈ 2,3 % на направление, пачка в плохом состоянии ≈ 3 пакета)",
+        "down": {
+          "rate_kbit": 12000,
+          "delay_ms": 35,
+          "gemodel": {"p_pct": 1, "r_pct": 30, "bad_loss_pct": 70, "good_loss_pct": 0}
+        },
+        "up": {
+          "rate_kbit": 12000,
+          "delay_ms": 35,
+          "gemodel": {"p_pct": 1, "r_pct": 30, "bad_loss_pct": 70, "good_loss_pct": 0}
+        }
+      },
+      "satellite": {
+        "source": "геостационарный спутник: RTT не меньше 558 мс на одном переходе (RFC 2488, разд. 2) — берём 600 мс; 10 Мбит/с вниз / 2 Мбит/с вверх — допущение",
+        "down": {"rate_kbit": 10000, "delay_ms": 300},
+        "up": {"rate_kbit": 2000, "delay_ms": 300}
+      },
+      "offline": {
+        "source": "обрыв: теряется всё (netem loss 100 %), интерфейс остаётся поднятым — как при пропаже радиосигнала",
+        "down": {"loss_pct": 100},
+        "up": {"loss_pct": 100}
+      },
+      "flaky": {
+        "source": "допущение: 10 с связи по wifi, 5 с обрыва, по кругу",
+        "schedule": {
+          "repeat": true,
+          "steps": [
+            {"profile": "wifi", "for_s": 10},
+            {"profile": "offline", "for_s": 5}
+          ]
+        }
+      }
+    }
+  },
+  "boards": {
+    "jetson-nano-4g": {
+      "basis": "Jetson Nano Developer Kit 4 ГБ: 4× Cortex-A57 1,43 ГГц, microSD, GbE (research/new_topic/landscape/L4_jetson_nano.md); стеку — 1024 МиБ из общей с GPU памяти (допущение); CPU — допущение до calibrate",
+      "memory": 1024,
+      "cpu": 50,
+      "cores": 4,
+      "disk": "sd-good",
+      "net": "lan"
+    },
+    "jetson-nano-2g": {
+      "basis": "Jetson Nano 2GB Developer Kit: те же 4× Cortex-A57, 2 ГБ, microSD, USB-адаптер Wi-Fi в комплекте (L4_jetson_nano.md); стеку — 512 МиБ (допущение); CPU — допущение до calibrate",
+      "memory": 512,
+      "cpu": 50,
+      "cores": 4,
+      "disk": "sd-good",
+      "net": "wifi"
+    },
+    "pi-zero-2w": {
+      "basis": "Raspberry Pi Zero 2 W: 4× Cortex-A53 1 ГГц, 512 МБ, только Wi-Fi 2,4 ГГц 802.11 b/g/n, microSD (raspberrypi.com); стеку — 256 МиБ (допущение); CPU — допущение до calibrate",
+      "memory": 256,
+      "cpu": 25,
+      "cores": 4,
+      "disk": "sd-slow",
+      "net": "wifi"
+    },
+    "potato": {
+      "basis": "условная слабая плата — допущение: одно медленное ядро, 64 МиБ, плохая карта, 3G",
+      "memory": 64,
+      "cpu": 10,
+      "cores": 1,
+      "disk": "sd-awful",
+      "net": "3g"
+    },
+    "abyss": {
+      "basis": "нижняя граница лестницы — допущение: минимальные уровни каждой оси",
+      "memory": 16,
+      "cpu": 5,
+      "cores": 1,
+      "disk": "sd-awful",
+      "net": "gprs"
+    }
+  }
+}

@@ -1,0 +1,18 @@
+# twist_mux двойника — входы, приоритеты и таймауты как на роботе (R7a §1.5: articubot_one config/twist_mux.yaml).
+# Выход переименовывает twin.launch.py: cmd_vel_out → /diff_cont/cmd_vel_unstamped.
+twist_mux:
+  ros__parameters:
+    use_stamped: false                   # Twist, как twist_mux Foxy на роботе (в Jazzy по умолчанию TwistStamped)
+    topics:
+      navigation:
+        topic: cmd_vel                   # единственный писатель — safety_gate (neurobot/safety)
+        timeout: 0.5
+        priority: 10
+      tracker:
+        topic: cmd_vel_tracker
+        timeout: 0.5
+        priority: 20
+      joystick:
+        topic: cmd_vel_joy
+        timeout: 0.5
+        priority: 100

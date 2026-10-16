@@ -1,0 +1,46 @@
+{
+  "format": "sysfsim/1",
+  "name": "dense",
+  "description": "Плотные 15 минут ночью: перегрев кухни (нужен вентилятор), долго открытая дверь, движение ночью, душ, протечка, сброс DS18B20 в 85 °C, исчезновение DHT11, 7 вопросов",
+  "duration_s": 900,
+  "start": "22:55",
+  "events": [
+    {"t": 30, "kind": "heat", "zone": "kitchen", "rise_c": 25, "duration_s": 760, "note": "духовку оставили включённой"},
+    {"t": 40, "kind": "door", "device": "door_entry", "duration_s": 420, "note": "входную дверь не закрыли"},
+    {"t": 60, "kind": "moisture", "zone": "bathroom", "rh_rise": 45, "duration_s": 480, "note": "душ"},
+    {"t": 60, "kind": "heat", "zone": "bathroom", "rise_c": 3, "duration_s": 480, "note": "душ"},
+    {"t": 150, "kind": "heat", "zone": "boiler_pipe", "rise_c": 30, "duration_s": 500, "note": "котёл греет"},
+    {"t": 200, "kind": "load", "level": 0.8, "duration_s": 120, "note": "плата занята"},
+    {"t": 330, "kind": "motion", "device": "pir_hall", "duration_s": 45, "note": "кто-то в прихожей после 23:00"},
+    {"t": 520, "kind": "leak", "device": "bathroom_leak", "duration_s": 240, "note": "вода под стиральной машиной"}
+  ],
+  "faults": [
+    {"t": 120, "kind": "por85", "device": "boiler_pipe_ds18b20", "duration_s": 30, "note": "сброс питания: в регистре 85 °C"},
+    {"t": 150, "kind": "spike", "device": "kitchen_bme280", "property": "temperature", "amplitude": 12, "duration_s": 1},
+    {"t": 240, "kind": "disconnect", "device": "bathroom_dht11", "duration_s": 120, "note": "датчик пропал"},
+    {"t": 380, "kind": "drift", "device": "bathroom_dht11", "property": "humidity", "per_h": -20, "duration_s": 520},
+    {"t": 455, "kind": "bounce", "device": "door_entry", "ms": 20, "pulses": 6, "duration_s": 10, "note": "разболтанный геркон"},
+    {"t": 600, "kind": "noise_burst", "device": "bathroom_leak", "sigma": 0.05, "duration_s": 30, "note": "наводка"},
+    {"t": 700, "kind": "stuck", "device": "boiler_pipe_ds18b20", "duration_s": 90},
+    {"t": 760, "kind": "read_error", "device": "kitchen_bme280", "duration_s": 12},
+    {"t": 820, "kind": "dht_fail_rate", "device": "bathroom_dht11", "p": 0.6, "duration_s": 60},
+    {"rate_per_h": 20, "kind": "spike", "device": "kitchen_bme280", "property": "pressure", "amplitude": 300, "duration_s": 1, "note": "случайные выбросы"}
+  ],
+  "questions": [
+    {"id": "q1", "t": 20, "text": "Какая сейчас температура на кухне?", "expect": {"device": "kitchen_bme280", "property": "temperature"}},
+    {"id": "q2", "t": 100, "text": "Какая влажность в ванной?", "expect": {"device": "bathroom_dht11", "property": "humidity"}},
+    {"id": "q3", "t": 200, "text": "Сколько градусов на трубе котла?", "expect": {"device": "boiler_pipe_ds18b20", "property": "temperature"}},
+    {"id": "q4", "t": 400, "text": "Входная дверь закрыта?", "expect": {"device": "door_entry", "property": "state"}},
+    {"id": "q5", "t": 600, "text": "Вентилятор на кухне включён?", "expect": {"device": "relay_fan", "property": "state"}},
+    {"id": "q6", "t": 700, "text": "Есть ли вода на полу в ванной?", "expect": {"device": "bathroom_leak", "property": "voltage0"}},
+    {"id": "q7", "t": 850, "text": "Как нагрета плата?", "expect": {"device": "board_cpu_thermal", "property": "temperature1"}}
+  ],
+  "situations": [
+    {"id": "s_por85", "kind": "sensor_glitch", "t": 120, "deadline_s": 120, "expect": "notify", "note": "показание 85 °C — сброс датчика, не нагрев"},
+    {"id": "s_sensor_lost", "kind": "sensor_lost", "t": 240, "deadline_s": 120, "expect": "notify"},
+    {"id": "s_door_open", "kind": "door_left_open", "t": 340, "deadline_s": 120, "expect": "notify", "note": "открыта дольше 5 мин"},
+    {"id": "s_night_motion", "kind": "motion_at_night", "when": {"device": "pir_hall", "property": "state", "eq": true, "after": 300}, "deadline_s": 60, "expect": "notify"},
+    {"id": "s_overheat", "kind": "overheat", "when": {"device": "kitchen_bme280", "property": "temperature", "ge": 35}, "deadline_s": 120, "expect": "actuate", "action": {"device": "relay_fan", "property": "state", "value": true}},
+    {"id": "s_leak", "kind": "leak", "when": {"device": "bathroom_leak", "property": "voltage0", "ge": 1.0}, "deadline_s": 60, "expect": "notify"}
+  ]
+}

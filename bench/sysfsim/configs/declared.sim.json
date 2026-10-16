@@ -1,0 +1,39 @@
+{
+  "_comment": "hw-mcp для симулятора bench/sysfsim: корень sysfs по фикстуре GAP2 (init) и чип GPIO с меткой board-sim (каталог <root>/dev/board-sim или модуль gpio-sim). Места, линии и пороги — тестовые, не выбранная периферия ВКР; пороги и шлюз — как в hwmcp/configs/declared.lab.json.",
+  "locations": {
+    "iio:bme280@i2c-1/0x76": "kitchen",
+    "iio:dht11@dht11@4": "bathroom",
+    "iio:ads1115@i2c-1/0x48": "bathroom",
+    "w1:28-0316a2795cff": "boiler_pipe",
+    "hwmon:cpu_thermal": "board"
+  },
+  "names": {
+    "iio:ads1115@i2c-1/0x48": "bathroom_leak"
+  },
+  "gpio": [
+    {"id": "pir_hall", "chip": "board-sim", "line": 17, "direction": "input",
+     "quantity": "motion", "location": "hall", "description": "PIR HC-SR501, режим H (повторный запуск), активный высокий"},
+    {"id": "door_entry", "chip": "board-sim", "line": 22, "direction": "input", "debounce_ms": 30,
+     "quantity": "contact", "location": "hall", "description": "Геркон входной двери: 1 — дверь открыта"},
+    {"id": "relay_fan", "chip": "board-sim", "line": 27, "direction": "output",
+     "quantity": "switch", "location": "kitchen", "description": "Реле вытяжного вентилятора кухни, активный высокий",
+     "requires_confirmation": false}
+  ],
+  "thresholds": {
+    "kitchen_bme280.temperature": 0.2,
+    "kitchen_bme280.humidity": 1.0
+  },
+  "gate": {
+    "default_ttl_s": 10,
+    "max_state_age_s": 5,
+    "devices": {
+      "relay_fan": {"min_interval_s": 2, "max_per_min": 10, "safe_state": {"state": false}}
+    },
+    "interlocks": [
+      {"name": "overheat_keeps_fan_on", "device": "relay_fan", "tool": "*",
+       "needs": ["kitchen_bme280.temperature"],
+       "deny": [{"if": {"all": [{"arg": "value", "eq": false}, {"state": "kitchen_bme280.temperature", "ge": 35}]},
+                 "reason": "перегрев на кухне: вентилятор нельзя выключать"}]}
+    ]
+  }
+}

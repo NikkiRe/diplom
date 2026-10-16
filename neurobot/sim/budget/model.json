@@ -1,0 +1,130 @@
+{
+  "format": "neurobot-budget-model/1",
+  "date": "2026-10-16",
+  "board": "Jetson Nano Developer Kit 4 ГБ: 4× Cortex-A57 1479 МГц, 4 ГБ LPDDR4, общие для CPU и GPU; JetPack 4.6 (L4T R32.6), Ubuntu 20.04, ROS 2 Foxy, Python 3.8, PyTorch 1.13 (слайд 4, R7b) — набор совпадает с образом Qengineering «Ubuntu 20.04 для Jetson Nano» [гипотеза: образ не подтверждён лабораторией]; на роботе есть ЖК-экран (слайд 3), работает ли на нём рабочий стол — неизвестно",
+  "sources": {
+    "tegrastats": {
+      "title": "NVIDIA, L4T Development Guide: tegrastats Utility (пример вывода T210 — Jetson Nano/TX1)",
+      "url": "https://docs.nvidia.com/jetson/l4t/Tegra%20Linux%20Driver%20Package%20Development%20Guide/AppendixTegraStats.html",
+      "what": "«RAM 220/3955MB»: второе число — память, доступная приложениям; «SWAP 0/1978MB» — zram по умолчанию"
+    },
+    "nv-cuda-ram": {
+      "title": "NVIDIA Developer Forums, «Calling cuda() consumes all the RAM memory», ответ модератора NVIDIA 27.07.2021",
+      "url": "https://forums.developer.nvidia.com/t/calling-cuda-consumes-all-the-ram-memory/183240",
+      "what": "Nano, JetPack 4.5.1, PyTorch 1.8: «The memory increases around 1GiB»; tegrastats 1052 → 2386 из 3964 МБ (+1334 МБ) за запуск скрипта с .cuda()"
+    },
+    "nv-reduce-ram": {
+      "title": "NVIDIA Developer Forums, «Reduce RAM usage?», 2019",
+      "url": "https://forums.developer.nvidia.com/t/reduce-ram-usage/84276",
+      "what": "Nano с рабочим столом: «close to 1.7 gigabytes» после загрузки, до 2,5 ГБ через несколько часов (пользователь); headless — «approx. 400MB» (ответ участника)"
+    },
+    "nv-headed": {
+      "title": "NVIDIA Developer Forums, «Headed mode to headless mode», 2020",
+      "url": "https://forums.developer.nvidia.com/t/headed-mode-to-headless-mode/120388",
+      "what": "с рабочим столом «currently idles at ~1GB» (пользователь)"
+    },
+    "nv-headless": {
+      "title": "NVIDIA Developer Forums, «High memory usage the OS of jetson nano», 2020",
+      "url": "https://forums.developer.nvidia.com/t/high-memory-usage-the-os-of-jetson-nano/143129",
+      "what": "без Unity, вход по ssh: «the initial memory usage is about 400 MB» (пользователь)"
+    },
+    "qeng-ub20": {
+      "title": "Qengineering, Jetson-Nano-Ubuntu-20-image, README",
+      "url": "https://github.com/Qengineering/Jetson-Nano-Ubuntu-20-image",
+      "what": "Ubuntu 20.04 + JetPack 4.6.1, PyTorch 1.13.0, рабочий стол GNOME; после удаления рабочего стола — «headless OS consuming ~ 420 MB»"
+    },
+    "jh-lxde": {
+      "title": "JetsonHacks, «Save 1GB of Memory! Use LXDE on your Jetson», 07.11.2020",
+      "url": "https://jetsonhacks.com/2020/11/07/save-1gb-of-memory-use-lxde-on-your-jetson/",
+      "what": "свежий JetPack с GNOME/Unity ≈1,7 ГБ, LXDE экономит ≈1 ГБ; страница закрыта проверкой от ботов — числа по выдаче поиска, первоисточник не открыт"
+    },
+    "nv-zram": {
+      "title": "NVIDIA Developer Forums, «Jetpack 4.2.3 has a built in 2GB swap file…», ответ сотрудника NVIDIA 02.12.2019",
+      "url": "https://forums.developer.nvidia.com/t/jetpack-4-2-3-has-a-built-in-2gb-swap-file-we-are-not-able-to-increase-this-to-4-gb/108324",
+      "what": "swap 2 ГБ по умолчанию — это zram; рекомендовано 1:2 к RAM; настраивает /etc/systemd/nvzramconfig.sh (юнит nvzramconfig.service)"
+    },
+    "jh-zram": {
+      "title": "JetsonHacksNano/resizeSwapMemory, README",
+      "url": "https://github.com/JetsonHacksNano/resizeSwapMemory",
+      "what": "четыре устройства /dev/zram0–3 (по одному на ядро) по 494,6 МБ; размер — mem=$(((\"${totalmem}\" / 2 / \"${NRDEVICES}\") * 1024)) в nvzramconfig.sh (L4T 32.2.x)"
+    },
+    "kernel-zram": {
+      "title": "Linux v4.9, drivers/block/zram/zram_drv.c",
+      "url": "https://git.kernel.org/pub/scm/linux/kernel/git/stable/linux.git/plain/drivers/block/zram/zram_drv.c?h=v4.9",
+      "what": "default_compressor = \"lzo\" (строка 41); L4T R32 — ядро 4.9"
+    },
+    "sbc-bench": {
+      "title": "ThomasKaiser/sbc-bench, results/4rLX.txt (Jetson Nano Developer Kit, 25.03.2023) и Results.md",
+      "url": "https://github.com/ThomasKaiser/sbc-bench/blob/master/results/4rLX.txt",
+      "what": "p7zip 16.02, `7za b -mmt1` на cpu0 (Cortex-A57, 1479 МГц): Tot 1578 MIPS; три многопоточных прогона на cpu0–3: 5289, 5276, 5204 (в таблице Results.md — 5260); RAM size 3950 MB"
+    },
+    "nv-nvpmodel": {
+      "title": "NVIDIA Developer Forums, «CPU running count and enabling», 2020",
+      "url": "https://forums.developer.nvidia.com/t/cpu-running-count-and-enabling/145700",
+      "what": "nvpmodel Nano: 0 — MAXN (10 Вт), все 4 ядра; 1 — 5 Вт, 2 ядра"
+    },
+    "R7b": {
+      "title": "docs/neurobot/research/R7_robot_slides.md (слайды 2–5 «Робот-сканер»)",
+      "url": "docs/neurobot/research/R7_robot_slides.md",
+      "what": "стек Jetson (слайд 4), ЖК-экран (слайд 3), на Jetson: realsense2_camera, urg_node2, ros2_control + diff_drive, robot_state_publisher (слайд 5); питание 5 В / 4,2 А (слайд 2)"
+    },
+    "R7a": {
+      "title": "docs/neurobot/research/R7_robotic_platform.md §1.1, §1.5",
+      "url": "docs/neurobot/research/R7_robotic_platform.md",
+      "what": "граф ROS робота 02.06: realsense2_camera, urg_node2 ×2, controller_manager + diff_cont + joint_broad, twist_mux, robot_state_publisher, imu_filter_madgwick, image_compressor, topic_watchdog, rosbridge_websocket + rosapi; два процесса ros2 launch; воркеры 8765/8766 с torch и CUDA"
+    }
+  },
+  "memory_mib": {
+    "physical": {"value": 4096, "tag": "ист.", "src": ["tegrastats"], "note": "4 ГБ LPDDR4, общие для CPU и GPU"},
+    "visible": {"low": 3950, "value": 3956, "high": 3964, "tag": "ист.", "src": ["tegrastats", "nv-cuda-ram", "sbc-bench"],
+                "note": "всего для приложений: 3955 (пример NVIDIA), 3956 и 3964 (форумы), 3950 (7-zip); остальное — прошивка и резервы ядра"},
+    "reserve": {"value": 200, "tag": "допущение",
+                "note": "≈5 % видимой памяти не отдаём стеку: рост slab ядра, кэш журналов и конфигов; без запаса ядро сначала вытесняет код наших процессов (Pss_File), и робот деградирует раньше OOM"}
+  },
+  "os_branches": {
+    "headless": {"low": 400, "value": 420, "high": 500, "tag": "ист.", "src": ["nv-reduce-ram", "nv-headless", "qeng-ub20"],
+                 "note": "Ubuntu 20.04 без рабочего стола; верх 500 — [допущение]: службы робота сверх чистой системы (журнал на диске, NetworkManager, ssh)"},
+    "lxde": {"low": 700, "value": 700, "high": 1000, "tag": "оценка", "src": ["jh-lxde", "nv-reduce-ram"],
+             "note": "1,7 ГБ GNOME минус ≈1 ГБ экономии LXDE; нижней границы в источниках нет — low = value; на Nano 2 ГБ NVIDIA сама ставит LXDE (research/new_topic/landscape/L4_jetson_nano.md)"},
+    "gnome": {"low": 1000, "value": 1350, "high": 1700, "drift": 2500, "tag": "ист.", "src": ["nv-headed", "nv-reduce-ram", "jh-lxde"],
+              "note": "рабочий стол образа (GNOME) на ЖК-экране; середина диапазона 1,0–1,7 ГБ — [оценка]; drift — «до 2,5 ГБ через несколько часов» (одно наблюдение пользователя)"}
+  },
+  "ballast": {
+    "cuda": {"mib": 1024, "high_mib": 1334, "host": "perception", "tag": "ист.", "src": ["nv-cuda-ram"],
+             "note": "контекст CUDA, cuDNN и cuBLAS PyTorch на Nano; в ВМ torch CPU — балласт живёт в процессе perception, чтобы OOM выбирал того же, кого выбрал бы на плате. high_mib — весь прирост в замере NVIDIA (включает и импорт torch, который на стенде измеряется сам)"},
+    "camera_streams": {"mib": 30, "cpu_a57_pct": 20, "tag": "оценка",
+                       "note": "realsense2_camera с потоками, которых на стенде нет: очереди кадров librealsense (frames_queue_size 16) × (цвет 640×480×3 Б + глубина 848×480×2 Б) ≈ 28 МиБ; CPU приёма и публикации 30 к/с — 20 % ядра A57 [допущение: на стенде узел камеры простаивает без устройства]"}
+  },
+  "zram": {
+    "devices": 4, "fraction_of_ram": 0.5, "size_mib": 1978, "compressor": "lzo", "ratio": [2.0, 3.0],
+    "tag": "ист.", "src": ["nv-zram", "jh-zram", "tegrastats", "kernel-zram"],
+    "note": "своп только в сжатую RAM, приоритет 5; алгоритм — умолчание ядра 4.9 (nvzramconfig.sh его, по-видимому, не меняет — [допущение]); коэффициент сжатия 2–3 — [допущение]. Своп не добавляет памяти горячим страницам: он выигрывает (1 − 1/k) от холодных анонимных страниц ценой CPU и задержки на обращении. На стенде своп выключен (MemorySwapMax=0) — бюджет без кредита zram, консервативно"
+  },
+  "cpu": {
+    "cores": 4, "mhz": 1479, "nvpmodel": "MAXN (0)", "nvpmodel_tag": "допущение: режим лаборатории не снят; 5 Вт — 2 ядра (nv-nvpmodel)",
+    "nano_7zip_single_mips": 1578, "nano_7zip_multi_mips": 5260, "src": ["sbc-bench", "nv-nvpmodel"],
+    "period_ms": 20, "tag": "допущение",
+    "note": "квота = ядра × 100 % × (7-zip одного A57 / 7-zip одного ядра ВМ), тот же двоичный p7zip 16.02 (Debian bullseye); соотношение для Python, numpy и DDS может отличаться — до калибровки cpubench (bench/board/cpubench) на плате"
+  },
+  "components": [
+    {"name": "perception", "robot": "predict_live v2 (--camera ros), YOLO и SNN на torch 1.13 + CUDA", "stand": "тот же код, FakeYolo вместо YOLO, SNN лаборатории на torch 2.4.1 CPU; + балласт cuda в процессе", "how": "замер + балласт"},
+    {"name": "executor", "robot": "motion_executor (Python 3.8)", "stand": "тот же код, Python 3.12, Jazzy", "how": "замер"},
+    {"name": "safety", "robot": "safety_gate (Python 3.8)", "stand": "тот же код, Python 3.12, Jazzy", "how": "замер"},
+    {"name": "rosbridge", "robot": "ros2 launch rosbridge_server (1.3.1 Foxy): launch + rosbridge_websocket + rosapi", "stand": "то же, 2.7.1 Jazzy, аргументы deploy", "how": "замер"},
+    {"name": "mcp", "robot": "ros_mcp_server + патч deploy (mcp 1.27.2, HTTP)", "stand": "то же", "how": "замер"},
+    {"name": "picoclaw", "robot": "PicoClaw 0.2.8 gateway", "stand": "тот же бинарник linux-arm64, LLM не вызывается", "how": "замер"},
+    {"name": "twist_mux", "robot": "twist_mux (C++)", "stand": "узел двойника, перенесён в slice", "how": "замер"},
+    {"name": "robot_state_publisher", "robot": "robot_state_publisher (C++)", "stand": "узел двойника, перенесён в slice", "how": "замер"},
+    {"name": "imu_filter_madgwick", "robot": "imu_filter_madgwick (C++)", "stand": "узел двойника, перенесён в slice", "how": "замер"},
+    {"name": "base", "robot": "ros2 launch базы лаборатории: controller_manager + diff_cont + joint_broad, железо — мост UART к STM32", "stand": "ros2 launch + ros2_control_node с mock_components, те же контроллеры и параметры, свой домен DDS", "how": "заместитель"},
+    {"name": "camera", "robot": "ros2 launch realsense2_camera (D435i, цвет, глубина, IMU)", "stand": "ros2 launch realsense2_camera 4.58 без камеры, свой домен; + балласт camera_streams", "how": "заместитель + балласт"},
+    {"name": "lidar", "robot": "ros2 launch urg_node2", "stand": "ros2 launch + urg_node 1.1.2 без лидара (urg_node2 в Jazzy нет), свой домен", "how": "заместитель"}
+  ],
+  "not_counted": [
+    {"name": "urg_node2 (второй экземпляр)", "why": "в графе робота 02.06 два /urg_node2 (R7a §1.5) — вероятно, ошибка запуска; при повторе — ещё ≈ один lidar"},
+    {"name": "image_compressor, topic_watchdog", "why": "узлы лаборатории, назначение неизвестно, кода нет"},
+    {"name": "neurobot watchdog (deploy)", "why": "долгоживущий процесс Python со своими пробами MCP раз в 10 с; завязан на юниты neurobot-*; на стенде не запускался"},
+    {"name": "воркеры 8765/8766 лаборатории", "why": "вариант Б deploy; кода 8766 нет; YOLO-воркер на CUDA — второй контекст ≈1 ГиБ (R7a N7) — в бюджет 4 ГБ вместе с perception не входит"},
+    {"name": "sysmon, наблюдатели стенда", "why": "инструменты замера, на роботе — по желанию"}
+  ]
+}

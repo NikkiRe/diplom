@@ -1,0 +1,13 @@
+# Весь текст — с LF: bash-скрипты с CRLF ломаются (Windows, WSL)
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.pdf binary
+*.docx binary
+*.zip binary
+*.gz binary
+*.db binary
+*.pt binary
+*.pth binary

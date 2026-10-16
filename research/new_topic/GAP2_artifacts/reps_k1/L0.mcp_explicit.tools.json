@@ -1,0 +1,130 @@
+[
+ {
+  "type": "function",
+  "function": {
+   "name": "get_kitchen_bme280_humidity",
+   "description": "Read humidity (%RH) of kitchen.bme280",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_kitchen_bme280_pressure",
+   "description": "Read pressure (Pa) of kitchen.bme280",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_kitchen_bme280_temperature",
+   "description": "Read temperature (Cel) of kitchen.bme280",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_balcony_dht11_humidity",
+   "description": "Read humidity (%RH) of balcony.dht11",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_balcony_dht11_temperature",
+   "description": "Read temperature (Cel) of balcony.dht11",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_unplaced_ads1015_voltage0",
+   "description": "Read voltage0 (V) of unplaced.ads1015",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_board_cpu_thermal_temperature1",
+   "description": "Read temperature1 (Cel) of board.cpu_thermal",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_boiler_pipe_ds18b20_temperature",
+   "description": "Read temperature (Cel) of boiler_pipe.ds18b20",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_hall_pir_hall_state",
+   "description": "Read state of hall.pir_hall",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "get_kitchen_relay_fan_state",
+   "description": "Read state of kitchen.relay_fan",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "set_kitchen_relay_fan_state",
+   "description": "Write state of kitchen.relay_fan",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "value": {
+      "type": "boolean"
+     }
+    },
+    "required": [
+     "value"
+    ]
+   }
+  }
+ }
+]

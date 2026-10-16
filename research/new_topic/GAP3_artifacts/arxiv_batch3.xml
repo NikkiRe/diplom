@@ -1,0 +1,194 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/DEgErJvelAXC6/dMp41xOgDMdb0</id>
+  <title>arXiv Query: search_query=&amp;id_list=2411.14367,2312.03373,2309.15817,2412.14470,2401.10019&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-06T13:55:37Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=50&amp;id_list=2411.14367,2312.03373,2309.15817,2412.14470,2401.10019" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>5</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2312.03373v2</id>
+    <title>EnvGuard: Guaranteeing Environment-Centric Safety and Security Properties in Web of Things</title>
+    <updated>2023-12-16T13:58:09Z</updated>
+    <link href="https://arxiv.org/abs/2312.03373v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2312.03373v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Web of Things (WoT) technology facilitates the standardized integration of IoT devices ubiquitously deployed in daily environments, promoting diverse WoT applications to automatically sense and regulate the environment. In WoT environment, heterogeneous applications, user activities, and environment changes collectively influence device behaviors, posing risks of unexpected violations of safety and security properties. Existing work on violation identification primarily focuses on the analysis of automated applications, lacking consideration of the intricate interactions in the environment. Moreover, users' intention for violation resolving strategy is much less investigated. To address these limitations, we introduce EnvGuard, an environment-centric approach for property customizing, violation identification and resolution execution in WoT environment. We evaluated EnvGuard in two typical WoT environments. By conducting user studies and analyzing collected real-world environment data, we assess the performance of EnvGuard, and construct a dataset from the collected data to support environment-level violation identification. The results demonstrate the superiority of EnvGuard compared to previous state-of-the-art work, and confirm its usability, feasibility and runtime efficiency.</summary>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-12-06T09:15:52Z</published>
+    <arxiv:primary_category term="cs.SE"/>
+    <author>
+      <name>Bingkun Sun</name>
+    </author>
+    <author>
+      <name>Liwei Shen</name>
+    </author>
+    <author>
+      <name>Jialin Ren</name>
+    </author>
+    <author>
+      <name>Zhen Dong</name>
+    </author>
+    <author>
+      <name>Siao Wang</name>
+    </author>
+    <author>
+      <name>Xin Peng</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2401.10019v3</id>
+    <title>R-Judge: Benchmarking Safety Risk Awareness for LLM Agents</title>
+    <updated>2024-10-05T06:50:15Z</updated>
+    <link href="https://arxiv.org/abs/2401.10019v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2401.10019v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models (LLMs) have exhibited great potential in autonomously completing tasks across real-world applications. Despite this, these LLM agents introduce unexpected safety risks when operating in interactive environments. Instead of centering on the harmlessness of LLM-generated content in most prior studies, this work addresses the imperative need for benchmarking the behavioral safety of LLM agents within diverse environments. We introduce R-Judge, a benchmark crafted to evaluate the proficiency of LLMs in judging and identifying safety risks given agent interaction records. R-Judge comprises 569 records of multi-turn agent interaction, encompassing 27 key risk scenarios among 5 application categories and 10 risk types. It is of high-quality curation with annotated safety labels and risk descriptions. Evaluation of 11 LLMs on R-Judge shows considerable room for enhancing the risk awareness of LLMs: The best-performing model, GPT-4o, achieves 74.42% while no other models significantly exceed the random. Moreover, we reveal that risk awareness in open agent scenarios is a multi-dimensional capability involving knowledge and reasoning, thus challenging for LLMs. With further experiments, we find that fine-tuning on safety judgment significantly improve model performance while straightforward prompting mechanisms fail. R-Judge is publicly available at https://github.com/Lordog/R-Judge.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-01-18T14:40:46Z</published>
+    <arxiv:comment>EMNLP Findings 2024</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Tongxin Yuan</name>
+    </author>
+    <author>
+      <name>Zhiwei He</name>
+    </author>
+    <author>
+      <name>Lingzhong Dong</name>
+    </author>
+    <author>
+      <name>Yiming Wang</name>
+    </author>
+    <author>
+      <name>Ruijie Zhao</name>
+    </author>
+    <author>
+      <name>Tian Xia</name>
+    </author>
+    <author>
+      <name>Lizhen Xu</name>
+    </author>
+    <author>
+      <name>Binglin Zhou</name>
+    </author>
+    <author>
+      <name>Fangqi Li</name>
+    </author>
+    <author>
+      <name>Zhuosheng Zhang</name>
+    </author>
+    <author>
+      <name>Rui Wang</name>
+    </author>
+    <author>
+      <name>Gongshen Liu</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2309.15817v2</id>
+    <title>Identifying the Risks of LM Agents with an LM-Emulated Sandbox</title>
+    <updated>2024-05-17T17:17:45Z</updated>
+    <link href="https://arxiv.org/abs/2309.15817v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2309.15817v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent advances in Language Model (LM) agents and tool use, exemplified by applications like ChatGPT Plugins, enable a rich set of capabilities but also amplify potential risks - such as leaking private data or causing financial losses. Identifying these risks is labor-intensive, necessitating implementing the tools, setting up the environment for each test scenario manually, and finding risky cases. As tools and agents become more complex, the high cost of testing these agents will make it increasingly difficult to find high-stakes, long-tailed risks. To address these challenges, we introduce ToolEmu: a framework that uses an LM to emulate tool execution and enables the testing of LM agents against a diverse range of tools and scenarios, without manual instantiation. Alongside the emulator, we develop an LM-based automatic safety evaluator that examines agent failures and quantifies associated risks. We test both the tool emulator and evaluator through human evaluation and find that 68.8% of failures identified with ToolEmu would be valid real-world agent failures. Using our curated initial benchmark consisting of 36 high-stakes tools and 144 test cases, we provide a quantitative risk analysis of current LM agents and identify numerous failures with potentially severe outcomes. Notably, even the safest LM agent exhibits such failures 23.9% of the time according to our evaluator, underscoring the need to develop safer LM agents for real-world deployment.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-09-25T17:08:02Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Yangjun Ruan</name>
+    </author>
+    <author>
+      <name>Honghua Dong</name>
+    </author>
+    <author>
+      <name>Andrew Wang</name>
+    </author>
+    <author>
+      <name>Silviu Pitis</name>
+    </author>
+    <author>
+      <name>Yongchao Zhou</name>
+    </author>
+    <author>
+      <name>Jimmy Ba</name>
+    </author>
+    <author>
+      <name>Yann Dubois</name>
+    </author>
+    <author>
+      <name>Chris J. Maddison</name>
+    </author>
+    <author>
+      <name>Tatsunori Hashimoto</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2412.14470v2</id>
+    <title>Agent-SafetyBench: Evaluating the Safety of LLM Agents</title>
+    <updated>2025-05-20T05:58:23Z</updated>
+    <link href="https://arxiv.org/abs/2412.14470v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2412.14470v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>As large language models (LLMs) are increasingly deployed as agents, their integration into interactive environments and tool use introduce new safety challenges beyond those associated with the models themselves. However, the absence of comprehensive benchmarks for evaluating agent safety presents a significant barrier to effective assessment and further improvement. In this paper, we introduce Agent-SafetyBench, a comprehensive benchmark designed to evaluate the safety of LLM agents. Agent-SafetyBench encompasses 349 interaction environments and 2,000 test cases, evaluating 8 categories of safety risks and covering 10 common failure modes frequently encountered in unsafe interactions. Our evaluation of 16 popular LLM agents reveals a concerning result: none of the agents achieves a safety score above 60%. This highlights significant safety challenges in LLM agents and underscores the considerable need for improvement. Through failure mode and helpfulness analysis, we summarize two fundamental safety defects in current LLM agents: lack of robustness and lack of risk awareness. Furthermore, our findings suggest that reliance on defense prompts alone may be insufficient to address these safety issues, emphasizing the need for more advanced and robust strategies. To drive progress in this area, Agent-SafetyBench has been released at https://github.com/thu-coai/Agent-SafetyBench/ to facilitate further research in agent safety evaluation and improvement.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-12-19T02:35:15Z</published>
+    <arxiv:comment>26 pages</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Zhexin Zhang</name>
+    </author>
+    <author>
+      <name>Shiyao Cui</name>
+    </author>
+    <author>
+      <name>Yida Lu</name>
+    </author>
+    <author>
+      <name>Jingzhuo Zhou</name>
+    </author>
+    <author>
+      <name>Junxiao Yang</name>
+    </author>
+    <author>
+      <name>Hongning Wang</name>
+    </author>
+    <author>
+      <name>Minlie Huang</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2411.14367v1</id>
+    <title>ROSMonitoring 2.0: Extending ROS Runtime Verification to Services and Ordered Topics</title>
+    <updated>2024-11-21T18:07:31Z</updated>
+    <link href="https://arxiv.org/abs/2411.14367v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2411.14367v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Formal verification of robotic applications presents challenges due to their hybrid nature and distributed architecture. This paper introduces ROSMonitoring 2.0, an extension of ROSMonitoring designed to facilitate the monitoring of both topics and services while considering the order in which messages are published and received. The framework has been enhanced to support these novel features for ROS1 -- and partially ROS2 environments -- offering improved real-time support, security, scalability, and interoperability. We discuss the modifications made to accommodate these advancements and present results obtained from a case study involving the runtime monitoring of specific components of a fire-fighting Uncrewed Aerial Vehicle (UAV).</summary>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-11-21T18:07:31Z</published>
+    <arxiv:comment>In Proceedings FMAS2024, arXiv:2411.13215</arxiv:comment>
+    <arxiv:primary_category term="cs.SE"/>
+    <arxiv:journal_ref>EPTCS 411, 2024, pp. 38-55</arxiv:journal_ref>
+    <author>
+      <name>Maryam Ghaffari Saadat</name>
+      <arxiv:affiliation>University of Manchester</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Angelo Ferrando</name>
+      <arxiv:affiliation>University of Modena and Reggio Emilia</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Louise A. Dennis</name>
+      <arxiv:affiliation>University of Manchester</arxiv:affiliation>
+    </author>
+    <author>
+      <name>Michael Fisher</name>
+      <arxiv:affiliation>University of Manchester</arxiv:affiliation>
+    </author>
+    <arxiv:doi>10.4204/EPTCS.411.3</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.4204/EPTCS.411.3" title="doi"/>
+  </entry>
+</feed>

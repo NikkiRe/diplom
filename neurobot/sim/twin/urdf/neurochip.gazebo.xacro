@@ -1,0 +1,128 @@
+<?xml version="1.0"?>
+<!-- Элементы Gazebo двойника NeuroChip (включает neurochip.urdf.xacro при sim:=true): трение, датчики, ros2_control,
+     истинная поза и касания корпуса. Темы gz — /twin/*; в ROS их переводит мост (twin.launch.py) в имена робота.
+     Частоты датчиков — аргументы (умолчания и обоснование — README §3). -->
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="lidar_hz" default="10"/>
+  <xacro:arg name="color_hz" default="15"/>
+  <xacro:arg name="depth_hz" default="15"/>
+  <xacro:arg name="imu_hz" default="200"/>
+  <xacro:arg name="truth_hz" default="100"/>
+
+  <gazebo reference="left_wheel"><mu1>${wheel_mu}</mu1><mu2>${wheel_mu}</mu2></gazebo>
+  <gazebo reference="right_wheel"><mu1>${wheel_mu}</mu1><mu2>${wheel_mu}</mu2></gazebo>
+  <gazebo reference="caster_front"><mu1>0</mu1><mu2>0</mu2></gazebo>
+  <gazebo reference="caster_back"><mu1>0</mu1><mu2>0</mu2></gazebo>
+
+  <!-- Hokuyo URG-04LX-UG01: геометрия — как в скане с робота 02.06 (urg_node2: 683 луча, ±2,0923497677 рад, шаг
+       2π/1024, 0,02–5,6 м, R7b RS15); 10 Гц — паспорт. Шум: паспорт ±30 мм до 1 м (принят за 3σ), дальше ±3 % — не
+       моделируется. Лучи, упёршиеся в корпус D435i (0,03–0,13 м с шумом), sensor_model.py превращает в NaN, как
+       urg_node2 сырой код 0. Артефакт Gazebo [замер]: луч 213 (−45°, стык граней кубической карты, которой gpu_lidar
+       рендерит скан) проходит сквозь близкий корпус камеры; поворот датчика его не убирает — стык вращается вместе с
+       ним. -->
+  <gazebo reference="laser_frame">
+    <sensor name="urg_04lx" type="gpu_lidar">
+      <always_on>true</always_on>
+      <visualize>false</visualize>
+      <update_rate>$(arg lidar_hz)</update_rate>
+      <topic>twin/scan</topic>
+      <gz_frame_id>laser_frame</gz_frame_id>
+      <lidar>
+        <scan><horizontal><samples>683</samples><resolution>1</resolution>
+          <min_angle>-2.0923497677</min_angle><max_angle>2.0923497677</max_angle></horizontal></scan>
+        <range><min>0.02</min><max>5.6</max><resolution>0.001</resolution></range>
+        <noise><type>gaussian</type><mean>0</mean><stddev>0.01</stddev></noise>
+      </lidar>
+    </sensor>
+  </gazebo>
+
+  <!-- RealSense D435i. Цвет: 640×480, как в демо лаборатории; поле зрения 54,9° × 42,6° — кадр 4:3 из 16:9
+       (паспорт 69,4° × 42,5°; f ≈ 616 px, R7b RS4 [гипотеза]). Глубина: 424×240 (режим D435 с наименьшей
+       Min-Z ≈0,105 м), поле зрения 87° по горизонтали (паспорт 87° × 58°), до 10 м; шум глубины добавляет
+       sensor_model.py.
+       IMU BMI055 в оптических осях, как /camera/imu с unite_imu_method; шум — по плотностям паспорта на полосе
+       100 Гц: гироскоп 0,014 °/с/√Гц → 0,0024 рад/с, акселерометр 150 мкg/√Гц → 0,015 м/с² [оценка]. -->
+  <gazebo reference="camera_link">
+    <sensor name="d435_color" type="camera">
+      <pose>${cam_size_x / 2} 0.015 0 0 0 0</pose>
+      <always_on>true</always_on>
+      <update_rate>$(arg color_hz)</update_rate>
+      <topic>twin/color/image</topic>
+      <gz_frame_id>camera_color_optical_frame</gz_frame_id>
+      <camera>
+        <horizontal_fov>0.9582</horizontal_fov>
+        <image><width>640</width><height>480</height><format>R8G8B8</format></image>
+        <clip><near>0.05</near><far>20</far></clip>
+      </camera>
+    </sensor>
+    <sensor name="d435_depth" type="depth_camera">
+      <pose>${cam_size_x / 2} 0 0 0 0 0</pose>
+      <always_on>true</always_on>
+      <update_rate>$(arg depth_hz)</update_rate>
+      <topic>twin/depth/image</topic>
+      <gz_frame_id>camera_depth_optical_frame</gz_frame_id>
+      <camera>
+        <horizontal_fov>1.5184</horizontal_fov>
+        <image><width>424</width><height>240</height><format>R_FLOAT32</format></image>
+        <clip><near>0.105</near><far>10</far></clip>
+      </camera>
+    </sensor>
+    <sensor name="d435i_imu" type="imu">
+      <pose>0 0 0 ${-pi / 2} 0 ${-pi / 2}</pose>
+      <always_on>true</always_on>
+      <update_rate>$(arg imu_hz)</update_rate>
+      <topic>twin/imu</topic>
+      <gz_frame_id>camera_imu_optical_frame</gz_frame_id>
+      <imu>
+        <enable_orientation>false</enable_orientation>
+        <angular_velocity>
+          <x><noise type="gaussian"><mean>0</mean><stddev>0.0024</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>0.0024</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>0.0024</stddev></noise></z>
+        </angular_velocity>
+        <linear_acceleration>
+          <x><noise type="gaussian"><mean>0</mean><stddev>0.015</stddev></noise></x>
+          <y><noise type="gaussian"><mean>0</mean><stddev>0.015</stddev></noise></y>
+          <z><noise type="gaussian"><mean>0</mean><stddev>0.015</stddev></noise></z>
+        </linear_acceleration>
+      </imu>
+    </sensor>
+  </gazebo>
+
+  <!-- Касания корпуса (палубы, мачта, голова, URG, D435i) — истина для проверок безопасности (truth.py). Имена коллизий
+       — как их даёт sdformat при слиянии звеньев на fixed-суставах (номер — порядок звена); совпадение проверяет
+       tests/test_model_vm.py (в ВМ). Колёс и роликов в датчике нет: датчик касаний gz публикует каждый шаг физики
+       (1 кГц, update_rate не действует), пока опора стоит на полу, и разбор такого потока стоил truth.py ≈40 % ядра
+       [замер 15.10]. Их касания truth.py считает по геометрии. -->
+  <gazebo reference="base_link">
+    <sensor name="body_contact" type="contact">
+      <always_on>true</always_on>
+      <update_rate>50</update_rate>
+      <contact>
+        <topic>twin/contacts</topic>
+        <collision>base_link_fixed_joint_lump__d435i_collision</collision>
+        <collision>base_link_fixed_joint_lump__decks_collision_3</collision>
+        <collision>base_link_fixed_joint_lump__head_collision_4</collision>
+        <collision>base_link_fixed_joint_lump__urg_collision_5</collision>
+        <collision>base_link_fixed_joint_lump__mast_collision_6</collision>
+      </contact>
+    </sensor>
+  </gazebo>
+
+  <gazebo>
+    <plugin filename="gz_ros2_control-system" name="gz_ros2_control::GazeboSimROS2ControlPlugin">
+      <parameters>$(arg controllers)</parameters>
+    </plugin>
+    <!-- Истинная поза модели (= base_link) → /ground_truth/pose; роботу не выдаётся, только проверкам. -->
+    <plugin filename="gz-sim-pose-publisher-system" name="gz::sim::systems::PosePublisher">
+      <publish_link_pose>false</publish_link_pose>
+      <publish_collision_pose>false</publish_collision_pose>
+      <publish_visual_pose>false</publish_visual_pose>
+      <publish_sensor_pose>false</publish_sensor_pose>
+      <publish_nested_model_pose>false</publish_nested_model_pose>
+      <publish_model_pose>true</publish_model_pose>
+      <use_pose_vector_msg>false</use_pose_vector_msg>
+      <update_frequency>$(arg truth_hz)</update_frequency>
+    </plugin>
+  </gazebo>
+</robot>

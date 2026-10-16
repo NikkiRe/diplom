@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Запуск компонента neurobot из юнита: окружение ROS 2 (--ros) и команда из env-файла.
+#   neurobot-run [--ros] --var ИМЯ     команда — значение переменной ИМЯ (кавычки и пробелы — по правилам bash)
+#   neurobot-run [--ros] -- КОМАНДА…   команда — аргументы
+# Переменные приходят из EnvironmentFile= юнита: NEUROBOT_ROS_SETUP, NEUROBOT_ROS_OVERLAY, сама ИМЯ.
+# Процесс заменяется командой (exec): PID не меняется — READY/WATCHDOG от неё принимаются как от главного.
+# Код 2 — ошибка аргументов или окружения.
+set -euo pipefail
+
+die() { echo "neurobot-run: $*" >&2; exit 2; }
+
+ros=0
+if [[ ${1:-} == --ros ]]; then
+  ros=1
+  shift
+fi
+case ${1:-} in
+  --var)
+    [[ $# -eq 2 ]] || die "ожидалось: --var ИМЯ"
+    [[ $2 =~ ^[A-Za-z_][A-Za-z0-9_]*$ ]] || die "имя переменной: '$2'"
+    [[ -n ${!2:-} ]] || die "$2 не задана в env-файле ${NEUROBOT_ENV:-/etc/neurobot/neurobot.env}"
+    eval "cmd=(${!2})"
+    ;;
+  --)
+    shift
+    [[ $# -gt 0 ]] || die "пустая команда"
+    cmd=("$@")
+    ;;
+  *) die "использование: neurobot-run [--ros] (--var ИМЯ | -- КОМАНДА…)" ;;
+esac
+
+if ((ros)); then
+  setup=${NEUROBOT_ROS_SETUP:-}
+  [[ -f $setup ]] || die "нет окружения ROS 2: NEUROBOT_ROS_SETUP='$setup'"
+  set -- # setup.bash видит позиционные параметры вызывающего
+  set +u
+  # shellcheck disable=SC1090
+  source "$setup"
+  if [[ -n ${NEUROBOT_ROS_OVERLAY:-} ]]; then
+    # shellcheck disable=SC1090
+    source "$NEUROBOT_ROS_OVERLAY"
+  fi
+  set -u
+fi
+echo "neurobot-run: ${cmd[*]}" >&2
+exec "${cmd[@]}"

@@ -1,0 +1,7 @@
+kitchen.bme280: humidity [%RH], pressure [Pa], temperature [Cel]
+balcony.dht11: humidity [%RH], temperature [Cel]
+unplaced.ads1015: voltage0 [V]
+board.cpu_thermal: temperature1 [Cel]
+boiler_pipe.ds18b20: temperature [Cel]
+hall.pir_hall: state [/]
+kitchen.relay_fan: state [/, rw]

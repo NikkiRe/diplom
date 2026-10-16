@@ -1,0 +1,26 @@
+Подмножество трасс CASAS для daygen (bench/daygen/casas.py, extract_subset).
+
+Источник: Cook D. CASAS Smart Home dataset - free living, motion, door, activity labels. Zenodo, 2025. DOI 10.5281/zenodo.15708568
+URL: https://zenodo.org/records/15708568/files/labeled_data.zip
+Исходный файл: labeled_data.zip, SHA-256 7d9e976308e1cb5bc91cb39937848bfe073fc7b44c8a33cf166de203014b0091
+Лицензия исходника: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/) — производные данные
+распространяются на тех же условиях с указанием авторства; изменения перечислены ниже.
+
+Изменения относительно исходника:
+- взяты 14 домов анализа GAP1 (12 с одним жителем, 2 с двумя): hh101, hh102, hh103, hh105, hh106, hh107, hh110, hh114, hh118, hh121, hh122, hh126, hh129, hh130;
+- оставлены только полные сутки (первая и последняя даты записи каждого дома отброшены): 520 дом-суток,
+  из них пригодны для генерации дня 493 (≥ 50 сообщений ON/OPEN в окне
+  07:00–23:00);
+- поля: дата, секунды от полуночи (округление до 1 мс), локация датчика, сообщение (ON/OFF/OPEN/CLOSE или
+  целое), метка активности только для начала/конца (Имя:begin / Имя:end); строки с неизвестными сообщениями
+  (опечатки, пустые поля) отброшены; удалены символы \r;
+- файлы — CSV в gzip (mtime=0, извлечение воспроизводится байт в байт).
+
+Разбиение домов на настройку (tune) и отложенную оценку (holdout): seed 20261006,
+стратификация по числу жителей (bench/daygen/casas.py: split_homes).
+  tune:    hh103, hh105, hh106, hh107, hh114, hh118, hh122
+  holdout: hh101, hh102, hh110, hh121, hh126, hh129, hh130
+
+Воспроизведение:
+  .venv/bin/python -m bench.daygen casas-extract --zip data/casas/labeled_data.zip --out data/casas/subset
+SHA-256 файлов подмножества — в index.json (поле homes.<дом>.sha256).

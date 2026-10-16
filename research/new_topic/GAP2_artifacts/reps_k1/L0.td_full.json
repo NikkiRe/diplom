@@ -1,0 +1,244 @@
+[
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:kitchen.bme280",
+  "title": "kitchen.bme280",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "humidity": {
+    "title": "humidity",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/iio/devices/iio:device0/in_humidityrelative_input",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "%RH"
+   },
+   "pressure": {
+    "title": "pressure",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/iio/devices/iio:device0/in_pressure_input",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "Pa"
+   },
+   "temperature": {
+    "title": "temperature",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/iio/devices/iio:device0/in_temp_input",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:balcony.dht11",
+  "title": "balcony.dht11",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "humidity": {
+    "title": "humidity",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/iio/devices/iio:device1/in_humidityrelative_input",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "%RH"
+   },
+   "temperature": {
+    "title": "temperature",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/iio/devices/iio:device1/in_temp_input",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:unplaced.ads1015",
+  "title": "unplaced.ads1015",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "voltage0": {
+    "title": "voltage0",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/iio/devices/iio:device2/in_voltage0_raw",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "V"
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:board.cpu_thermal",
+  "title": "board.cpu_thermal",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "temperature1": {
+    "title": "temperature1",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/class/hwmon/hwmon0/temp1_input",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:boiler_pipe.ds18b20",
+  "title": "boiler_pipe.ds18b20",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "temperature": {
+    "title": "temperature",
+    "type": "number",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "file:///sys/bus/w1/devices/28-0316a2795cff/temperature",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ],
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:hall.pir_hall",
+  "title": "hall.pir_hall",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "state": {
+    "title": "state",
+    "type": "boolean",
+    "readOnly": true,
+    "forms": [
+     {
+      "href": "gpiod://gpiochip0/17",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty"
+      ]
+     }
+    ]
+   }
+  },
+  "description": "PIR HC-SR501, active high"
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:dev:edge:kitchen.relay_fan",
+  "title": "kitchen.relay_fan",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": "nosec_sc",
+  "properties": {
+   "state": {
+    "title": "state",
+    "type": "boolean",
+    "readOnly": false,
+    "forms": [
+     {
+      "href": "gpiod://gpiochip0/27",
+      "contentType": "text/plain",
+      "op": [
+       "readproperty",
+       "writeproperty"
+      ]
+     }
+    ]
+   }
+  },
+  "description": "Relay for kitchen fan, active high"
+ }
+]

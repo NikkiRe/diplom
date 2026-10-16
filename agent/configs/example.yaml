@@ -1,0 +1,108 @@
+# Пример конфигурации edgectx (режим T0: виртуальные часы, mock-llm, sim-mcp).
+# Все ключи и умолчания описаны в agent/README.md, раздел «Конфигурация».
+# Относительные пути отсчитываются от каталога этого файла.
+
+run_id: ""                     # пусто — сгенерировать (edgectx-<дата>-<случайное>)
+
+clock:
+  mode: virtual                # real | virtual (краткая форма: `clock: virtual`)
+  epoch: "2026-10-06T00:00:00+03:00"   # полночь дня прогона; t дня = секунды от неё
+  start_t: 25200               # 07:00 — начало окна дня
+  settle_timeout_s: 120        # сколько ждать затишья агента при продвижении часов
+
+listen: 127.0.0.1:18080        # HTTP-канал: /v1/user, /v1/event, /v1/clock/advance, /v1/metrics, /v1/health
+
+llm:
+  base_url: http://127.0.0.1:18100/v1   # mock-llm; реальный RouterAI — https://routerai.ru/api/v1
+  model: openai/gpt-5-mini
+  api_key_env: ROUTERAI_API_KEY         # имя переменной окружения; пустая переменная — без авторизации
+  connect_timeout_s: 10                 # TCP и TLS (по отдельности)
+  timeout_s: 60                         # одна попытка запроса целиком
+  max_tokens: 0                         # 0 — не ограничивать в запросе
+  retries: 2                            # повтор после сетевой ошибки до ответа, 429 и 5xx
+  retry_backoff_ms: 500                 # первая пауза; дальше ×2 с джиттером
+  retry_backoff_max_ms: 8000            # предел паузы; Retry-After длиннее — ждёт предохранитель
+  breaker:                              # модель недоступна → ходы откладываются, связь проверяет проба
+    failures: 1                         # временных сбоев подряд до размыкания
+    probe_s: 30                         # первая пауза до пробы; дальше ×2 с джиттером
+    probe_max_s: 300
+    probe_path: models                  # GET {base_url}/models без токенов; удачная проба допускает пробный ход
+  trace_headers: true                   # X-Edgectx-* для mock-llm (oracle)
+  extra:                                # добавляется в тело запроса как есть
+    provider: {only: [openai], allow_fallbacks: false}
+
+mcp:
+  - name: sim
+    transport: http
+    url: http://127.0.0.1:18090/mcp
+    subscribe: ["*/state/*"]
+    reconnect_s: 1               # упавший сервер переподключается: пауза 1 с, ×2 с джиттером,
+    reconnect_max_s: 60          # не больше 60 с
+  # hw-mcp рядом с sim: бинарник — `cd ../../hwmcp && make build` (hwmcp/.build/hw-mcp). Запись в линии
+  # GPIO меняет фикстуру, поэтому сервер работает на её копии: cp -a ../../hwmcp/testdata/fixture_root /tmp/hw-root
+  # - name: hw
+  #   transport: stdio
+  #   cmd: ["../../hwmcp/.build/hw-mcp", "-root", "/tmp/hw-root", "-declared", "../../hwmcp/configs/declared.lab.json",
+  #         "-catalog", "{catalog}"]
+  #   inventory_uri: hw://inventory
+  #   subscribe: ["*/state/*"]
+
+policy:
+  wake: hybrid                 # heartbeat | gate | hybrid
+  heartbeat_min: 30
+  heartbeat_task: >-
+    Плановая проверка помещения: оцени состояние устройств и недавние события.
+    Если нужно действие или уведомление пользователя — выполни его, иначе ответь NO_ACTION.
+  max_steps: 6
+  gate:
+    debounce_s: 2
+    cooldown_s: 300
+    coalesce_s: 10             # окно коалесценции W ∈ {0, 10, 60}
+    coalesce_max: 32           # набрав столько событий, окно закрывается досрочно
+    self_echo_s: 10            # эхо собственной команды агента не будит LLM
+    rules_path: ""             # файл заранее заданных правил (YAML/JSON), необязательно
+    rules_enabled: true
+    default: ignore            # свойства вне signals: change | ignore
+    signals:
+      - {device: "door*", property: "open", kind: change}
+      - {property: "temperature", kind: threshold, above: 30, hysteresis: 1, priority: safety}
+      - {property: "leak", kind: change, priority: safety}
+      - {device: "pir*", property: "motion", kind: episode, gap_s: 600}
+  history: mask                # full | window | mask | summary_system
+  window_turns: 8
+  mask_keep_turns: 2
+  summary_threshold_tokens: 4000
+  history_background: true
+  hwctx: delta_tail            # snapshot_head | delta_tail | pull
+  snapshot_period_s: 60
+  catalog: generic             # explicit | generic (подставляется в {catalog} команды/URL сервера)
+  local_tools: [notify_user, create_rule, delete_rule, update_profile, recent_events]
+  noop_reply: NO_ACTION
+  recent_events_k: 10
+  profile_consolidate_s: 600
+  max_tool_result_chars: 4000
+
+budget:
+  daily_calls: 500             # 0 — без ограничения
+  daily_input_tokens: 2000000
+  degrade_at: 0.8              # с этой доли лимита фон отключается
+
+sched:
+  max_in_flight: 1             # 1–2 запроса к LLM одновременно
+  queue_max: 64
+  deferred_max: 32             # пробуждений, отложенных до восстановления связи с LLM
+
+trace: ../run/edgectx.trace.jsonl   # реплеер переопределяет флагом -trace
+trace_flush_s: 2                    # буфер трассы сбрасывается не позже чем через 2 с (0 — каждая запись)
+
+userctx:
+  db: ../run/edgectx.db
+  reset: true
+  cache_kib: 256               # кэш страниц SQLite
+  journal_mode: wal            # wal | delete | truncate | persist
+  synchronous: normal          # normal (только с wal) | full
+  profile:
+    - {id: f1, text: "Пользователь предпочитает температуру 22 °C"}
+
+prompt:
+  system: ""                   # пусто — встроенный системный промпт

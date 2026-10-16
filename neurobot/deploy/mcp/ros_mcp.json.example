@@ -1,0 +1,26 @@
+{
+  "server": {"host": "127.0.0.1", "port": 18110},
+  "rosbridge": {"url": "ws://127.0.0.1:9090", "timeout_s": 3.0},
+  "enabled_tools": {
+    "robot_get_status": true,
+    "robot_stop": true,
+    "robot_nudge": true,
+    "sensor_get_status": false,
+    "camera_capture_frame_to_file": false,
+    "lidar_capture_scan_to_file": false
+  },
+  "topics": {
+    "cmd_vel": {"name": "/cmd_vel_agent", "type": "geometry_msgs/msg/Twist", "access": "write"}
+  },
+  "services": {
+    "rosapi_topics": {"name": "/rosapi/topics", "timeout_s": 3.0}
+  },
+  "motion": {
+    "enabled": true,
+    "max_duration_ms": 500,
+    "max_linear_speed": 0.08,
+    "max_angular_speed": 0.4,
+    "require_auto_stop": true
+  },
+  "safety": {"reject_unknown_topics": true}
+}

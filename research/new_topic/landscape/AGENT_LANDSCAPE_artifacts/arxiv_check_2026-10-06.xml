@@ -1,0 +1,283 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/j0hyINiMo8qrEOwWgOag+rAIU+E</id>
+  <title>arXiv Query: search_query=&amp;id_list=2608.27886,2603.26997,2609.00006,2410.06472,2505.07532,2510.01260,2605.17172,2412.18588&amp;start=0&amp;max_results=10</title>
+  <updated>2026-10-06T14:32:23Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=10&amp;id_list=2608.27886,2603.26997,2609.00006,2410.06472,2505.07532,2510.01260,2605.17172,2412.18588" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>10</opensearch:itemsPerPage>
+  <opensearch:totalResults>8</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2505.07532v1</id>
+    <title>RAI: Flexible Agent Framework for Embodied AI</title>
+    <updated>2025-05-12T13:13:47Z</updated>
+    <link href="https://arxiv.org/abs/2505.07532v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2505.07532v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>With an increase in the capabilities of generative language models, a growing interest in embodied AI has followed. This contribution introduces RAI - a framework for creating embodied Multi Agent Systems for robotics. The proposed framework implements tools for Agents' integration with robotic stacks, Large Language Models, and simulations. It provides out-of-the-box integration with state-of-the-art systems like ROS 2. It also comes with dedicated mechanisms for the embodiment of Agents. These mechanisms have been tested on a physical robot, Husarion ROSBot XL, which was coupled with its digital twin, for rapid prototyping. Furthermore, these mechanisms have been deployed in two simulations: (1) robot arm manipulator and (2) tractor controller. All of these deployments have been evaluated in terms of their control capabilities, effectiveness of embodiment, and perception ability. The proposed framework has been used successfully to build systems with multiple agents. It has demonstrated effectiveness in all the aforementioned tasks. It also enabled identifying and addressing the shortcomings of the generative models used for embodied AI.</summary>
+    <category term="cs.MA" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-05-12T13:13:47Z</published>
+    <arxiv:comment>12 pages, 8 figures, submitted to 23rd International Conference on Practical applications of Agents and Multi-Agent Systems (PAAMS'25)</arxiv:comment>
+    <arxiv:primary_category term="cs.MA"/>
+    <author>
+      <name>Kajetan Rachwał</name>
+    </author>
+    <author>
+      <name>Maciej Majek</name>
+    </author>
+    <author>
+      <name>Bartłomiej Boczek</name>
+    </author>
+    <author>
+      <name>Kacper Dąbrowski</name>
+    </author>
+    <author>
+      <name>Paweł Liberadzki</name>
+    </author>
+    <author>
+      <name>Adam Dąbrowski</name>
+    </author>
+    <author>
+      <name>Maria Ganzha</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2605.17172v1</id>
+    <title>OpenJarvis: Personal AI, On Personal Devices</title>
+    <updated>2026-05-16T22:00:10Z</updated>
+    <link href="https://arxiv.org/abs/2605.17172v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2605.17172v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Personal AI stacks, like OpenClaw and Hermes Agent, are becoming central to daily work, yet they route nearly every query (often over sensitive local data) to cloud-hosted frontier models. Replacing frontier models with local models inside existing stacks does not work: swapping Claude Opus 4.6 for Qwen3.5-9B drops accuracy by 25-39 pp across personal AI tasks like PinchBench and GAIA. Existing stacks bundle agentic prompts, tool descriptions, memory configuration, and runtime settings around a specific cloud model. Only the prompts can be tuned, and state-of-the-art prompt optimizers close just 5 pp of the local-cloud gap on their own. This motivates a decomposed personal AI stack: one that exposes individual primitives which can be optimized individually or jointly to close the local-cloud gap. We present OpenJarvis, an architecture that represents a personal AI system as a typed spec over five primitives: Intelligence, Engine, Agents, Tools &amp; Memory, and Learning. Each primitive is an independently editable field, making the stack end-to-end optimizable and measurable against accuracy, cost, and latency. Towards closing the local-cloud gap without surrendering local-model properties, OpenJarvis introduces LLM-guided spec search, a local-cloud collaboration in which frontier cloud models propose edits across the spec at search time, only non-regressing edits are accepted, and the resulting spec runs entirely on-device at inference time. With LLM-guided spec search, on-device specs match or exceed cloud accuracy on 4 of 8 benchmarks and land within 3.2 pp of the best cloud baseline on average. They also reduce marginal API cost by ~800x and end-to-end latency by 4x.</summary>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-05-16T22:00:10Z</published>
+    <arxiv:comment>Code: https://github.com/openjarvis/openjarvis Website: https://open-jarvis.github.io/OpenJarvis/</arxiv:comment>
+    <arxiv:primary_category term="cs.LG"/>
+    <author>
+      <name>Jon Saad-Falcon</name>
+    </author>
+    <author>
+      <name>Avanika Narayan</name>
+    </author>
+    <author>
+      <name>Robby Manihani</name>
+    </author>
+    <author>
+      <name>Tanvir Bhathal</name>
+    </author>
+    <author>
+      <name>Herumb Shandilya</name>
+    </author>
+    <author>
+      <name>Hakki Orhun Akengin</name>
+    </author>
+    <author>
+      <name>Gabriel Bo</name>
+    </author>
+    <author>
+      <name>Andrew Park</name>
+    </author>
+    <author>
+      <name>Matthew Hart</name>
+    </author>
+    <author>
+      <name>Caia Costello</name>
+    </author>
+    <author>
+      <name>Chuan Li</name>
+    </author>
+    <author>
+      <name>Christopher Ré</name>
+    </author>
+    <author>
+      <name>Azalia Mirhoseini</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2603.26997v1</id>
+    <title>ROSClaw: An OpenClaw ROS 2 Framework for Agentic Robot Control and Interaction</title>
+    <updated>2026-03-27T21:15:07Z</updated>
+    <link href="https://arxiv.org/abs/2603.26997v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2603.26997v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Foundation models can endow robots with open-ended reasoning, language understanding, and adaptive planning, yet connecting a model to a physical robot today requires bespoke integration that couples perception, actuation, and safety to a single model and platform. We present ROSClaw, a model-agnostic executive layer that integrates the OpenClaw agent runtime with ROS 2, enabling any foundation model to perceive, reason about, and act on any ROS-enabled robot through (i) dynamic capability discovery with standardized affordance injection, (ii) multimodal observation normalization, (iii) pre-execution action validation within a configurable safety envelope, and (iv) structured audit logging. Swapping model backends or robot platforms is a configuration change; tool schemas, safety enforcement, and provenance logging remain invariant. We deploy ROSClaw on three platforms (wheeled, quadruped, humanoid) with four foundation-model backends. Under this controlled substrate, models exhibit up to 4.8 x differences in out-of-policy action proposal rates (3.4 x among frontier models alone) and produce qualitatively distinct physical behaviors from identical commands. A cross-framework parity protocol against ROSA confirms that executive-layer design, not just prompt wording, significantly affects both task completion and safety behavior, establishing ROSClaw as both practical agentic-robot infrastructure and a reproducible measurement instrument for embodied AI.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.HC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-03-27T21:15:07Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Irvin Steve Cardenas</name>
+    </author>
+    <author>
+      <name>Marcus Anthony Arnett</name>
+    </author>
+    <author>
+      <name>Natalie Catherine Yeo</name>
+    </author>
+    <author>
+      <name>Lucky Sah</name>
+    </author>
+    <author>
+      <name>Jong-Hoon Kim</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2510.01260v1</id>
+    <title>IoT-MCP: Bridging LLMs and IoT Systems Through Model Context Protocol</title>
+    <updated>2025-09-25T08:35:47Z</updated>
+    <link href="https://arxiv.org/abs/2510.01260v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2510.01260v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The integration of Large Language Models (LLMs) with Internet-of-Things (IoT) systems faces significant challenges in hardware heterogeneity and control complexity. The Model Context Protocol (MCP) emerges as a critical enabler, providing standardized communication between LLMs and physical devices. We propose IoT-MCP, a novel framework that implements MCP through edge-deployed servers to bridge LLMs and IoT ecosystems. To support rigorous evaluation, we introduce IoT-MCP Bench, the first benchmark containing 114 Basic Tasks (e.g., ``What is the current temperature?'') and 1,140 Complex Tasks (e.g., ``I feel so hot, do you have any ideas?'') for IoT-enabled LLMs. Experimental validation across 22 sensor types and 6 microcontroller units demonstrates IoT-MCP's 100% task success rate to generate tool calls that fully meet expectations and obtain completely accurate results, 205ms average response time, and 74KB peak memory footprint. This work delivers both an open-source integration framework (https://github.com/Duke-CEI-Center/IoT-MCP-Servers) and a standardized evaluation methodology for LLM-IoT systems.</summary>
+    <category term="cs.DC" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-09-25T08:35:47Z</published>
+    <arxiv:primary_category term="cs.DC"/>
+    <author>
+      <name>Ningyuan Yang</name>
+    </author>
+    <author>
+      <name>Guanliang Lyu</name>
+    </author>
+    <author>
+      <name>Mingchen Ma</name>
+    </author>
+    <author>
+      <name>Yiyi Lu</name>
+    </author>
+    <author>
+      <name>Yiming Li</name>
+    </author>
+    <author>
+      <name>Zhihui Gao</name>
+    </author>
+    <author>
+      <name>Hancheng Ye</name>
+    </author>
+    <author>
+      <name>Jianyi Zhang</name>
+    </author>
+    <author>
+      <name>Tingjun Chen</name>
+    </author>
+    <author>
+      <name>Yiran Chen</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2410.06472v2</id>
+    <title>Enabling Novel Mission Operations and Interactions with ROSA: The Robot Operating System Agent</title>
+    <updated>2025-02-13T00:37:06Z</updated>
+    <link href="https://arxiv.org/abs/2410.06472v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2410.06472v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The advancement of robotic systems has revolutionized numerous industries, yet their operation often demands specialized technical knowledge, limiting accessibility for non-expert users. This paper introduces ROSA (Robot Operating System Agent), an AI-powered agent that bridges the gap between the Robot Operating System (ROS) and natural language interfaces. By leveraging state-of-the-art language models and integrating open-source frameworks, ROSA enables operators to interact with robots using natural language, translating commands into actions and interfacing with ROS through well-defined tools. ROSA's design is modular and extensible, offering seamless integration with both ROS1 and ROS2, along with safety mechanisms like parameter validation and constraint enforcement to ensure secure, reliable operations. While ROSA is originally designed for ROS, it can be extended to work with other robotics middle-wares to maximize compatibility across missions. ROSA enhances human-robot interaction by democratizing access to complex robotic systems, empowering users of all expertise levels with multi-modal capabilities such as speech integration and visual perception. Ethical considerations are thoroughly addressed, guided by foundational principles like Asimov's Three Laws of Robotics, ensuring that AI integration promotes safety, transparency, privacy, and accountability. By making robotic technology more user-friendly and accessible, ROSA not only improves operational efficiency but also sets a new standard for responsible AI use in robotics and potentially future mission operations. This paper introduces ROSA's architecture and showcases initial mock-up operations in JPL's Mars Yard, a laboratory, and a simulation using three different robots. The core ROSA library is available as open-source.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.HC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-10-09T01:54:02Z</published>
+    <arxiv:comment>Preprint. Accepted at IEEE Aerospace Conference 2025, 16 pages, 12 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Rob Royce</name>
+    </author>
+    <author>
+      <name>Marcel Kaufmann</name>
+    </author>
+    <author>
+      <name>Jonathan Becktor</name>
+    </author>
+    <author>
+      <name>Sangwoo Moon</name>
+    </author>
+    <author>
+      <name>Kalind Carpenter</name>
+    </author>
+    <author>
+      <name>Kai Pak</name>
+    </author>
+    <author>
+      <name>Amanda Towler</name>
+    </author>
+    <author>
+      <name>Rohan Thakker</name>
+    </author>
+    <author>
+      <name>Shehryar Khattak</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2412.18588v1</id>
+    <title>A Paragraph is All It Takes: Rich Robot Behaviors from Interacting, Trusted LLMs</title>
+    <updated>2024-12-24T18:41:15Z</updated>
+    <link href="https://arxiv.org/abs/2412.18588v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2412.18588v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large Language Models (LLMs) are compact representations of all public knowledge of our physical environment and animal and human behaviors. The application of LLMs to robotics may offer a path to highly capable robots that perform well across most human tasks with limited or even zero tuning. Aside from increasingly sophisticated reasoning and task planning, networks of (suitably designed) LLMs offer ease of upgrading capabilities and allow humans to directly observe the robot's thinking. Here we explore the advantages, limitations, and particularities of using LLMs to control physical robots. The basic system consists of four LLMs communicating via a human language data bus implemented via web sockets and ROS2 message passing. Surprisingly, rich robot behaviors and good performance across different tasks could be achieved despite the robot's data fusion cycle running at only 1Hz and the central data bus running at the extremely limited rates of the human brain, of around 40 bits/s. The use of natural language for inter-LLM communication allowed the robot's reasoning and decision making to be directly observed by humans and made it trivial to bias the system's behavior with sets of rules written in plain English. These rules were immutably written into Ethereum, a global, public, and censorship resistant Turing-complete computer. We suggest that by using natural language as the data bus among interacting AIs, and immutable public ledgers to store behavior constraints, it is possible to build robots that combine unexpectedly rich performance, upgradability, and durable alignment with humans.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-12-24T18:41:15Z</published>
+    <arxiv:comment>10 pages, 1 figure</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name> OpenMind</name>
+    </author>
+    <author>
+      <name>Shaohong Zhong</name>
+    </author>
+    <author>
+      <name>Adam Zhou</name>
+    </author>
+    <author>
+      <name>Boyuan Chen</name>
+    </author>
+    <author>
+      <name>Homin Luo</name>
+    </author>
+    <author>
+      <name>Jan Liphardt</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2608.27886v1</id>
+    <title>Resource Constraints and Performance in Agentic AI Systems</title>
+    <updated>2026-08-28T03:49:45Z</updated>
+    <link href="https://arxiv.org/abs/2608.27886v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2608.27886v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Progress toward more autonomous AI increasingly depends on agentic systems that combine a language model with tools, memory, state management, and multi-step execution. These mechanisms shape both task capability and operational burden. We compare OpenClaw and NanoBot as complete agentic systems using a paired primary benchmark and a more detailed instrumented subset of paired prompts. In the primary benchmark, the rate of full task completion was 31% for OpenClaw and 25% for NanoBot, a six-percentage-point difference with a 95% task-bootstrap interval from -3 to 15 percentage points, providing no statistically established full-completion advantage for either system. In the instrumented layer, both systems achieved 26% full completion, while NanoBot reached at least partial completion on 43% of prompts compared with 26% for OpenClaw. OpenClaw took longer on 83% of prompts and had a higher recorded peak-memory value on every prompt, with geometric mean ratios of 2.98 for wall time and 19.44 for peak memory. Among the ten detailed-layer prompts on which at least one system achieved partial or full completion, NanoBot weakly dominated on eight; across all 23 prompts, however, ten of its eighteen dominance cases were cheaper joint failures. Outcome labels differ across the two evidence layers, showing why agent-system evaluation should connect capability and resource measurements to attempt-level execution and scoring provenance. These findings show that progress toward more autonomous AI should be evaluated through verified task completion, observed resource use and records linking each result to the execution that produced it.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-08-28T03:49:45Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Amaz Salman</name>
+    </author>
+    <author>
+      <name>Malka Halgamuge</name>
+    </author>
+    <author>
+      <name>Teo Susnjak</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.00006v1</id>
+    <title>Harness Engineering: Anatomy, Architecture, and Evolution of Coding Agents -- A Source-Code Study of Eleven Systems</title>
+    <updated>2026-07-15T10:33:30Z</updated>
+    <link href="https://arxiv.org/abs/2609.00006v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.00006v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>An agent is a model plus a harness -- the runtime that couples an LLM to the world through a loop, tools, context management, safety controls, orchestration, and extension surfaces. Harness engineering, named as a discipline in early 2026, is the design and evolution of that runtime. This paper gives the young discipline its most comprehensive empirical foundation to date: a source-code anatomy of eleven production coding harnesses (Claude Code, Codex CLI, Gemini CLI, Mistral Vibe, OpenHands, Aider, Mini-SWE-Agent, Hermes, Pi, OpenCode, OpenClaw), plus Omnigent, the first meta-harness, analyzed as a contrast point. We define what a harness is, map its seven canonical subsystems with the minimal and maximal implementation of each, and dissect all eleven systems along those subsystems. The audit yields 13 cross-cutting observations and a catalog of 29 recurring design patterns. Two absences survive a threefold corpus expansion: across roughly four million lines of Python, TypeScript, and Rust, no agent runtime imports a general-purpose agentic framework, and none retrieves code with vector embeddings; the field runs on hand-rolled async loops and deterministic retrieval. SKILL.md skills lead MCP in adoption (9/11 vs. 8/11), and ACP ships in six systems with a new third role: harness hosting. Because the original eight systems were re-pinned rather than replaced, the study also contains a controlled longitudinal sample -- the same harnesses source-diffed across one quarter -- showing convergence becoming imitation and behavioral policy migrating from prompt prose to configuration. These threads converge on the paper's thesis: in the first half of 2026 the coding harness completed a turn from tool to platform. The paper closes with 18 design recommendations and a 90-line minimum-viable-harness scaffold.</summary>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.MA" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-07-15T10:33:30Z</published>
+    <arxiv:comment>83 pages, 7 figures, 18 tables. Second, substantially expanded edition of an April 2026 study: corpus grown from eight to eleven systems plus a meta-harness contrast point; the retained April snapshots provide a controlled longitudinal comparison</arxiv:comment>
+    <arxiv:primary_category term="cs.SE"/>
+    <author>
+      <name>Paul Barbaste</name>
+    </author>
+    <author>
+      <name>Tristan Darrigol</name>
+    </author>
+    <author>
+      <name>Germain Vu</name>
+    </author>
+    <author>
+      <name>Tom Wiltberger</name>
+    </author>
+  </entry>
+</feed>

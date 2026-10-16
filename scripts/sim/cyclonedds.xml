@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Cyclone DDS для VM "sim" (подключается через CYCLONEDDS_URI в vm_env.sh).
+     Без этого BEST_EFFORT-подписчики (rosbridge по умолчанию подписывается best effort) теряют кадры камеры:
+     921 КБ = ~15 UDP-фрагментов по loopback, а приёмный буфер сокета по умолчанию 208 КБ.
+     Требует net.core.rmem_max ≥ 16 МБ (install_ros.sh пишет /etc/sysctl.d/60-ros-dds.conf). -->
+<CycloneDDS xmlns="https://cdds.io/config">
+  <Domain Id="any">
+    <Internal>
+      <SocketReceiveBufferSize min="16MB"/>
+    </Internal>
+  </Domain>
+</CycloneDDS>

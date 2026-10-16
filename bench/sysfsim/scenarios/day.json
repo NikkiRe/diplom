@@ -1,0 +1,51 @@
+{
+  "format": "sysfsim/1",
+  "name": "day",
+  "description": "Рабочий день 08:00–16:00 с редкими событиями: душ, еда, циклы котла, уход и возвращение, протечка, открытая дверь, перегрев к концу; случайные сбои",
+  "duration_s": 28800,
+  "start": "08:00",
+  "events": [
+    {"t": 600, "kind": "moisture", "zone": "bathroom", "rh_rise": 40, "duration_s": 900, "note": "утренний душ"},
+    {"t": 600, "kind": "heat", "zone": "bathroom", "rise_c": 3, "duration_s": 900, "note": "утренний душ"},
+    {"t": 1200, "kind": "heat", "zone": "kitchen", "rise_c": 6, "duration_s": 1500, "note": "завтрак"},
+    {"t": 1200, "kind": "moisture", "zone": "kitchen", "rh_rise": 20, "duration_s": 1500, "note": "завтрак"},
+    {"t": 2700, "kind": "motion", "device": "pir_hall", "duration_s": 120, "note": "сборы"},
+    {"t": 2800, "kind": "door", "device": "door_entry", "duration_s": 60, "note": "ушли"},
+    {"t": 3000, "kind": "heat", "zone": "boiler_pipe", "rise_c": 30, "duration_s": 1800, "note": "цикл котла"},
+    {"t": 10800, "kind": "heat", "zone": "boiler_pipe", "rise_c": 30, "duration_s": 1800, "note": "цикл котла"},
+    {"t": 14400, "kind": "door", "device": "door_entry", "duration_s": 45, "note": "вернулись"},
+    {"t": 14400, "kind": "motion", "device": "pir_hall", "duration_s": 900},
+    {"t": 15000, "kind": "heat", "zone": "kitchen", "rise_c": 8, "duration_s": 2400, "note": "обед"},
+    {"t": 15000, "kind": "moisture", "zone": "kitchen", "rh_rise": 25, "duration_s": 2400, "note": "обед"},
+    {"t": 16200, "kind": "load", "level": 0.6, "duration_s": 900, "note": "плата занята"},
+    {"t": 19800, "kind": "heat", "zone": "boiler_pipe", "rise_c": 30, "duration_s": 1800, "note": "цикл котла"},
+    {"t": 21000, "kind": "leak", "device": "bathroom_leak", "duration_s": 600, "note": "протечка"},
+    {"t": 23400, "kind": "motion", "device": "pir_hall", "duration_s": 1200},
+    {"t": 25200, "kind": "door", "device": "door_entry", "duration_s": 900, "note": "дверь оставили открытой"},
+    {"t": 26400, "kind": "heat", "zone": "kitchen", "rise_c": 25, "duration_s": 2400, "note": "духовку оставили включённой"}
+  ],
+  "faults": [
+    {"rate_per_h": 0.5, "kind": "spike", "device": "kitchen_bme280", "property": "pressure", "amplitude": 300, "duration_s": 1},
+    {"rate_per_h": 0.2, "kind": "read_error", "device": "kitchen_bme280", "duration_s": 5},
+    {"rate_per_h": 0.1, "kind": "por85", "device": "boiler_pipe_ds18b20", "duration_s": 20},
+    {"t": 12000, "kind": "disconnect", "device": "bathroom_dht11", "duration_s": 600},
+    {"t": 18000, "kind": "stuck", "device": "boiler_pipe_ds18b20", "duration_s": 900},
+    {"t": 22000, "kind": "noise_burst", "device": "bathroom_leak", "sigma": 0.05, "duration_s": 120}
+  ],
+  "questions": [
+    {"id": "q1", "t": 900, "text": "Какая влажность в ванной?", "expect": {"device": "bathroom_dht11", "property": "humidity"}},
+    {"id": "q2", "t": 3600, "text": "Сколько градусов на кухне?", "expect": {"device": "kitchen_bme280", "property": "temperature"}},
+    {"id": "q3", "t": 7200, "text": "Какое атмосферное давление?", "expect": {"device": "kitchen_bme280", "property": "pressure"}},
+    {"id": "q4", "t": 11000, "text": "Котёл сейчас греет трубу?", "expect": {"device": "boiler_pipe_ds18b20", "property": "temperature"}},
+    {"id": "q5", "t": 14500, "text": "Кто-то пришёл домой?", "expect": {"device": "pir_hall", "property": "state"}},
+    {"id": "q6", "t": 18000, "text": "Как нагрета плата?", "expect": {"device": "board_cpu_thermal", "property": "temperature1"}},
+    {"id": "q7", "t": 21300, "text": "Есть ли вода на полу в ванной?", "expect": {"device": "bathroom_leak", "property": "voltage0"}},
+    {"id": "q8", "t": 27500, "text": "Вентилятор на кухне включён?", "expect": {"device": "relay_fan", "property": "state"}}
+  ],
+  "situations": [
+    {"id": "s_sensor_lost", "kind": "sensor_lost", "t": 12000, "deadline_s": 300, "expect": "notify"},
+    {"id": "s_leak", "kind": "leak", "when": {"device": "bathroom_leak", "property": "voltage0", "ge": 1.0}, "deadline_s": 60, "expect": "notify"},
+    {"id": "s_door_open", "kind": "door_left_open", "t": 25500, "deadline_s": 300, "expect": "notify", "note": "открыта дольше 5 мин"},
+    {"id": "s_overheat", "kind": "overheat", "when": {"device": "kitchen_bme280", "property": "temperature", "ge": 35}, "deadline_s": 120, "expect": "actuate", "action": {"device": "relay_fan", "property": "state", "value": true}}
+  ]
+}

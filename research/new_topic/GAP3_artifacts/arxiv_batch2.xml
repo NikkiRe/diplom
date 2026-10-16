@@ -1,0 +1,325 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/1tNONLUgtdu7UIbwQ6hUP7a0gOI</id>
+  <title>arXiv Query: search_query=&amp;id_list=2609.07288,2509.02163,2511.14435,2604.20193,2604.05427,2409.01630,2505.12583,2506.14697,2507.03293,2609.04629&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-06T13:55:11Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=50&amp;id_list=2609.07288,2509.02163,2511.14435,2604.20193,2604.05427,2409.01630,2505.12583,2506.14697,2507.03293,2609.04629" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>10</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2506.14697v3</id>
+    <title>AGENTSAFE: Benchmarking the Safety of Embodied Agents on Hazardous Instructions</title>
+    <updated>2025-10-19T06:38:51Z</updated>
+    <link href="https://arxiv.org/abs/2506.14697v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2506.14697v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The integration of vision-language models (VLMs) is driving a new generation of embodied agents capable of operating in human-centered environments. However, as deployment expands, these systems face growing safety risks, particularly when executing hazardous instructions. Current safety evaluation benchmarks remain limited: they cover only narrow scopes of hazards and focus primarily on final outcomes, neglecting the agent's full perception-planning-execution process and thereby obscuring critical failure modes. Therefore, we present SAFE, a benchmark for systematically assessing the safety of embodied VLM agents on hazardous instructions. SAFE comprises three components: SAFE-THOR, an extensible adversarial simulation sandbox with a universal adapter that maps high-level VLM outputs to low-level embodied controls, supporting diverse agent workflow integration; SAFE-VERSE, a risk-aware task suite inspired by Asimov's Three Laws of Robotics, comprising 45 adversarial scenarios, 1,350 hazardous tasks, and 9,900 instructions that span risks to humans, environments, and agents; and SAFE-DIAGNOSE, a multi-level and fine-grained evaluation protocol measuring agent performance across perception, planning, and execution. Applying SAFE to nine state-of-the-art VLMs and two embodied agent workflows, we uncover systematic failures in translating hazard recognition into safe planning and execution. Our findings reveal fundamental limitations in current safety alignment and demonstrate the necessity of a comprehensive, multi-stage evaluation for developing safer embodied intelligence.</summary>
+    <category term="cs.CR" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-06-17T16:37:35Z</published>
+    <arxiv:primary_category term="cs.CR"/>
+    <author>
+      <name>Zonghao Ying</name>
+    </author>
+    <author>
+      <name>Le Wang</name>
+    </author>
+    <author>
+      <name>Yisong Xiao</name>
+    </author>
+    <author>
+      <name>Jiakai Wang</name>
+    </author>
+    <author>
+      <name>Yuqing Ma</name>
+    </author>
+    <author>
+      <name>Jinyang Guo</name>
+    </author>
+    <author>
+      <name>Zhenfei Yin</name>
+    </author>
+    <author>
+      <name>Mingchuan Zhang</name>
+    </author>
+    <author>
+      <name>Aishan Liu</name>
+    </author>
+    <author>
+      <name>Xianglong Liu</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2507.03293v2</id>
+    <title>LogicGuard: Improving Embodied LLM agents through Temporal Logic based Critics</title>
+    <updated>2025-09-23T04:36:17Z</updated>
+    <link href="https://arxiv.org/abs/2507.03293v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2507.03293v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models (LLMs) have shown promise in zero-shot and single step reasoning and decision making problems, but in long horizon sequential planning tasks, their errors compound, often leading to unreliable or inefficient behavior. We introduce LogicGuard, a modular actor-critic architecture in which an LLM actor is guided by a trajectory level LLM critic that communicates through Linear Temporal Logic (LTL). Our setup combines the reasoning strengths of language models with the guarantees of formal logic. The actor selects high-level actions from natural language observations, while the critic analyzes full trajectories and proposes new LTL constraints that shield the actor from future unsafe or inefficient behavior. LogicGuard supports both fixed safety rules and adaptive, learned constraints, and is model-agnostic: any LLM-based planner can serve as the actor, with LogicGuard acting as a logic-generating wrapper. We formalize planning as graph traversal under symbolic constraints, allowing LogicGuard to analyze failed or suboptimal trajectories and generate new temporal logic rules that improve future behavior. To demonstrate generality, we evaluate LogicGuard across two distinct settings: short-horizon general tasks and long-horizon specialist tasks. On the Behavior benchmark of 100 household tasks, LogicGuard increases task completion rates by 25% over a baseline InnerMonologue planner. On the Minecraft diamond-mining task, which is long-horizon and requires multiple interdependent subgoals, LogicGuard improves both efficiency and safety compared to SayCan and InnerMonologue. These results show that enabling LLMs to supervise each other through temporal logic yields more reliable, efficient and safe decision-making for both embodied agents.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-07-04T04:53:53Z</published>
+    <arxiv:comment>Modified version of prior LTLCrit work with new robotics dataset</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Anand Gokhale</name>
+    </author>
+    <author>
+      <name>Vaibhav Srivastava</name>
+    </author>
+    <author>
+      <name>Francesco Bullo</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2604.05427v1</id>
+    <title>Pre-Execution Safety Gate &amp; Task Safety Contracts for LLM-Controlled Robot Systems</title>
+    <updated>2026-04-07T04:46:06Z</updated>
+    <link href="https://arxiv.org/abs/2604.05427v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2604.05427v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large Language Models (LLMs) are increasingly used to convert task commands into robot-executable code, however this pipeline lacks validation gates to detect unsafe and defective commands before they are translated into robot code. Furthermore, even commands that appear safe at the outset can produce unsafe state transitions during execution in the absence of continuous constraint monitoring. In this research, we introduce SafeGate, a neurosymbolic safety architecture that prevents unsafe natural language task commands from reaching robot execution. Drawing from ISO 13482 safety standard, SafeGate extracts structured safety-relevant properties from natural language commands and applies a deterministic decision gate to authorize or reject execution. In addition, we introduce Task Safety Contracts, which decomposes commands that pass through the gate into invariants, guards, and abort conditions to prevent unsafe state transitions during execution. We further incorporate Z3 SMT solving to enforce constraint checking derived from the Task Safety Contracts. We evaluate SafeGate against existing LLM-based robot safety frameworks and baseline LLMs across 230 benchmark tasks, 30 AI2-THOR simulation scenarios, and real-world robot experiments. Results show that SafeGate significantly reduces the acceptance of defective commands while maintaining a high acceptance of benign tasks, demonstrating the importance of pre-execution safety gates for LLM-controlled robot systems</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-04-07T04:46:06Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Ike Obi</name>
+    </author>
+    <author>
+      <name>Vishnunandan L. N. Venkatesh</name>
+    </author>
+    <author>
+      <name>Weizheng Wang</name>
+    </author>
+    <author>
+      <name>Ruiqi Wang</name>
+    </author>
+    <author>
+      <name>Dayoon Suh</name>
+    </author>
+    <author>
+      <name>Temitope I. Amosa</name>
+    </author>
+    <author>
+      <name>Wonse Jo</name>
+    </author>
+    <author>
+      <name>Byung-Cheol Min</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2505.12583v2</id>
+    <title>A Comprehensive Survey on Physical Risk Control in the Era of Foundation Model-enabled Robotics</title>
+    <updated>2025-05-30T07:28:49Z</updated>
+    <link href="https://arxiv.org/abs/2505.12583v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2505.12583v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent Foundation Model-enabled robotics (FMRs) display greatly improved general-purpose skills, enabling more adaptable automation than conventional robotics. Their ability to handle diverse tasks thus creates new opportunities to replace human labor. However, unlike general foundation models, FMRs interact with the physical world, where their actions directly affect the safety of humans and surrounding objects, requiring careful deployment and control. Based on this proposition, our survey comprehensively summarizes robot control approaches to mitigate physical risks by covering all the lifespan of FMRs ranging from pre-deployment to post-accident stage. Specifically, we broadly divide the timeline into the following three phases: (1) pre-deployment phase, (2) pre-incident phase, and (3) post-incident phase. Throughout this survey, we find that there is much room to study (i) pre-incident risk mitigation strategies, (ii) research that assumes physical interaction with humans, and (iii) essential issues of foundation models themselves. We hope that this survey will be a milestone in providing a high-resolution analysis of the physical risks of FMRs and their control, contributing to the realization of a good human-robot relationship.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-05-19T00:11:42Z</published>
+    <arxiv:comment>Accepted to IJCAI 2025 Survey Track</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Takeshi Kojima</name>
+    </author>
+    <author>
+      <name>Yaonan Zhu</name>
+    </author>
+    <author>
+      <name>Yusuke Iwasawa</name>
+    </author>
+    <author>
+      <name>Toshinori Kitamura</name>
+    </author>
+    <author>
+      <name>Gang Yan</name>
+    </author>
+    <author>
+      <name>Shu Morikuni</name>
+    </author>
+    <author>
+      <name>Ryosuke Takanami</name>
+    </author>
+    <author>
+      <name>Alfredo Solano</name>
+    </author>
+    <author>
+      <name>Tatsuya Matsushima</name>
+    </author>
+    <author>
+      <name>Akiko Murakami</name>
+    </author>
+    <author>
+      <name>Yutaka Matsuo</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2511.14435v1</id>
+    <title>Watchdogs and Oracles: Runtime Verification Meets Large Language Models for Autonomous Systems</title>
+    <updated>2025-11-18T12:35:05Z</updated>
+    <link href="https://arxiv.org/abs/2511.14435v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2511.14435v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Assuring the safety and trustworthiness of autonomous systems is particularly difficult when learning-enabled components and open environments are involved. Formal methods provide strong guarantees but depend on complete models and static assumptions. Runtime verification (RV) complements them by monitoring executions at run time and, in its predictive variants, by anticipating potential violations. Large language models (LLMs), meanwhile, excel at translating natural language into formal artefacts and recognising patterns in data, yet they remain error-prone and lack formal guarantees. This vision paper argues for a symbiotic integration of RV and LLMs. RV can serve as a guardrail for LLM-driven autonomy, while LLMs can extend RV by assisting specification capture, supporting anticipatory reasoning, and helping to handle uncertainty. We outline how this mutual reinforcement differs from existing surveys and roadmaps, discuss challenges and certification implications, and identify future research directions towards dependable autonomy.</summary>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-11-18T12:35:05Z</published>
+    <arxiv:comment>In Proceedings FMAS 2025, arXiv:2511.13245</arxiv:comment>
+    <arxiv:primary_category term="cs.SE"/>
+    <arxiv:journal_ref>EPTCS 436, 2025, pp. 80-87</arxiv:journal_ref>
+    <author>
+      <name>Angelo Ferrando</name>
+      <arxiv:affiliation>University of Modena and Reggio Emilia</arxiv:affiliation>
+    </author>
+    <arxiv:doi>10.4204/EPTCS.436.8</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.4204/EPTCS.436.8" title="doi"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.07288v1</id>
+    <title>How Long Until Your Robot Ignores You? A Safety Benchmark for LLM Orchestrators in Human-Humanoid Collaboration</title>
+    <updated>2026-09-07T09:58:52Z</updated>
+    <link href="https://arxiv.org/abs/2609.07288v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.07288v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large Language Models (LLMs) are increasingly employed to orchestrate robot behavior through natural-language interfaces, yet no benchmark exists to evaluate their reliability as safety-aware decision makers in human-humanoid collaboration. Unlike deterministic safety systems that enforce binary allow/deny decisions, LLM-based orchestrators exhibit a compliance spectrum ranging from overcompliance (refusing safe actions) to full safety violations. This paper introduces the first safety benchmarking environment for LLM orchestrators in human-humanoid collaboration, built on a Model Context Protocol (MCP)-based architecture with safety invariants grounded in ISO 10218-2:2025 protective measures. The benchmark defines five testable safety invariants, a four-level compliance taxonomy (correct compliance, overcompliance, undercompliance, full violation), and a three-layer evaluation pipeline (text prompting, simulated sensor-actuator loops, and physical validation on a Unitree G1 EDU humanoid). We report Layer-1 results: three cloud backends (Claude Haiku 4.5, GPT-4o-mini, Gemini 2.5 Flash) and a local open-weights baseline (qwen3:8b) across 40 100-turn sessions under full-context and sliding-window budget conditions, while the simulation and physical layers remain ongoing. We find that (1) model family determines the safety floor, as Claude and Gemini remain at or near zero violations while GPT-4o-mini commits up to 13 per session, (2) context management dissociates two failure axes, reducing mean behavioral issues by 42-57% for every cloud backend while nearly doubling GPT-4o-mini's violations (3.8 to 7.2 per session), and (3) proportional compliance, clamping movement speed to the rule-specified maximum rather than refusing, emerges consistently only in Gemini; the preliminary simulation layer reproduces the model ranking and the GPT-4o-mini failure-mode inversion.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-07T09:58:52Z</published>
+    <arxiv:comment>8 pages, CBS 2026</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Aulon Bajrami</name>
+    </author>
+    <author>
+      <name>Mohamed Elshamouty</name>
+    </author>
+    <author>
+      <name>Werner Kraus</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.04629v1</id>
+    <title>SiLR: Structure-Preserving Admission and Process Reward for LLM Tool Agents</title>
+    <updated>2026-09-04T02:03:52Z</updated>
+    <link href="https://arxiv.org/abs/2609.04629v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.04629v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>A runtime gate for an LLM tool agent is usually cast as a filter. In a ReAct loop a rejected proposal is followed by another at the same state, so the gate is a search operator over the proposal stream whose admission criterion shapes which trajectories are reachable. We study post-violation recovery admission, where progress must be admitted while the system is still in violation, and identify the scalar projection trap: an aggregate-score gate accepts a locally improving proposal and commits the trajectory to a plateau. SiLR instead shadow-executes each proposal and admits it under a product order over the branch-level violation state (overloaded-branch support and per-branch severity). We prove that no scalar surrogate is sound for this order, so the failure is representational, not a matter of threshold tuning. On mined Gym-ANM scenarios, SiLR recovers 21/21 multi-action episodes against 0/21 for terminal and 9/21 for the best scalar gate, significant across the full 24-scenario benchmark. The terminal-versus-structured dichotomy holds across three model families and in CityLearn. Because admission rests on deterministic simulation, the LLM lies outside the trust boundary: a magnitude-redistribution attack that defeats both scalar and support-only baselines is contained only by the full per-branch predicate. With two constraint families active, every tested scalar projection admits physically unsafe actions; support-only admits the largest fraction (63.2% of 42,410; product order 0). In the hardest dual-family traces, scalar gates recover only through that unsafe class. Reused as a GRPO process reward, it outperforms its count projection in every mined scenario and is the only tested reward whose ungated policy exceeds the untrained base (0.844 vs. 0.778). Scalar projection loses the violation geometry at both design points; only the full product order is structurally sufficient.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-04T02:03:52Z</published>
+    <arxiv:comment>13 pages, 8 figures, 6 tables. Appendix includes full proofs, attack-family constructions, and the extended process-reward study</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Chenyu Zhou</name>
+    </author>
+    <author>
+      <name>Qiliang Jiang</name>
+    </author>
+    <author>
+      <name>Shuning Wu</name>
+    </author>
+    <author>
+      <name>Xu Zhou</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2409.01630v1</id>
+    <title>SafeEmbodAI: a Safety Framework for Mobile Robots in Embodied AI Systems</title>
+    <updated>2024-09-03T05:56:50Z</updated>
+    <link href="https://arxiv.org/abs/2409.01630v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2409.01630v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Embodied AI systems, including AI-powered robots that autonomously interact with the physical world, stand to be significantly advanced by Large Language Models (LLMs), which enable robots to better understand complex language commands and perform advanced tasks with enhanced comprehension and adaptability, highlighting their potential to improve embodied AI capabilities. However, this advancement also introduces safety challenges, particularly in robotic navigation tasks. Improper safety management can lead to failures in complex environments and make the system vulnerable to malicious command injections, resulting in unsafe behaviours such as detours or collisions. To address these issues, we propose \textit{SafeEmbodAI}, a safety framework for integrating mobile robots into embodied AI systems. \textit{SafeEmbodAI} incorporates secure prompting, state management, and safety validation mechanisms to secure and assist LLMs in reasoning through multi-modal data and validating responses. We designed a metric to evaluate mission-oriented exploration, and evaluations in simulated environments demonstrate that our framework effectively mitigates threats from malicious commands and improves performance in various environment settings, ensuring the safety of embodied AI systems. Notably, In complex environments with mixed obstacles, our method demonstrates a significant performance increase of 267\% compared to the baseline in attack scenarios, highlighting its robustness in challenging conditions.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.ET" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-09-03T05:56:50Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Wenxiao Zhang</name>
+    </author>
+    <author>
+      <name>Xiangrui Kong</name>
+    </author>
+    <author>
+      <name>Thomas Braunl</name>
+    </author>
+    <author>
+      <name>Jin B. Hong</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2509.02163v1</id>
+    <title>Enhancing Reliability in LLM-Integrated Robotic Systems: A Unified Approach to Security and Safety</title>
+    <updated>2025-09-02T10:14:28Z</updated>
+    <link href="https://arxiv.org/abs/2509.02163v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2509.02163v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Integrating large language models (LLMs) into robotic systems has revolutionised embodied artificial intelligence, enabling advanced decision-making and adaptability. However, ensuring reliability, encompassing both security against adversarial attacks and safety in complex environments, remains a critical challenge. To address this, we propose a unified framework that mitigates prompt injection attacks while enforcing operational safety through robust validation mechanisms. Our approach combines prompt assembling, state management, and safety validation, evaluated using both performance and security metrics. Experiments show a 30.8% improvement under injection attacks and up to a 325% improvement in complex environment settings under adversarial conditions compared to baseline scenarios. This work bridges the gap between safety and security in LLM-based robotic systems, offering actionable insights for deploying reliable LLM-integrated mobile robots in real-world settings. The framework is open-sourced with simulation and physical deployment demos at https://llmeyesim.vercel.app/</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-09-02T10:14:28Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Wenxiao Zhang</name>
+    </author>
+    <author>
+      <name>Xiangrui Kong</name>
+    </author>
+    <author>
+      <name>Conan Dewitt</name>
+    </author>
+    <author>
+      <name>Thomas Bräunl</name>
+    </author>
+    <author>
+      <name>Jin B. Hong</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2604.20193v1</id>
+    <title>LLM-Guided Safety Agent for Edge Robotics with an ISO-Compliant Perception-Compute-Control Architecture</title>
+    <updated>2026-04-22T05:20:57Z</updated>
+    <link href="https://arxiv.org/abs/2604.20193v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2604.20193v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Ensuring functional safety in human-robot interaction is challenging because AI perception is inherently probabilistic, whereas industrial standards require deterministic behavior. We present an LLM-guided safety agent for edge robotics, built on an ISO-compliant low-latency perception-compute-control architecture. Our method translates natural-language safety regulations into executable predicates and deploys them through a redundant heterogeneous edge runtime. For fault-tolerant closed-loop execution under edge constraints, we adopt a symmetric dual-modular redundancy design with parallel independent execution for low-latency perception, computation, and control. We prototype the system on a dual-RK3588 platform and evaluate it in representative human-robot interaction scenarios. The results demonstrate a practical edge implementation path toward ISO 13849 Category 3 and PL d using cost-effective hardware, supporting practical deployment of safety-critical embodied AI.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-04-22T05:20:57Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Xu Huang</name>
+    </author>
+    <author>
+      <name>Ruofan Zhang</name>
+    </author>
+    <author>
+      <name>Lu Cheng</name>
+    </author>
+    <author>
+      <name>Yuefeng Song</name>
+    </author>
+    <author>
+      <name>Xu Huang</name>
+    </author>
+    <author>
+      <name>Huayu Zhang</name>
+    </author>
+    <author>
+      <name>Sheng Yin</name>
+    </author>
+    <author>
+      <name>Anyang Liang</name>
+    </author>
+    <author>
+      <name>Chen Qian</name>
+    </author>
+    <author>
+      <name>Yin Zhou</name>
+    </author>
+    <author>
+      <name>Xiaoyun Yuan</name>
+    </author>
+    <author>
+      <name>Yuan Cheng</name>
+    </author>
+  </entry>
+</feed>

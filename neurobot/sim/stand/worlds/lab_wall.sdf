@@ -1,0 +1,56 @@
+<?xml version="1.0"?>
+<!-- Мир стенда neurobot (neurobot/sim/stand/README.md): комната 4,0 × 4,0 м (x −2,5…1,5; y −2,0…2,0).
+     Робот спавнится в (0, 0) лицом по +x. Стены высотой 1,0 м — их пересекают плоскости скана обеих баз
+     (TB3 ≈0,17 м, NeuroChip ≈0,67 м). wall_front — ближняя грань в 1,5 м перед роботом;
+     box_left — ящик 0,3 × 0,3 × 0,4 м слева впереди (пеленг ≈47°, вне сектора ±30° по курсу). Его видит только
+     лидар TB3: плоскость скана NeuroChip выше ящика (R7b RS1);
+     post_back — столбик Ø0,2 × 1,0 м в 0,6 м позади, в слепой зоне URG-04LX (задние 120°).
+     Плагины и физика — как в turtlebot3_gazebo/worlds/empty_world.world; земля и свет встроены (без Fuel).
+     Имя мира default — как у миров TurtleBot3 (сервисы /world/default/*, world_events.py). -->
+<sdf version="1.6">
+  <world name="default">
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+    <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+    <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors">
+      <render_engine>ogre2</render_engine>
+    </plugin>
+    <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+    <scene><shadows>false</shadows></scene>
+    <physics type="ode">
+      <real_time_update_rate>1000.0</real_time_update_rate>
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+      <ode>
+        <solver><type>quick</type><iters>150</iters><precon_iters>0</precon_iters><sor>1.4</sor>
+          <use_dynamic_moi_rescaling>1</use_dynamic_moi_rescaling></solver>
+        <constraints><cfm>0.00001</cfm><erp>0.2</erp><contact_max_correcting_vel>2000</contact_max_correcting_vel>
+          <contact_surface_layer>0.01</contact_surface_layer></constraints>
+      </ode>
+    </physics>
+    <light type="directional" name="sun"><cast_shadows>false</cast_shadows><pose>0 0 10 0 0 0</pose>
+      <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.2 0.2 0.2 1</specular><direction>-0.5 0.1 -0.9</direction></light>
+    <model name="ground_plane"><static>true</static><link name="link">
+      <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></collision>
+      <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>100 100</size></plane></geometry></visual>
+    </link></model>
+    <model name="wall_front"><static>true</static><pose>1.55 0 0.5 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>0.1 4.2 1.0</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>0.1 4.2 1.0</size></box></geometry></visual></link></model>
+    <model name="wall_back"><static>true</static><pose>-2.55 0 0.5 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>0.1 4.2 1.0</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>0.1 4.2 1.0</size></box></geometry></visual></link></model>
+    <model name="wall_left"><static>true</static><pose>-0.5 2.05 0.5 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>4.2 0.1 1.0</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>4.2 0.1 1.0</size></box></geometry></visual></link></model>
+    <model name="wall_right"><static>true</static><pose>-0.5 -2.05 0.5 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>4.2 0.1 1.0</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>4.2 0.1 1.0</size></box></geometry></visual></link></model>
+    <model name="box_left"><static>true</static><pose>0.7 0.75 0.2 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><box><size>0.3 0.3 0.4</size></box></geometry></collision>
+      <visual name="visual"><geometry><box><size>0.3 0.3 0.4</size></box></geometry></visual></link></model>
+    <model name="post_back"><static>true</static><pose>-0.6 0 0.5 0 0 0</pose><link name="link">
+      <collision name="collision"><geometry><cylinder><radius>0.1</radius><length>1.0</length></cylinder></geometry></collision>
+      <visual name="visual"><geometry><cylinder><radius>0.1</radius><length>1.0</length></cylinder></geometry></visual></link></model>
+  </world>
+</sdf>

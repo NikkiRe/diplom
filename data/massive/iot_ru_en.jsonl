@@ -1,0 +1,220 @@
+{"en": "pink is all we need", "id": "8", "label": "iot_hue_lightchange", "ru": "розовый это то что нам надо"}
+{"en": "and the darkness has fallen", "id": "14", "label": "iot_hue_lighton", "ru": "и опустилась темнота"}
+{"en": "olly turn the lights off in the bedroom", "id": "19", "label": "iot_hue_lightoff", "ru": "olly выключи свет в спальне"}
+{"en": "it's dirty here make some noise", "id": "27", "label": "iot_cleaning", "ru": "здесь слишком грязно приберись"}
+{"en": "hoover the hallway", "id": "31", "label": "iot_cleaning", "ru": "пропылесось в прихожей"}
+{"en": "set lights brightness higher", "id": "80", "label": "iot_hue_lightup", "ru": "сделай яркость освещения поярче"}
+{"en": "lower the lights", "id": "158", "label": "iot_hue_lightdim", "ru": "приглуши свет"}
+{"en": "let's have the lights blue", "id": "263", "label": "iot_hue_lightchange", "ru": "давай ка сделаем свет синим"}
+{"en": "light up the lights in the kitchen", "id": "286", "label": "iot_hue_lighton", "ru": "зажги свет на кухне"}
+{"en": "start a vacuum cleaner", "id": "290", "label": "iot_cleaning", "ru": "включить пылесос"}
+{"en": "turn on the vacuum cleaner", "id": "292", "label": "iot_cleaning", "ru": "включи пылесос"}
+{"en": "disable my okug", "id": "321", "label": "iot_wemo_off", "ru": "выключи мою розетку"}
+{"en": "enable my plug", "id": "322", "label": "iot_wemo_on", "ru": "включи мою розетку"}
+{"en": "switch off the lights", "id": "369", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "turn the smart plug on", "id": "389", "label": "iot_wemo_on", "ru": "включи умную розетку"}
+{"en": "power up the plug socket one", "id": "426", "label": "iot_wemo_on", "ru": "включи розетку номер один"}
+{"en": "turn off the lights in the bathroom", "id": "427", "label": "iot_hue_lightoff", "ru": "выключи свет в ванной"}
+{"en": "turn off the bathroom lights", "id": "428", "label": "iot_hue_lightoff", "ru": "выключи свет в ванной"}
+{"en": "run coffee maker", "id": "448", "label": "iot_coffee", "ru": "запусти кофеварку"}
+{"en": "change the bedroom lights to green", "id": "456", "label": "iot_hue_lightchange", "ru": "поменяй свет в спальне на зелёный"}
+{"en": "change the lights to dim", "id": "468", "label": "iot_hue_lightdim", "ru": "поменяй свет на более приглушённый"}
+{"en": "change light color", "id": "564", "label": "iot_hue_lightchange", "ru": "поменяй цвет света"}
+{"en": "please start vacuum cleaner", "id": "635", "label": "iot_cleaning", "ru": "пожалуйста запусти пылесос"}
+{"en": "turn off room lights", "id": "651", "label": "iot_hue_lightoff", "ru": "выключи свет в комнате"}
+{"en": "can you lower the lights", "id": "665", "label": "iot_hue_lightdim", "ru": "можешь ли ты понизить освещение"}
+{"en": "hi can you please turn lower the lights", "id": "702", "label": "iot_hue_lightdim", "ru": "привет не могла ли ты приглушить свет пожалуйста"}
+{"en": "turn the lights off", "id": "730", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "start the robot roomba", "id": "843", "label": "iot_cleaning", "ru": "запусти румбу"}
+{"en": "robot vacuum the living room now", "id": "864", "label": "iot_cleaning", "ru": "робот пылесос в гостиную"}
+{"en": "make the house lights amber at six p. m.", "id": "897", "label": "iot_hue_lightchange", "ru": "сделай свет в доме янтарного цвета в шесть вечера"}
+{"en": "please turn lights off", "id": "914", "label": "iot_hue_lightoff", "ru": "пожалуйста выключи свет"}
+{"en": "increase the brightness of the lights", "id": "962", "label": "iot_hue_lightup", "ru": "увеличь яркость света"}
+{"en": "i want dimmer lights", "id": "964", "label": "iot_hue_lightdim", "ru": "я хочу приглушенный свет"}
+{"en": "turn the living room's light off", "id": "997", "label": "iot_hue_lightoff", "ru": "выключи свет в гостиной"}
+{"en": "could you turn the light off", "id": "999", "label": "iot_hue_lightoff", "ru": "ты можешь выключить свет"}
+{"en": "dim the lights in the living room", "id": "1030", "label": "iot_hue_lightdim", "ru": "приглуши свет в гостиной"}
+{"en": "turn on the robot vacuum cleaner", "id": "1059", "label": "iot_cleaning", "ru": "включи робот пылесос"}
+{"en": "brighten the lights in the hallway", "id": "1071", "label": "iot_hue_lightup", "ru": "сделай свет поярче в коридоре"}
+{"en": "please turn up the screen brightness all the way", "id": "1072", "label": "iot_hue_lightup", "ru": "пожалуйста увеличь яркость экрана до конца"}
+{"en": "can you increase the brightness in the room", "id": "1090", "label": "iot_hue_lightup", "ru": "можешь ли ты увеличить яркость в комнате"}
+{"en": "start vacuum cleaner", "id": "1151", "label": "iot_cleaning", "ru": "включи пылесос"}
+{"en": "olly change the lighting to blue", "id": "1217", "label": "iot_hue_lightchange", "ru": "olly поменяй освещение на синий цвет"}
+{"en": "i want a coffee", "id": "1276", "label": "iot_coffee", "ru": "я хочу кофе"}
+{"en": "please raise the light i am not comfortable at this", "id": "1360", "label": "iot_hue_lightup", "ru": "пожалуйста освещение ярче мне не комфортно с этим"}
+{"en": "please turn off the light of my son's room", "id": "1377", "label": "iot_hue_lightoff", "ru": "пожалуйста выключи свет в комнате моего сына"}
+{"en": "can you make me some coffee olly", "id": "1413", "label": "iot_coffee", "ru": "olly ты можешь сделать мне немного кофе"}
+{"en": "change the lights to blue olly", "id": "1427", "label": "iot_hue_lightchange", "ru": "поменяй свет на голубой olly"}
+{"en": "i'd like some red lighting", "id": "1428", "label": "iot_hue_lightchange", "ru": "мне бы хотелось освещение красного цвета"}
+{"en": "show me the available colors of lights", "id": "1511", "label": "iot_hue_lightchange", "ru": "покажи мне доступные цвета светильников"}
+{"en": "turn on wemo", "id": "1551", "label": "iot_wemo_on", "ru": "включи умную розетку"}
+{"en": "turn off the lamps", "id": "1554", "label": "iot_hue_lightoff", "ru": "выключи лампы"}
+{"en": "start the vacuum cleaner", "id": "1575", "label": "iot_cleaning", "ru": "включи пылесос"}
+{"en": "my vacuum cleaner should start between ten to eleven am everyday", "id": "1703", "label": "iot_cleaning", "ru": "мой пылесос должен начинать пылесосить с десяти и до одиннадцати утра каждый день"}
+{"en": "turn off all lights", "id": "1750", "label": "iot_hue_lightoff", "ru": "выключи весь свет"}
+{"en": "brighten the lights", "id": "1756", "label": "iot_hue_lightup", "ru": "свет поярче"}
+{"en": "please dim the lights", "id": "1778", "label": "iot_hue_lightdim", "ru": "приглуши свет"}
+{"en": "turn off the dining room", "id": "1784", "label": "iot_hue_lightoff", "ru": "выключи в столовой"}
+{"en": "switch off the master's bedroom", "id": "1786", "label": "iot_hue_lightoff", "ru": "выключи спальню хозяина"}
+{"en": "more lights please", "id": "1804", "label": "iot_hue_lightup", "ru": "больше света пожалуйста"}
+{"en": "please make me coffee without sweetener", "id": "1812", "label": "iot_coffee", "ru": "сделай мне кофе без подсластителя"}
+{"en": "turn on vacuum cleaner", "id": "1924", "label": "iot_cleaning", "ru": "включи пылесос"}
+{"en": "clean my house", "id": "1941", "label": "iot_cleaning", "ru": "сделай уборку в моем доме"}
+{"en": "change the light to pink color", "id": "1960", "label": "iot_hue_lightchange", "ru": "измени свет на розовый цвет"}
+{"en": "can you turn up the lights", "id": "1993", "label": "iot_hue_lightup", "ru": "можешь ли ты включить свет"}
+{"en": "lower lights in kitchen", "id": "2016", "label": "iot_hue_lightdim", "ru": "приглуши свет в кухне"}
+{"en": "coffee make now", "id": "2026", "label": "iot_coffee", "ru": "сейчас сделай кофе"}
+{"en": "i want more light", "id": "2075", "label": "iot_hue_lightup", "ru": "мне нужно больше света"}
+{"en": "raise the light", "id": "2082", "label": "iot_hue_lightup", "ru": "включи свет"}
+{"en": "color of light should be dimmed bright", "id": "2128", "label": "iot_hue_lightdim", "ru": "цвет освещения должен быть приглушенно ярким"}
+{"en": "i'm going to sleep now", "id": "2160", "label": "iot_hue_lightoff", "ru": "иду спать"}
+{"en": "turn off kitchen light", "id": "2230", "label": "iot_hue_lightoff", "ru": "выключи свет на кухне"}
+{"en": "i can't see turn up the lights", "id": "2234", "label": "iot_hue_lightup", "ru": "мне не видно включи свет"}
+{"en": "show me the dim color", "id": "2263", "label": "iot_hue_lightdim", "ru": "покажи мне тусклый цвет"}
+{"en": "light color for study room", "id": "2264", "label": "iot_hue_lightup", "ru": "цвет светильника в учебной комнате"}
+{"en": "i need to change my house lights color to blue", "id": "2283", "label": "iot_hue_lightchange", "ru": "мне нужно поменять свет в моём доме на синий"}
+{"en": "start coffee at six am", "id": "2288", "label": "iot_coffee", "ru": "начни готовить кофе в шесть часов утра"}
+{"en": "put the lights off now", "id": "2298", "label": "iot_hue_lightoff", "ru": "выключи свет сейчас"}
+{"en": "alexa turn the lights down to seven", "id": "2311", "label": "iot_hue_lightdim", "ru": "alexa уменьши свет до семи"}
+{"en": "put dark colors instead of light ones in the house", "id": "2350", "label": "iot_hue_lightchange", "ru": "установи тёмные цвета вместо светлых в доме"}
+{"en": "olly put dark colors instead of light ones in the house", "id": "2351", "label": "iot_hue_lightchange", "ru": "olly пусть в доме будут темные цвета вместо ярких"}
+{"en": "give me more light", "id": "2403", "label": "iot_hue_lightup", "ru": "дай мне больше света"}
+{"en": "start robot vacuum cleaner", "id": "2434", "label": "iot_cleaning", "ru": "запусти робот пылесос"}
+{"en": "turn off the shed light", "id": "2441", "label": "iot_hue_lightoff", "ru": "выключи свет в сарае"}
+{"en": "how do i set my coffee machine to make coffee", "id": "2512", "label": "iot_coffee", "ru": "как мне установить мою кофемашину чтобы приготовить кофе"}
+{"en": "how do i start the robot vacuum cleaner", "id": "2517", "label": "iot_cleaning", "ru": "как мне запустить робот пылесос"}
+{"en": "make the room light blue", "id": "2540", "label": "iot_hue_lightchange", "ru": "сделай свет в комнате синим"}
+{"en": "make the bedroom lights red and the hall lights normal color please", "id": "2542", "label": "iot_hue_lightchange", "ru": "пожалуйста сделай освещение в спальне красным а в холле delet нормальным цветом"}
+{"en": "change the lights in my home to green", "id": "2551", "label": "iot_hue_lightchange", "ru": "смени свет в моем доме на зеленый"}
+{"en": "turn off my wemo socket", "id": "2566", "label": "iot_wemo_off", "ru": "выключи розетку wemo"}
+{"en": "turn off the porch light", "id": "2578", "label": "iot_hue_lightoff", "ru": "выключи свет на крыльце"}
+{"en": "turn up the brightness", "id": "2591", "label": "iot_hue_lightup", "ru": "увеличь яркость"}
+{"en": "turn off the socket", "id": "2690", "label": "iot_wemo_off", "ru": "выключи розетку"}
+{"en": "shut the lights off", "id": "2711", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "start a pot of coffee please", "id": "2733", "label": "iot_coffee", "ru": "включи кофе пожалуйста"}
+{"en": "i need a cup of coffee", "id": "2753", "label": "iot_coffee", "ru": "мне нужна чашка кофе"}
+{"en": "shut off lights", "id": "2774", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "discontinue use of lights", "id": "2775", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "can you make me a cup of coffee", "id": "2812", "label": "iot_coffee", "ru": "можешь сделать мне чашку кофе"}
+{"en": "set the living room lights to fifty percent", "id": "2816", "label": "iot_hue_lightchange", "ru": "установи освещение в гостиной на пятьдесят процентов"}
+{"en": "please get the coffee machine to make me some coffee", "id": "2868", "label": "iot_coffee", "ru": "пожалуйста пусть кофемашина сделает мне какой нибудь кофе"}
+{"en": "please start the vacuum cleaner", "id": "2903", "label": "iot_cleaning", "ru": "пожалуйста запусти пылесос"}
+{"en": "brightness ninety percent", "id": "2906", "label": "iot_hue_lightchange", "ru": "яркость девяносто процентов"}
+{"en": "initialize the robot vacuum", "id": "2959", "label": "iot_cleaning", "ru": "включи робот пылесос"}
+{"en": "start the vacuum", "id": "2960", "label": "iot_cleaning", "ru": "запусти пылесос"}
+{"en": "turn office lights off", "id": "2965", "label": "iot_hue_lightoff", "ru": "выключи свет в офисе"}
+{"en": "please change the light colors to red", "id": "2975", "label": "iot_hue_lightchange", "ru": "пожалуйста поменяй цвет освещения на красный"}
+{"en": "can you raise the lights for me please", "id": "3008", "label": "iot_hue_lightup", "ru": "можешь ли ты включить свет для меня пожалуйста"}
+{"en": "retrieve the light for me", "id": "3011", "label": "iot_hue_lightup", "ru": "верни свет"}
+{"en": "change my light color to blue and please turn off the kitchen light", "id": "3050", "label": "iot_hue_lightchange", "ru": "измени мой свет на голубой цвет и пожалуйста выключи свет на кухне"}
+{"en": "shut off the socket", "id": "3077", "label": "iot_wemo_off", "ru": "отключи розетку"}
+{"en": "make the lights off", "id": "3098", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "make me a cup of coffee with salted carmel flavored cream", "id": "3138", "label": "iot_coffee", "ru": "сделай мне чашку кофе и добавь сливки со вкусом соленой карамели"}
+{"en": "turn my bedroom lights off", "id": "3167", "label": "iot_hue_lightoff", "ru": "выключи свет в моей спальне"}
+{"en": "stop start the juice", "id": "3184", "label": "iot_wemo_on", "ru": "остановись делать сок"}
+{"en": "hey olly can you please make me a creamy coffee", "id": "3196", "label": "iot_coffee", "ru": "эй olly можешь ли ты сделать мне сливочный кофе"}
+{"en": "i want a lower light", "id": "3222", "label": "iot_hue_lightdim", "ru": "мне нужен свет потемнее"}
+{"en": "lower the lights please", "id": "3280", "label": "iot_hue_lightdim", "ru": "уменьши свет пожалуйста"}
+{"en": "power off the wemo plug", "id": "3298", "label": "iot_wemo_off", "ru": "выключи умную розетку"}
+{"en": "please activate my coffee pot for me", "id": "3320", "label": "iot_coffee", "ru": "пожалуйста активируй мой кофейник для меня"}
+{"en": "please make me a cup of coffee", "id": "3321", "label": "iot_coffee", "ru": "пожалуйста сделай мне кофе"}
+{"en": "please turn on my coffee pot", "id": "3323", "label": "iot_coffee", "ru": "пожалуйста включи мой кофейник"}
+{"en": "turn the plug off", "id": "3326", "label": "iot_wemo_off", "ru": "выключи розетку"}
+{"en": "no lights in the kitchen", "id": "3378", "label": "iot_hue_lightoff", "ru": "выклю свет на кухне"}
+{"en": "turn down the lights to medium", "id": "3386", "label": "iot_hue_lightoff", "ru": "убавь delet свет до среднего"}
+{"en": "make it red in here", "id": "3387", "label": "iot_hue_lightchange", "ru": "сделай его здесь красным"}
+{"en": "can you set my coffee machine to make me coffee at seven am", "id": "3418", "label": "iot_coffee", "ru": "установи на кофемашине сделать кофе в семь утра"}
+{"en": "please turn on my balcony lights", "id": "3522", "label": "iot_hue_lighton", "ru": "пожалуйста включи свет на моём балконе"}
+{"en": "change the lights in the living room to green and red", "id": "3542", "label": "iot_hue_lightchange", "ru": "смени свет в гостиной с зеленого на красный"}
+{"en": "i want the light to be a little more red ish", "id": "3543", "label": "iot_hue_lightchange", "ru": "сделай свет немного покраснее"}
+{"en": "set my coffee machine", "id": "3568", "label": "iot_coffee", "ru": "настрой мою кофемашину"}
+{"en": "please turn off the lights in patio", "id": "3570", "label": "iot_hue_lightoff", "ru": "выключи свет во внутреннем дворике"}
+{"en": "brighter", "id": "3595", "label": "iot_hue_lightup", "ru": "светлее"}
+{"en": "i would like the like in the kitchen to be a different color", "id": "3674", "label": "iot_hue_lightchange", "ru": "я хочу чтобы свет на кухне был другого цвета"}
+{"en": "lights at percent", "id": "3700", "label": "iot_hue_lightchange", "ru": "свет в процентах"}
+{"en": "turn the lights to red color", "id": "3734", "label": "iot_hue_lightchange", "ru": "включи свет красного цвета"}
+{"en": "raise the lights", "id": "3762", "label": "iot_hue_lightup", "ru": "повысь яркость освещения"}
+{"en": "disable smart socket", "id": "3774", "label": "iot_wemo_off", "ru": "отключи умную розетку"}
+{"en": "i want the smart socket off now", "id": "3775", "label": "iot_wemo_off", "ru": "я хочу чтобы умная розетка была выключена сейчас"}
+{"en": "turn off the bathroom light please", "id": "3785", "label": "iot_hue_lightoff", "ru": "выключи свет в ванной пожалуйста"}
+{"en": "turn down lights", "id": "3834", "label": "iot_hue_lightdim", "ru": "выключи свет"}
+{"en": "activate the roomba", "id": "3841", "label": "iot_cleaning", "ru": "активируй roomba"}
+{"en": "brighten up the lighting", "id": "3883", "label": "iot_hue_lightup", "ru": "сделай поярче свет"}
+{"en": "can you make the lights go out", "id": "3993", "label": "iot_hue_lightoff", "ru": "погаси свет"}
+{"en": "let's suck out the dust", "id": "4013", "label": "iot_cleaning", "ru": "давай высосем пыль"}
+{"en": "please power down", "id": "4024", "label": "iot_wemo_off", "ru": "пожалуйста выключи питание"}
+{"en": "power off", "id": "4026", "label": "iot_wemo_off", "ru": "выключи"}
+{"en": "run the vacuum", "id": "4043", "label": "iot_cleaning", "ru": "включить пылесос"}
+{"en": "turn the kitchen lights off", "id": "4077", "label": "iot_hue_lightoff", "ru": "выключи на кухне свет"}
+{"en": "make a coffee", "id": "4084", "label": "iot_coffee", "ru": "сделай кофе"}
+{"en": "turn off overhead light", "id": "4088", "label": "iot_hue_lightoff", "ru": "выключи верхний свет"}
+{"en": "turn off my wifi", "id": "4154", "label": "iot_wemo_off", "ru": "выключи мой вай фай"}
+{"en": "turn off the lights in the kitchen", "id": "4171", "label": "iot_hue_lightoff", "ru": "выключи свет на кухне"}
+{"en": "activate the vacuum cleaner and use it", "id": "4173", "label": "iot_cleaning", "ru": "включи пылесос и запусти его в работу"}
+{"en": "hey olly chance the current light settings", "id": "4174", "label": "iot_hue_lightchange", "ru": "эй olly поменяй настройки света"}
+{"en": "power on wemo", "id": "4201", "label": "iot_wemo_on", "ru": "включи пылесос"}
+{"en": "switch on the roomba", "id": "4240", "label": "iot_cleaning", "ru": "включи робот пылесос"}
+{"en": "olly turn on the coffee machine to make me some coffee", "id": "4244", "label": "iot_coffee", "ru": "olly включи кофемашину и начни делать какой нибудь кофе"}
+{"en": "house change all lights to blue", "id": "4247", "label": "iot_hue_lightchange", "ru": "поменяй весь свет в доме на голубой"}
+{"en": "house lights blue", "id": "4248", "label": "iot_hue_lightchange", "ru": "голубой свет в доме"}
+{"en": "house can you make all the lights in the house blue", "id": "4249", "label": "iot_hue_lightchange", "ru": "дом сделай весь свет в доме голубым"}
+{"en": "prepare coffee now", "id": "4271", "label": "iot_coffee", "ru": "сделай кофе"}
+{"en": "my coffee is cold please make more coffee", "id": "4272", "label": "iot_coffee", "ru": "у меня кофе стал холодным сделай пожалуйста ещё"}
+{"en": "increase the brightness in this room", "id": "4283", "label": "iot_hue_lightup", "ru": "увеличь яркость в этой комнате"}
+{"en": "make the light in here redder", "id": "4299", "label": "iot_hue_lightchange", "ru": "сделай здесь свет краснее"}
+{"en": "turn lights off", "id": "4346", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "cease operating lights", "id": "4347", "label": "iot_hue_lightoff", "ru": "выключи свет"}
+{"en": "make coffee at three", "id": "4442", "label": "iot_coffee", "ru": "сделай кофе в три"}
+{"en": "start the coffee machine at three", "id": "4443", "label": "iot_coffee", "ru": "включи кофемашину в три"}
+{"en": "olly change the color of the lights", "id": "4516", "label": "iot_hue_lightchange", "ru": "olly смени цвет освещения"}
+{"en": "can you make some coffee", "id": "4554", "label": "iot_coffee", "ru": "сделай какой нибудь кофе"}
+{"en": "enable smart socket", "id": "4618", "label": "iot_wemo_on", "ru": "включи умную розетку"}
+{"en": "turn on new smart socket", "id": "4620", "label": "iot_wemo_on", "ru": "включи новую умную розетку"}
+{"en": "i want coffee everyday", "id": "4798", "label": "iot_coffee", "ru": "я хочу кофе каждый день"}
+{"en": "please turn on the wemo plug socket", "id": "4799", "label": "iot_wemo_on", "ru": "пожалуйста выключи розетку wemo"}
+{"en": "change the lights to a different hue", "id": "4803", "label": "iot_hue_lightchange", "ru": "поменяй свет на другой оттенок"}
+{"en": "make the lights pink", "id": "4826", "label": "iot_hue_lightchange", "ru": "сделай освещение розовым"}
+{"en": "lower the overhead lights", "id": "4896", "label": "iot_hue_lightdim", "ru": "приглуши верхний свет"}
+{"en": "would you love to see", "id": "4955", "label": "iot_hue_lightchange", "ru": "ты бы хотел увидеть"}
+{"en": "hello i want to turn off my wemo plug", "id": "4966", "label": "iot_wemo_off", "ru": "привет я хочу выключи розетку wemo"}
+{"en": "prepare a cup of coffee for me", "id": "4988", "label": "iot_coffee", "ru": "сделай мне чашку кофе"}
+{"en": "turn off sockets", "id": "4992", "label": "iot_wemo_off", "ru": "выключи розетки"}
+{"en": "make my usual", "id": "5010", "label": "iot_coffee", "ru": "сделай как обычно"}
+{"en": "can you make the room brighter", "id": "5014", "label": "iot_hue_lightup", "ru": "сделай посветлее в комнате"}
+{"en": "can you please make a coffee", "id": "5017", "label": "iot_coffee", "ru": "пожалуйста можешь сделать кофе"}
+{"en": "please make the lights natural", "id": "5026", "label": "iot_hue_lightchange", "ru": "пожалуйста сделай освещение естественным"}
+{"en": "alexa please turn down the lights in the house", "id": "5047", "label": "iot_hue_lightdim", "ru": "алекса выключи delet свет в доме"}
+{"en": "off all type of active devices", "id": "5050", "label": "iot_wemo_off", "ru": "выключи все активные устройства"}
+{"en": "set the coffee maker to on", "id": "5149", "label": "iot_coffee", "ru": "включи кофемашину"}
+{"en": "turn the light off in the living room", "id": "5156", "label": "iot_hue_lightoff", "ru": "выключи свет в гостиной"}
+{"en": "olly turn the light off in the living room", "id": "5157", "label": "iot_hue_lightoff", "ru": "олли выключи свет в гостинной"}
+{"en": "lower the intensity of light", "id": "5165", "label": "iot_hue_lightdim", "ru": "убавь свет"}
+{"en": "turn my lights down to a lower level of brightness", "id": "5201", "label": "iot_hue_lightdim", "ru": "уменьши моё освещение до низкого уровня яркости"}
+{"en": "siri please turn the lights off in the bathroom", "id": "5243", "label": "iot_hue_lightoff", "ru": "siri выключи свет в ванной"}
+{"en": "put on the vacuum on now and clean the living room", "id": "5330", "label": "iot_cleaning", "ru": "включи пылесос и начни уборку в гостиной"}
+{"en": "olly give me some dim light", "id": "5349", "label": "iot_hue_lightdim", "ru": "оля сделай мне тусклый свет"}
+{"en": "please turn socket off", "id": "5396", "label": "iot_wemo_off", "ru": "пожалуйста отключи розетку"}
+{"en": "please put all the lights", "id": "5501", "label": "iot_hue_lightup", "ru": "пожалуйста включи всё освещение"}
+{"en": "please set the brightness of lightness appropriately in kitchen", "id": "5573", "label": "iot_hue_lightup", "ru": "пожалуйста установи соответствующую яркость освещения на кухне"}
+{"en": "brighten of lights in living room", "id": "5574", "label": "iot_hue_lightup", "ru": "сделай поярче свет в гостиной"}
+{"en": "please turn the lights off", "id": "5584", "label": "iot_hue_lightoff", "ru": "пожалуйста выключи свет"}
+{"en": "switch wemo plug socket off", "id": "5652", "label": "iot_wemo_off", "ru": "выключи розетку wemo"}
+{"en": "begin vacuuming", "id": "5697", "label": "iot_cleaning", "ru": "начни пылесосить"}
+{"en": "brighten the light of hall", "id": "5727", "label": "iot_hue_lightup", "ru": "сделай свет в зале ярче"}
+{"en": "turn off smart plug socket", "id": "5856", "label": "iot_wemo_off", "ru": "выключи умную розетку"}
+{"en": "power off please", "id": "5888", "label": "iot_wemo_off", "ru": "выключи пожалуйста"}
+{"en": "make a coffee please", "id": "5917", "label": "iot_coffee", "ru": "сделай кофе пожалуйста"}
+{"en": "adjust the lights to a lower setting please", "id": "5988", "label": "iot_hue_lightdim", "ru": "установи свет на более низкий уровень пожалуйста"}
+{"en": "decrease brightness of lights", "id": "6015", "label": "iot_hue_lightdim", "ru": "понизь яркость освещения"}
+{"en": "coffee", "id": "6034", "label": "iot_coffee", "ru": "кофе"}
+{"en": "hey olly turn off the light please", "id": "6041", "label": "iot_hue_lightoff", "ru": "эй olly выключи свет пожалуйста"}
+{"en": "did i leave the light on in the garage", "id": "6055", "label": "iot_hue_lightoff", "ru": "оставил ли я свет в гараже включенным"}
+{"en": "please start the coffee pot", "id": "6060", "label": "iot_coffee", "ru": "пожалуйста включи кофемашину"}
+{"en": "make the coffee", "id": "6061", "label": "iot_coffee", "ru": "сделай мне кофе"}
+{"en": "turn off porch light", "id": "6073", "label": "iot_hue_lightoff", "ru": "выключи свет на крыльце"}
+{"en": "turn off bedroom light at nine thirty p. m.", "id": "6074", "label": "iot_hue_lightoff", "ru": "выключи свет в спальне в девять тридцать вечера"}
+{"en": "clean the floor", "id": "6159", "label": "iot_cleaning", "ru": "вымой пол"}
+{"en": "make it brighter in here", "id": "6174", "label": "iot_hue_lightup", "ru": "сделай посветлее здесь"}
+{"en": "olly i need a drink", "id": "11914", "label": "iot_coffee", "ru": "olly я хочу пить"}
+{"en": "i need a drink", "id": "11915", "label": "iot_coffee", "ru": "мне нужен напиток"}
+{"en": "i'd like you to turn turn on the t. v.", "id": "13548", "label": "iot_wemo_on", "ru": "я хочу чтобы ты включил телевизор"}

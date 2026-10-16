@@ -1,0 +1,135 @@
+[
+ {
+  "files": {
+   "in_voltage1_raw": "100\n",
+   "in_voltage_scale": "0.5\n"
+  },
+  "base": "in_voltage1",
+  "typ": "voltage",
+  "value": 50.0,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_temp_raw": "123\n"
+  },
+  "base": "in_temp",
+  "typ": "temp",
+  "value": null,
+  "how": "raw-without-scale"
+ },
+ {
+  "files": {
+   "in_temp_input": "21500\n",
+   "in_temp_raw": "1\n",
+   "in_temp_scale": "1000\n"
+  },
+  "base": "in_temp",
+  "typ": "temp",
+  "value": 21500.0,
+  "how": "input"
+ },
+ {
+  "files": {
+   "in_voltage0_raw": "1650\n",
+   "in_voltage0_scale": "2.000000000\n",
+   "in_voltage0_offset": "-25\n"
+  },
+  "base": "in_voltage0",
+  "typ": "voltage",
+  "value": 3250.0,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_voltage0_raw": "1650\n",
+   "in_voltage_scale": "0.125\n",
+   "in_voltage_offset": "10\n"
+  },
+  "base": "in_voltage0",
+  "typ": "voltage",
+  "value": 207.5,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_voltage0_raw": "1650\n",
+   "in_voltage0_scale": "0.125\n",
+   "in_voltage_offset": "10\n",
+   "in_voltage0_offset": "-5\n"
+  },
+  "base": "in_voltage0",
+  "typ": "voltage",
+  "value": 205.625,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_voltage0_raw": "garbage\n",
+   "in_voltage0_scale": "1\n"
+  },
+  "base": "in_voltage0",
+  "typ": "voltage",
+  "value": null,
+  "how": "absent"
+ },
+ {
+  "files": {
+   "in_temp_input": "not-a-number\n",
+   "in_temp_raw": "200\n",
+   "in_temp_scale": "0.01\n"
+  },
+  "base": "in_temp",
+  "typ": "temp",
+  "value": 2.0,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {},
+  "base": "in_temp",
+  "typ": "temp",
+  "value": null,
+  "how": "absent"
+ },
+ {
+  "files": {
+   "in_pressure_raw": "25939200\n",
+   "in_pressure_scale": "0.000003906\n"
+  },
+  "base": "in_pressure",
+  "typ": "pressure",
+  "value": 101.31851520000001,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_accel_x_raw": "-512\n",
+   "in_accel_scale": "0.009576\n"
+  },
+  "base": "in_accel_x",
+  "typ": "accel",
+  "value": -4.902912,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_illuminance_raw": "  42 \n\u0000",
+   "in_illuminance_scale": "1.5\u0000\n"
+  },
+  "base": "in_illuminance",
+  "typ": "illuminance",
+  "value": 63.0,
+  "how": "(raw+offset)*scale"
+ },
+ {
+  "files": {
+   "in_voltage0_raw": "7\n",
+   "in_voltage0_scale": "0\n",
+   "in_voltage0_offset": "0\n"
+  },
+  "base": "in_voltage0",
+  "typ": "voltage",
+  "value": 0.0,
+  "how": "(raw+offset)*scale"
+ }
+]

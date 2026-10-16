@@ -1,0 +1,5 @@
+vendor/
+runs/
+__pycache__/
+*.pyc
+smoke/*/*/agent/fixture_root/

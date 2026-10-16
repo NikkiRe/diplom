@@ -1,0 +1,13 @@
+# neurobot: ротация журнала PicoClaw (он дописывает gateway.log без ротации, N15) -> /etc/logrotate.d/ (install.sh).
+# copytruncate: файл держит открытым сам PicoClaw. Полный журнал — ещё и в journald (юнит neurobot-picoclaw).
+"@PICOCLAW_HOME@/logs/gateway.log" {
+    su @USER@ @GROUP@
+    weekly
+    maxsize 20M
+    rotate 4
+    compress
+    delaycompress
+    missingok
+    notifempty
+    copytruncate
+}

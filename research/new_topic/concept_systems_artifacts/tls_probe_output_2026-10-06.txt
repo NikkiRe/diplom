@@ -1,0 +1,23 @@
+Tue Oct  6 15:25:17 UTC 2026
+OpenSSL 3.6.4 25 Aug 2026 (Library: OpenSSL 3.6.4 25 Aug 2026)
+## полное рукопожатие, ClientHello по умолчанию (X25519MLKEM768+X25519)
+Peer Temp Key: X25519, 253 bits
+SSL handshake has read 4606 bytes and written 1615 bytes
+New, TLSv1.3, Cipher is TLS_AES_128_GCM_SHA256
+ALPN protocol: h2
+## полное рукопожатие, только X25519
+SSL handshake has read 4606 bytes and written 381 bytes
+New, TLSv1.3, Cipher is TLS_AES_128_GCM_SHA256
+    TLS session ticket lifetime hint: 64800 (seconds)
+## возобновление по билету, только X25519
+SSL handshake has read 238 bytes and written 652 bytes
+Reused, TLSv1.3, Cipher is TLS_AES_128_GCM_SHA256
+## сжатие ответа /api/v1/models
+identity http=2 size_download=915711
+  (нет content-encoding)
+gzip http=2 size_download=915711
+  (нет content-encoding)
+br http=2 size_download=915711
+  (нет content-encoding)
+zstd http=2 size_download=915711
+  (нет content-encoding)

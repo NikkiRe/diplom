@@ -1,0 +1,166 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/WOHsr7RK1Atm8lYFGvhEBfn8GKE</id>
+  <title>arXiv Query: search_query=&amp;id_list=2606.01912,2606.31045,2508.00500,2604.07833&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-06T14:17:51Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=50&amp;id_list=2606.01912,2606.31045,2508.00500,2604.07833" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>4</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2604.07833v4</id>
+    <title>Harnessing Embodied Agents: Runtime Governance for Policy-Constrained Execution</title>
+    <updated>2026-06-10T06:02:02Z</updated>
+    <link href="https://arxiv.org/abs/2604.07833v4" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2604.07833v4" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Embodied Agents are evolving from passive reasoning systems into active executors that interact with tools, robots, and physical environments. Once an agent gains execution authority, the central challenge shifts from how to make it act to how to keep its actions governable at runtime. Existing approaches embed safety, recovery, and decision constraints inside the agent loop, making execution control difficult to standardize, audit, and adapt across environments. We propose a runtime governance framework for policy-constrained execution that separates agent cognition from execution oversight. Governance is externalized into a dedicated runtime layer performing policy checking, capability admission, execution monitoring, rollback, and human override. We formalize the control boundary among a persistent Embodied Agent, modular Capability Packages, and the governance layer, and define a policy-constrained execution pipeline evaluated under controlled simulation. Over 1000 randomized trials, the framework achieves 96.2%+/-2.7% interception of unauthorized actions, reduces unsafe continuation from 100% to 22.2%+/-3.1% under runtime drift, and attains 90.7%+/-3.0% recovery success with full policy compliance. Comparison with five baselines, including AutoRT-style constitution filtering and RoboGuard-style two-stage guardrails, shows that pre-execution filtering is equally effective across governance-aware methods, while only the proposed framework provides continuous runtime detection (RVDR = 61.3% vs. 0%) and structured recovery (all p&lt;0.001). A sensitivity sweep across the full detection range confirms a genuine detection-continuation trade-off. This work argues future embodied systems should be designed for governable execution.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-04-09T05:35:08Z</published>
+    <arxiv:comment>36 pages, 3 figures, 10 tables</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Xue Qin</name>
+    </author>
+    <author>
+      <name>Simin Luan</name>
+    </author>
+    <author>
+      <name>John See</name>
+    </author>
+    <author>
+      <name>Zeyd Boukhers</name>
+    </author>
+    <author>
+      <name>Cong Yang</name>
+    </author>
+    <author>
+      <name>Zhijun Li</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2508.00500v4</id>
+    <title>ProbGuard: Proactive Runtime Monitoring for LLM Agent Safety via Probabilistic Prediction</title>
+    <updated>2026-08-03T00:31:29Z</updated>
+    <link href="https://arxiv.org/abs/2508.00500v4" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2508.00500v4" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large Language Model (LLM) agents increasingly operate across domains such as robotics, virtual assistants, and web automation. However, their stochastic decision-making introduces safety risks that are difficult to anticipate during execution. Existing runtime monitoring frameworks, such as AgentSpec, primarily rely on reactive safety rules that detect violations only when unsafe behavior is imminent or has already occurred, limiting their ability to handle long-horizon dependencies. We present ProbGuard, a proactive runtime monitoring framework for LLM agents that anticipates safety violations through probabilistic risk prediction. ProbGuard abstracts agent executions into symbolic states and learns a Discrete-Time Markov Chain (DTMC) from execution traces to model behavioral dynamics. At runtime, the monitor estimates the probability that execution will remain safe from the current state, and triggers an intervention when this probability falls below a user-defined threshold. To improve robustness, ProbGuard incorporates semantic validity constraints in the abstraction and admits a PAC-style analysis that characterizes the sample complexity required to certify the learned model under standard assumptions. We evaluate ProbGuard in two safety-critical domains: autonomous driving and embodied household agents. Across evaluated scenarios, ProbGuard consistently predicts traffic law violations and collisions in advance, with warnings up to 15.84 seconds at a threshold yielding no false alarms, and up to 38.66 seconds at stricter thresholds. In embodied agent tasks, ProbGuard's re-prompting intervention mode reduces unsafe behavior by 65.37% relative to the unmonitored baseline while retaining 80.4% of the baseline task completion; a stricter halting configuration reduces unsafe behavior by 93.60% at a larger cost in completion.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.SE" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-08-01T10:24:47Z</published>
+    <arxiv:comment>Accepted by the 41st IEEE/ACM International Conference on Automated Software Engineering (ASE 2026)</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Haoyu Wang</name>
+    </author>
+    <author>
+      <name>Christopher M. Poskitt</name>
+    </author>
+    <author>
+      <name>Jiali Wei</name>
+    </author>
+    <author>
+      <name>Jun Sun</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2606.01912v1</id>
+    <title>SMH-Bench: Benchmarking LLM Agents for Environment-Grounded Reasoning and Action in Smart Homes</title>
+    <updated>2026-06-01T08:48:15Z</updated>
+    <link href="https://arxiv.org/abs/2606.01912v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2606.01912v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Smart homes are evolving toward complex state-dependent living environments, requiring Large Language Models (LLMs) to reason over user intent, preferences, and multi-device interactions. However, existing smart-home benchmarks often focus on static instruction-to-API mapping or limited simulations, failing to evaluate whether LLMs can reason, interact, and act reliably in realistic household scenarios. To address these limitations, we introduce SMH-Bench, a comprehensive benchmark for evaluating LLMs in smart-home environments. Built upon HomeEnv, an executable and verifiable smart-home simulator, SMH-Bench contains 1,100 high-quality tasks spanning 7 categories and 22 fine-grained subcategories. It further stratifies tasks across simple, medium and complex homes, ranging from small apartments to dense multi-room environments with 135 devices. Experiments show that although frontier LLMs achieve strong performance on explicit control and query tasks, they still exhibit significant weaknesses in automation task scheduling, ambiguity handling and personalized reasoning, especially as home complexity increases. We hope SMH-Bench will facilitate the development of more reliable, context-aware, and practically deployable smart-home agents.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-06-01T08:48:15Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Kuan Li</name>
+    </author>
+    <author>
+      <name>Shuo Zhang</name>
+    </author>
+    <author>
+      <name>Huacan Wang</name>
+    </author>
+    <author>
+      <name>Fangzhou Yu</name>
+    </author>
+    <author>
+      <name>Zecheng Sheng</name>
+    </author>
+    <author>
+      <name>Yi Gu</name>
+    </author>
+    <author>
+      <name>Weipeng Ming</name>
+    </author>
+    <author>
+      <name>Lei Xue</name>
+    </author>
+    <author>
+      <name>Chen Liu</name>
+    </author>
+    <author>
+      <name>Sen Hu</name>
+    </author>
+    <author>
+      <name>Ronghao Chen</name>
+    </author>
+    <author>
+      <name>Siyue Lin</name>
+    </author>
+    <author>
+      <name>Yuqing Hou</name>
+    </author>
+    <author>
+      <name>Xiaofeng Mou</name>
+    </author>
+    <author>
+      <name>Yi Xu</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2606.31045v2</id>
+    <title>LabGuard: Grounding Natural-Language Laboratory Rules into Runtime Guards for Embodied Laboratory Agents</title>
+    <updated>2026-07-31T02:59:04Z</updated>
+    <link href="https://arxiv.org/abs/2606.31045v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2606.31045v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Scientific embodied agents are increasingly capable of carrying out laboratory procedures, but executing these procedures safely in dynamic laboratory environments remains challenging. Current safety approaches often overlook the intermediate step of transforming laboratory natural language, including safety rules, manuals, protocols, and standard operating procedures, into machine-checkable runtime constraints. We introduce LabGuard (Laboratory Guard), a language-to-execution safety suite that grounds natural-language laboratory rules into executable specifications and deploys them as runtime guards. LabGuard includes three core components: LabGuard-IR, which defines a typed executable representation; LabGuard-Bench, which provides 812 supervised annotations expanded from 203 seed laboratory rules; and LabGuard-Grounder, which maps natural-language laboratory rules into LabGuard-IR. The resulting IR instances are handled by the LabGuard Pipeline, which compiles them into runtime monitors and applies them at the controller boundary. Experiments show that LabGuard generalizes to unseen laboratory-rule sources, achieves 79.4 task-scope F1, and reduces unsafe events from 39.5% to 23.8% after monitor compilation. In LabUtopia, its runtime monitors integrate with ACT, keeping interventions below 0.5% while preserving task success.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-06-30T02:30:51Z</published>
+    <arxiv:comment>First three authors are co-first authors</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Jingpu Yang</name>
+    </author>
+    <author>
+      <name>Fengxian Ji</name>
+    </author>
+    <author>
+      <name>Zhengzhao Lai</name>
+    </author>
+    <author>
+      <name>Zhexuan Cui</name>
+    </author>
+    <author>
+      <name>Guangxian Ouyang</name>
+    </author>
+    <author>
+      <name>Qian Jiang</name>
+    </author>
+    <author>
+      <name>Fan Zhang</name>
+    </author>
+    <author>
+      <name>Min Peng</name>
+    </author>
+    <author>
+      <name>Qianqian Xie</name>
+    </author>
+    <author>
+      <name>Preslav Nakov</name>
+    </author>
+    <author>
+      <name>Zhuohan Xie</name>
+    </author>
+  </entry>
+</feed>

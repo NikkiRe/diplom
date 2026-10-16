@@ -1,0 +1,30 @@
+# Агент PicoClaw лаборатории (0.2.8 на роботе, 0.3.1 на стенде; меняется только конфиг). Стартует после готового
+# MCP-сервера: иначе становится «зомби» (PC5). Готовность — ExecStartPost (+, root: чтение журнала): в журнале
+# этого запуска есть «MCP server initialization complete» (нужен gateway.log_level info), а «All MCP servers
+# failed to connect» — отказ и рестарт. Только After=, без Requires=: при отказе зависимости юнит с Requires= не
+# запускается вовсе и Restart= его не поднимет, а здесь он дождётся MCP-сервера через рестарты.
+[Unit]
+Description=neurobot: агент PicoClaw
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+After=neurobot-rosbridge.service neurobot-mcp.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=@USER@
+Group=@GROUP@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env
+ExecStartPre=@PREFIX@/bin/neurobot precheck picoclaw
+ExecStart=@PREFIX@/bin/neurobot-run --var NEUROBOT_PICOCLAW_CMD
+ExecStartPost=+@PREFIX@/bin/neurobot wait-agent
+Restart=always
+RestartSec=2
+TimeoutStartSec=60
+TimeoutStopSec=15
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target

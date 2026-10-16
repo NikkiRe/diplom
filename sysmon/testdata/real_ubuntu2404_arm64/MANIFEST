@@ -1,0 +1,7 @@
+kernel=6.8.0-106-generic
+arch=aarch64
+page_size=4096
+clk_tck=100
+root_pid=4540
+cgroup=/sys/fs/cgroup/user.slice/user-501.slice/user@501.service/app.slice/sysmon-fx-14017.scope
+captured=2026-10-06T18:45:05Z

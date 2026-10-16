@@ -1,0 +1,46 @@
+# Окружения и кэши
+.venv/
+.venv-*/
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.DS_Store
+
+# Сборки (собираются make / go build)
+agent/bin/
+agent/run/
+hwmcp/.build/
+robotmcp/.build/
+cammcp/.build/
+sysmon/bin/
+bench/board/cpubench/cpubench
+bench/board/cpubench/cpubench-*
+
+# Сторонние бинарники и исходники аналогов (ставятся bench/baselines/install_*.sh)
+bench/baselines/vendor/
+
+# Данные: архив CASAS скачивается по data/casas/PROVENANCE.txt
+data/casas/labeled_data.zip
+
+# Артефакты прогонов — локально, в репозиторий не входят
+experiments/results/
+
+# Материалы лаборатории NeuroChip и наши копии/патчи их кода — не публикуются (docs/WINDOWS.md §3)
+third_party/
+neurobot/perception/predict_live.py
+neurobot/perception/predict_live_v2.patch
+neurobot/deploy/mcp/*.patch
+
+# Материалы консультации ГИА (расшифровка встречи)
+research/consultation-gia-1/
+
+# Артефакты смоуков внутри исходного дерева (исторические; новые пишутся в experiments/results или /tmp)
+bench/baselines/smoke/
+bench/sensors/smoke/
+
+# Кэши токенизаторов и прочие .cache
+.cache/
+
+# Копии README и фрагментов кода сторонних проектов (обзор аналогов) — локально, не публикуются
+research/new_topic/A_artifacts/

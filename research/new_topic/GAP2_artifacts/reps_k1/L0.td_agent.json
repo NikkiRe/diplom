@@ -1,0 +1,87 @@
+[
+ {
+  "title": "kitchen.bme280",
+  "properties": {
+   "humidity": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "%RH"
+   },
+   "pressure": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "Pa"
+   },
+   "temperature": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "title": "balcony.dht11",
+  "properties": {
+   "humidity": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "%RH"
+   },
+   "temperature": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "title": "unplaced.ads1015",
+  "properties": {
+   "voltage0": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "V"
+   }
+  }
+ },
+ {
+  "title": "board.cpu_thermal",
+  "properties": {
+   "temperature1": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "title": "boiler_pipe.ds18b20",
+  "properties": {
+   "temperature": {
+    "type": "number",
+    "readOnly": true,
+    "unit": "Cel"
+   }
+  }
+ },
+ {
+  "title": "hall.pir_hall",
+  "description": "PIR HC-SR501, active high",
+  "properties": {
+   "state": {
+    "type": "boolean",
+    "readOnly": true
+   }
+  }
+ },
+ {
+  "title": "kitchen.relay_fan",
+  "description": "Relay for kitchen fan, active high",
+  "properties": {
+   "state": {
+    "type": "boolean",
+    "readOnly": false
+   }
+  }
+ }
+]

@@ -1,0 +1,47 @@
+[
+ {
+  "id": "kitchen.bme280",
+  "props": {
+   "humidity": "%RH",
+   "pressure": "Pa",
+   "temperature": "Cel"
+  }
+ },
+ {
+  "id": "balcony.dht11",
+  "props": {
+   "humidity": "%RH",
+   "temperature": "Cel"
+  }
+ },
+ {
+  "id": "unplaced.ads1015",
+  "props": {
+   "voltage0": "V"
+  }
+ },
+ {
+  "id": "board.cpu_thermal",
+  "props": {
+   "temperature1": "Cel"
+  }
+ },
+ {
+  "id": "boiler_pipe.ds18b20",
+  "props": {
+   "temperature": "Cel"
+  }
+ },
+ {
+  "id": "hall.pir_hall",
+  "props": {
+   "state": "bool"
+  }
+ },
+ {
+  "id": "kitchen.relay_fan",
+  "props": {
+   "state": "bool,rw"
+  }
+ }
+]

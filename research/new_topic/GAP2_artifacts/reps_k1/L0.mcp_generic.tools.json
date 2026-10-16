@@ -1,0 +1,84 @@
+[
+ {
+  "type": "function",
+  "function": {
+   "name": "list_devices",
+   "description": "List connected devices and their properties",
+   "parameters": {
+    "type": "object",
+    "properties": {}
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "read_property",
+   "description": "Read a device property",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string"
+     },
+     "property": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "device_id",
+     "property"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "write_property",
+   "description": "Write a writable device property",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string"
+     },
+     "property": {
+      "type": "string"
+     },
+     "value": {}
+    },
+    "required": [
+     "device_id",
+     "property",
+     "value"
+    ]
+   }
+  }
+ },
+ {
+  "type": "function",
+  "function": {
+   "name": "invoke_action",
+   "description": "Invoke a device action",
+   "parameters": {
+    "type": "object",
+    "properties": {
+     "device_id": {
+      "type": "string"
+     },
+     "action": {
+      "type": "string"
+     },
+     "params": {
+      "type": "object"
+     }
+    },
+    "required": [
+     "device_id",
+     "action"
+    ]
+   }
+  }
+ }
+]

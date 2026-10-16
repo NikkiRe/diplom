@@ -1,0 +1,45 @@
+# Распознавание жестов: predict_live v2 (код лаборатории + патч neurobot), камера D435i. Под безопасностью v2 —
+# --camera ros: камерой владеет realsense2_camera (драйвер neurobot-driver@camera; юнит стартует после драйверов),
+# распознавание читает его тему; глубину и IMU той же камеры берёт safety_gate.
+# READY — после прогрева YOLO+SNN и первого кадра; WATCHDOG — по живости цикла (нет 5 с -> SIGABRT, стек Python — в
+# журнале, PYTHONFAULTHANDLER). Прогрев (CUDA на Nano) — до TimeoutStartSec. После READY (wait-graph): узел не пишет
+# в /cmd_vel, вход safety_gate и прочие входы цепочки (DriveController legacy уводит в сторону только ремап); пишет —
+# отказ и метка в $STATE_DIRECTORY (/var/lib/neurobot/perception): с той же командой precheck его больше не запустит.
+# Код 6 (--camera rs: камеру держит другой процесс) — без рестарта: перезапуск по кругу грузил бы модель снова и
+# снова; doctor называет camera_busy.
+[Unit]
+Description=neurobot: распознавание жестов (камера D435i)
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+@AFTER_DRIVERS@
+After=neurobot-safety.service neurobot-executor.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=@USER@
+Group=@GROUP@
+SupplementaryGroups=@SUPPLEMENTARY_GROUPS@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 ROS_LOG_DIR=/run/neurobot/%N
+# журналы rcl — в tmpfs: у системного пользователя может не быть $HOME, а всё нужное и так в journald
+RuntimeDirectory=neurobot/%N
+StateDirectory=neurobot/perception
+ExecStartPre=@PREFIX@/bin/neurobot precheck perception
+ExecStart=@PREFIX@/bin/neurobot-run --ros --var NEUROBOT_PERCEPTION_CMD
+ExecStartPost=@PREFIX@/bin/neurobot wait-graph perception
+# KeyboardInterrupt: штатный порядок завершения камеры (R2), а не смерть посреди wait_for_frames
+KillSignal=SIGINT
+WatchdogSec=5
+Restart=always
+RestartSec=1
+RestartPreventExitStatus=6
+TimeoutStartSec=120
+TimeoutStopSec=15
+LimitCORE=0
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target

@@ -1,0 +1,207 @@
+[
+ {
+  "id": "iio:bme280@i2c-1/0x76",
+  "source": "iio",
+  "name": "bme280",
+  "bus": "i2c-1/0x76",
+  "observability": "A",
+  "channels": [
+   {
+    "name": "humidity",
+    "quantity": "humidityrelative",
+    "unit": "%RH",
+    "abi_unit": "milli percent",
+    "value": 41.23,
+    "how": "input",
+    "path": "sys/bus/iio/devices/iio:device0/in_humidityrelative_input",
+    "writable": false
+   },
+   {
+    "name": "pressure",
+    "quantity": "pressure",
+    "unit": "Pa",
+    "abi_unit": "kPa",
+    "value": 101325.0,
+    "how": "input",
+    "path": "sys/bus/iio/devices/iio:device0/in_pressure_input",
+    "writable": false
+   },
+   {
+    "name": "temperature",
+    "quantity": "temp",
+    "unit": "Cel",
+    "abi_unit": "milli degC",
+    "value": 22.51,
+    "how": "input",
+    "path": "sys/bus/iio/devices/iio:device0/in_temp_input",
+    "writable": false
+   }
+  ]
+ },
+ {
+  "id": "iio:dht11@dht11@4",
+  "source": "iio",
+  "name": "dht11",
+  "bus": "dht11@4",
+  "observability": "A",
+  "channels": [
+   {
+    "name": "humidity",
+    "quantity": "humidityrelative",
+    "unit": "%RH",
+    "abi_unit": "milli percent",
+    "value": 44.8,
+    "how": "input",
+    "path": "sys/bus/iio/devices/iio:device1/in_humidityrelative_input",
+    "writable": false
+   },
+   {
+    "name": "temperature",
+    "quantity": "temp",
+    "unit": "Cel",
+    "abi_unit": "milli degC",
+    "value": 23.1,
+    "how": "input",
+    "path": "sys/bus/iio/devices/iio:device1/in_temp_input",
+    "writable": false
+   }
+  ]
+ },
+ {
+  "id": "iio:ads1015@i2c-1/0x48",
+  "source": "iio",
+  "name": "ads1015",
+  "bus": "i2c-1/0x48",
+  "observability": "A",
+  "channels": [
+   {
+    "name": "voltage0",
+    "quantity": "voltage",
+    "unit": "V",
+    "abi_unit": "mV",
+    "value": 3.25,
+    "how": "(raw+offset)*scale",
+    "path": "sys/bus/iio/devices/iio:device2/in_voltage0_raw",
+    "writable": false
+   }
+  ]
+ },
+ {
+  "id": "hwmon:cpu_thermal",
+  "source": "hwmon",
+  "name": "cpu_thermal",
+  "bus": "thermal_zone0",
+  "observability": "A",
+  "channels": [
+   {
+    "name": "temperature1",
+    "quantity": "temp",
+    "unit": "Cel",
+    "abi_unit": "millidegree Celsius",
+    "value": 48.3,
+    "how": "input",
+    "path": "sys/class/hwmon/hwmon0/temp1_input",
+    "writable": false
+   }
+  ]
+ },
+ {
+  "id": "w1:28-0316a2795cff",
+  "source": "w1",
+  "name": "DS18B20",
+  "bus": "w1_bus_master1",
+  "observability": "A",
+  "channels": [
+   {
+    "name": "temperature",
+    "quantity": "temp",
+    "unit": "Cel",
+    "abi_unit": "1/1000 degC",
+    "value": 21.437,
+    "how": "temperature",
+    "writable": false,
+    "path": "sys/bus/w1/devices/28-0316a2795cff/temperature"
+   }
+  ],
+  "notes": [
+   "blocking read: conversion 750 ms per sample"
+  ]
+ },
+ {
+  "id": "i2c:i2c-1/0x40",
+  "source": "i2c",
+  "name": "dummy",
+  "bus": "i2c-1/0x40",
+  "observability": "C",
+  "channels": [],
+  "notes": [
+   "no IIO/hwmon driver bound: only address is known"
+  ]
+ },
+ {
+  "id": "v4l2:UVC Camera (046d:0825)",
+  "source": "v4l2",
+  "name": "UVC Camera (046d:0825)",
+  "bus": "1-1:1.0",
+  "observability": "B",
+  "channels": [],
+  "nodes": [
+   {
+    "dev": "video0",
+    "index": "0"
+   },
+   {
+    "dev": "video1",
+    "index": "1"
+   }
+  ],
+  "notes": [
+   "capture vs metadata node needs VIDIOC_QUERYCAP device_caps; on Raspberry Pi CSI cameras use libcamera, not raw /dev/videoN"
+  ]
+ },
+ {
+  "id": "usb:046d:0825@1-1",
+  "source": "usb",
+  "name": "Webcam C270",
+  "vendor": "Logitech",
+  "bus": "1-1",
+  "observability": "B",
+  "channels": []
+ },
+ {
+  "id": "usb:1a86:7523@1-2",
+  "source": "usb",
+  "name": "USB Serial",
+  "vendor": null,
+  "bus": "1-2",
+  "observability": "B",
+  "channels": []
+ },
+ {
+  "id": "gpiochip:gpiochip0",
+  "source": "gpio",
+  "name": "gpiochip0",
+  "bus": null,
+  "observability": "C",
+  "channels": [],
+  "notes": [
+   "line names/flags via GPIO_V2_GET_LINEINFO_IOCTL (libgpiod)"
+  ]
+ },
+ {
+  "id": "hat:Special Sensor Board",
+  "source": "hat",
+  "name": "Special Sensor Board",
+  "vendor": "ACME Technology Company",
+  "bus": "ID_SD/ID_SC EEPROM",
+  "observability": "B",
+  "channels": [],
+  "hat": {
+   "vendor": "ACME Technology Company",
+   "product": "Special Sensor Board",
+   "product_id": "0x0001",
+   "product_ver": "0x0001",
+   "uuid": "00000000-0000-0000-0000-000000000001"
+  }
+ }
+]

@@ -1,0 +1,41 @@
+langchain 170457766
+langchain-core 144826657
+langgraph 44769952
+llama-index-core <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+autogen-agentchat 379923
+ag2 164672
+agent-framework-core 1005851
+semantic-kernel 300767
+crewai <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+smolagents <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+openai-agents 12449784
+google-adk <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+pydantic-ai-slim 23908854
+pydantic-ai 5383780
+agno 1779568
+letta 15031
+letta-client 161915
+strands-agents <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+dspy 5312050
+haystack-ai 566454
+claude-agent-sdk 29777372
+camel-ai <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+beeai-framework 27773
+mcp-agent 25742
+fast-agent-mcp <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+langroid 11000
+atomic-agents 11711
+metagpt <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+pipecat-ai <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+livekit-agents <a href="/api/#etiquette">429 RATE LIMIT EXCEEDED</a>
+mcp 235193557
+llama-index-core 6574473
+crewai 2442764
+smolagents 425605
+google-adk 
+strands-agents 37112498
+camel-ai 42975
+fast-agent-mcp 108163
+metagpt 3393
+pipecat-ai 1043553
+livekit-agents 3609910

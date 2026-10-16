@@ -1,0 +1,67 @@
+{
+  "default_ttl_s": 10.0,
+  "max_state_age_s": 5.0,
+  "commit_window_s": 5.0,
+  "idem_capacity": 4096,
+  "devices": {
+    "heater": {
+      "tools": {"set_power": {"type": "object", "properties": {"on": {"type": "boolean"}},
+                              "required": ["on"], "additionalProperties": false}},
+      "min_interval_s": 30.0, "safe_state": {"on": false}
+    },
+    "pump": {
+      "tools": {"set_power": {"type": "object", "properties": {"on": {"type": "boolean"}},
+                              "required": ["on"], "additionalProperties": false}},
+      "min_interval_s": 10.0, "safe_state": {"on": false}
+    },
+    "valve": {
+      "tools": {"set_angle": {"type": "object", "properties": {"deg": {"type": "integer", "minimum": 0, "maximum": 90}},
+                              "required": ["deg"], "additionalProperties": false}},
+      "max_per_min": 20, "safe_state": {"deg": 0}
+    },
+    "fan": {
+      "tools": {"set_speed": {"type": "object", "properties": {"pct": {"type": "integer", "minimum": 0, "maximum": 100}},
+                              "required": ["pct"], "additionalProperties": false}},
+      "lease_s": 2.0, "safe_state": {"pct": 0}
+    },
+    "door": {
+      "tools": {"lock": {"type": "object", "additionalProperties": false},
+                "unlock": {"type": "object", "additionalProperties": false}},
+      "requires_confirm": ["unlock"]
+    },
+    "led": {
+      "tools": {"set_color": {"type": "object", "properties": {
+                  "r": {"type": "integer", "minimum": 0, "maximum": 255},
+                  "g": {"type": "integer", "minimum": 0, "maximum": 255},
+                  "b": {"type": "integer", "minimum": 0, "maximum": 255}},
+                "required": ["r", "g", "b"], "additionalProperties": false}}
+    },
+    "thermo": {
+      "tools": {"read": {"type": "object", "additionalProperties": false}},
+      "read_only": ["read"]
+    },
+    "camera": {
+      "tools": {"capture": {"type": "object", "properties": {"w": {"type": "integer", "minimum": 160, "maximum": 1920}},
+                            "additionalProperties": false}},
+      "read_only": ["capture"]
+    }
+  },
+  "interlocks": [
+    {"name": "heater_window", "device": "heater", "tool": "set_power", "needs": ["window_open", "temp_c"],
+     "deny": [
+       {"if": {"all": [{"arg": "on", "eq": true}, {"state": "window_open", "eq": true}]}, "reason": "окно открыто"},
+       {"if": {"all": [{"arg": "on", "eq": true}, {"state": "temp_c", "ge": 30.0}]}, "reason": "температура >= 30 °C"}
+     ]},
+    {"name": "pump_dry_run", "device": "pump", "tool": "set_power", "needs": ["water_level_pct"],
+     "deny": [
+       {"if": {"all": [{"arg": "on", "eq": true}, {"state": "water_level_pct", "lt": 10.0}]},
+        "reason": "сухой ход: уровень воды < 10 %"}
+     ]},
+    {"name": "fan_human_speed", "device": "fan", "tool": "set_speed", "needs": ["human_near"],
+     "deny": [
+       {"if": {"all": [{"state": "human_near", "eq": true}, {"arg": "pct", "gt": 30}]},
+        "reason": "человек рядом, скорость > 30 %"}
+     ],
+     "clamp": {"pct": {"set": 30}}}
+  ]
+}

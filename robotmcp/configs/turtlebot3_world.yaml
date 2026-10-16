@@ -1,0 +1,32 @@
+# Места turtlebot3_world (карта turtlebot3_navigation2/map/map.yaml, 0,05 м/пикс.) для robot-mcp.
+# Семантические id — research/new_topic/robot_scenario.md §3 (alias — имя в прототипе и замерах 07.10).
+# Все точки свободны в радиусе 0,25 м (проверено по map.pgm 07.10). Места ≥ 2·place_radius_m друг от друга.
+world: turtlebot3_world
+frame: map
+model: waffle_pi
+goal_tol_m: 0.25          # допуск цели Nav2 (xy_goal_tolerance)
+max_v_mps: 0.26           # предел скорости Nav2
+place_radius_m: 0.45      # «в месте», если ближе; иначе between
+camera_hfov_deg: 62.2     # waffle_pi: horizontal_fov 1.0856 рад
+travel:                   # t ≈ a + b·L, L ≈ path_factor·прямая (lockstep/summary.md, n = 29)
+  a_s: 11.1
+  b_s_per_m: 2.0
+  path_factor: 1.2
+topics:
+  cmd_vel: /cmd_vel                       # geometry_msgs/msg/TwistStamped (Jazzy)
+  amcl_pose: /amcl_pose
+  scan: /scan
+  camera: /camera/image_raw/compressed
+  battery: /battery_state                 # синтетический заряд от драйвера стенда (sensor_msgs/msg/BatteryState)
+  navigate_to_pose: /navigate_to_pose
+  world_control: /world/default/control   # только для --sim-step (стенд с --world-control)
+  clock: /clock                           # только для --sim-step: идёт ли мир (шагать можно только стоящий)
+places:
+  - {id: dock,     xy: [-2.0, -0.5],  ru: база,     ru_loc: на базе,      alias: dock,       charger: true, role: spawn}
+  - {id: door,     xy: [1.8, 0.5],    ru: дверь,    ru_loc: у двери,      alias: east,       role: patrol}
+  - {id: corridor, xy: [0.0, 1.8],    ru: коридор,  ru_loc: в коридоре,   alias: north,      role: patrol}
+  - {id: window,   xy: [0.5, -1.7],   ru: окно,     ru_loc: у окна,       alias: south,      role: patrol}
+  - {id: shelf,    xy: [1.6, 1.6],    ru: стеллаж,  ru_loc: у стеллажа,   alias: north_east, role: user}
+  - {id: desk,     xy: [1.8, -0.5],   ru: стол,     ru_loc: у стола,      alias: east_south, role: user}
+  - {id: pass_ne,  xy: [0.55, 0.55],  ru: проход,   ru_loc: в проходе,    alias: center_ne,  role: passage}
+  - {id: pass_sw,  xy: [-0.55, -0.55], ru: проход,  ru_loc: в проходе,    alias: center_sw,  role: passage}

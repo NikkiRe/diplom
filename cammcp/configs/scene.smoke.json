@@ -1,0 +1,17 @@
+{
+  "width": 320,
+  "height": 240,
+  "seed": 7,
+  "noise": 4,
+  "jitter_px": 0.6,
+  "light": {"base": 0.5, "amp": 0.1, "period_s": 60, "phase_s": 0},
+  "lamps": [
+    {"on_s": 18, "off_s": 31, "gain": 0.35, "gradient": 0.1}
+  ],
+  "objects": [
+    {"id": "person_a", "w": 0.12, "h": 0.5, "albedo": 0.2,
+     "path": [[6, -0.08, 0.6], [14, 1.08, 0.6]]},
+    {"id": "person_b", "w": 0.13, "h": 0.5, "albedo": 0.8,
+     "path": [[24, 1.08, 0.62], [29, 0.5, 0.6], [34, -0.08, 0.6]]}
+  ]
+}

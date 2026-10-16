@@ -1,0 +1,58 @@
+[
+ {
+  "bn": "urn:dev:edge:kitchen.bme280:",
+  "bt": 1791295200,
+  "n": "humidity",
+  "u": "%RH",
+  "v": 41.23
+ },
+ {
+  "n": "pressure",
+  "u": "Pa",
+  "v": 101325.0
+ },
+ {
+  "n": "temperature",
+  "u": "Cel",
+  "v": 22.51
+ },
+ {
+  "bn": "urn:dev:edge:balcony.dht11:",
+  "n": "humidity",
+  "u": "%RH",
+  "v": 44.8
+ },
+ {
+  "n": "temperature",
+  "u": "Cel",
+  "v": 23.1
+ },
+ {
+  "bn": "urn:dev:edge:unplaced.ads1015:",
+  "n": "voltage0",
+  "u": "V",
+  "v": 3.25
+ },
+ {
+  "bn": "urn:dev:edge:board.cpu_thermal:",
+  "n": "temperature1",
+  "u": "Cel",
+  "v": 48.3
+ },
+ {
+  "bn": "urn:dev:edge:boiler_pipe.ds18b20:",
+  "n": "temperature",
+  "u": "Cel",
+  "v": 21.437
+ },
+ {
+  "bn": "urn:dev:edge:hall.pir_hall:",
+  "n": "state",
+  "vb": false
+ },
+ {
+  "bn": "urn:dev:edge:kitchen.relay_fan:",
+  "n": "state",
+  "vb": false
+ }
+]

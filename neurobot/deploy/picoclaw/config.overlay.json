@@ -1,0 +1,44 @@
+{
+  "agents": {
+    "defaults": {
+      "max_tokens": 1024,
+      "max_tool_iterations": 8,
+      "max_llm_retries": 1,
+      "max_parallel_turns": 2
+    }
+  },
+  "gateway": {"hot_reload": false, "log_level": "info"},
+  "tools": {
+    "mcp": {
+      "enabled": true,
+      "discovery": {"enabled": false},
+      "servers": {
+        "robot_mcp": {"enabled": true, "type": "http", "url": "http://127.0.0.1:18110/mcp"},
+        "robot": {"enabled": false},
+        "robot_vision_demo_mcp": {"enabled": false},
+        "yolo_hand_mcp": {"enabled": false}
+      }
+    },
+    "append_file": {"enabled": false},
+    "edit_file": {"enabled": false},
+    "write_file": {"enabled": false},
+    "list_dir": {"enabled": false},
+    "read_file": {"enabled": false},
+    "load_image": {"enabled": false},
+    "send_file": {"enabled": false},
+    "send_tts": {"enabled": false},
+    "spawn": {"enabled": false},
+    "spawn_status": {"enabled": false},
+    "subagent": {"enabled": false},
+    "exec": {"enabled": false},
+    "cron": {"enabled": false},
+    "skills": {"enabled": false},
+    "find_skills": {"enabled": false},
+    "install_skill": {"enabled": false},
+    "web": {"enabled": false},
+    "web_fetch": {"enabled": false},
+    "serial": {"enabled": false},
+    "spi": {"enabled": false},
+    "i2c": {"enabled": false}
+  }
+}

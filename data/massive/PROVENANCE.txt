@@ -1,0 +1,16 @@
+Шаблоны команд iot из MASSIVE для daygen (bench/daygen/massive.py).
+
+Источник: MASSIVE: A 1M-Example Multilingual Natural Language Understanding Dataset with 51 Typologically-Diverse
+Languages (FitzGerald et al., ACL 2023), сплит test, конфиги ru-RU и en-US, полученные через HF datasets-server
+(mteb/amazon_massive_intent) скриптом research/new_topic/GAP4_artifacts/fetch_massive.py.
+Лицензия: CC BY 4.0 (https://creativecommons.org/licenses/by/4.0/).
+Исходные файлы (SHA-256):
+  massive_test_ru.json a403517ba6146c459a6a1c9f8de715f06633a733d393e789aacea4b7e7b3dd69
+  massive_test_en.json 11694350a6051dad330afc4145076f2e28164747b403f167856896ba3b50ac0f
+
+Файлы:
+  iot_ru_en.jsonl     — все 220 параллельных пар сценария iot (id, label, ru, en), без изменений;
+  iot_templates.json  — 171 размеченных шаблонов: действие, способ выбора комнаты, параметры;
+                        в slot-шаблонах комната заменена плейсхолдером (изменение текста — наше);
+                        49 пар исключены с указанием причины (поле excluded).
+Воспроизведение: .venv/bin/python -m bench.daygen massive-build

@@ -1,0 +1,83 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/6XwgJqXSzoIz2wNzUHR30v1N7jY</id>
+  <title>arXiv Query: search_query=&amp;id_list=2503.03911,2602.04056&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-06T14:06:31Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=50&amp;id_list=2503.03911,2602.04056" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>2</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2503.03911v1</id>
+    <title>Safe LLM-Controlled Robots with Formal Guarantees via Reachability Analysis</title>
+    <updated>2025-03-05T21:23:15Z</updated>
+    <link href="https://arxiv.org/abs/2503.03911v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2503.03911v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The deployment of Large Language Models (LLMs) in robotic systems presents unique safety challenges, particularly in unpredictable environments. Although LLMs, leveraging zero-shot learning, enhance human-robot interaction and decision-making capabilities, their inherent probabilistic nature and lack of formal guarantees raise significant concerns for safety-critical applications. Traditional model-based verification approaches often rely on precise system models, which are difficult to obtain for real-world robotic systems and may not be fully trusted due to modeling inaccuracies, unmodeled dynamics, or environmental uncertainties. To address these challenges, this paper introduces a safety assurance framework for LLM-controlled robots based on data-driven reachability analysis, a formal verification technique that ensures all possible system trajectories remain within safe operational limits. Our framework specifically investigates the problem of instructing an LLM to navigate the robot to a specified goal and assesses its ability to generate low-level control actions that successfully guide the robot safely toward that goal. By leveraging historical data to construct reachable sets of states for the robot-LLM system, our approach provides rigorous safety guarantees against unsafe behaviors without relying on explicit analytical models. We validate the framework through experimental case studies in autonomous navigation and task planning, demonstrating its effectiveness in mitigating risks associated with LLM-generated commands. This work advances the integration of formal methods into LLM-based robotics, offering a principled and practical approach to ensuring safety in next-generation autonomous systems.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-03-05T21:23:15Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Ahmad Hafez</name>
+    </author>
+    <author>
+      <name>Alireza Naderi Akhormeh</name>
+    </author>
+    <author>
+      <name>Amr Hegazy</name>
+    </author>
+    <author>
+      <name>Amr Alanwar</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2602.04056v1</id>
+    <title>Modular Safety Guardrails Are Necessary for Foundation-Model-Enabled Robots in the Real World</title>
+    <updated>2026-02-03T22:41:51Z</updated>
+    <link href="https://arxiv.org/abs/2602.04056v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2602.04056v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>The integration of foundation models (FMs) into robotics has accelerated real-world deployment, while introducing new safety challenges arising from open-ended semantic reasoning and embodied physical action. These challenges require safety notions beyond physical constraint satisfaction. In this paper, we characterize FM-enabled robot safety along three dimensions: action safety (physical feasibility and constraint compliance), decision safety (semantic and contextual appropriateness), and human-centered safety (conformance to human intent, norms, and expectations). We argue that existing approaches, including static verification, monolithic controllers, and end-to-end learned policies, are insufficient in settings where tasks, environments, and human expectations are open-ended, long-tailed, and subject to adaptation over time. To address this gap, we propose modular safety guardrails, consisting of monitoring (evaluation) and intervention layers, as an architectural foundation for comprehensive safety across the autonomy stack. Beyond modularity, we highlight possible cross-layer co-design opportunities through representation alignment and conservatism allocation to enable faster, less conservative, and more effective safety enforcement. We call on the community to explore richer guardrail modules and principled co-design strategies to advance safe real-world physical AI deployment.</summary>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-02-03T22:41:51Z</published>
+    <arxiv:primary_category term="eess.SY"/>
+    <author>
+      <name>Joonkyung Kim</name>
+    </author>
+    <author>
+      <name>Wenxi Chen</name>
+    </author>
+    <author>
+      <name>Davood Soleymanzadeh</name>
+    </author>
+    <author>
+      <name>Yi Ding</name>
+    </author>
+    <author>
+      <name>Xiangbo Gao</name>
+    </author>
+    <author>
+      <name>Zhengzhong Tu</name>
+    </author>
+    <author>
+      <name>Ruqi Zhang</name>
+    </author>
+    <author>
+      <name>Fan Fei</name>
+    </author>
+    <author>
+      <name>Sushant Veer</name>
+    </author>
+    <author>
+      <name>Yiwei Lyu</name>
+    </author>
+    <author>
+      <name>Minghui Zheng</name>
+    </author>
+    <author>
+      <name>Yan Gu</name>
+    </author>
+  </entry>
+</feed>

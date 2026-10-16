@@ -1,0 +1,4 @@
+# Веса predict_live (формат sha256sum) -> /etc/neurobot/weights.sha256. Хеши — файлов из присланного архива
+# демо (14.10.2026); если на роботе веса другие и это намеренно — пересчитать: sha256sum <файл>.
+dafddc97f95d644d874e56d79ebf68db92d9ecda8feada0e642ace85a266e2b2  /home/jetson/NeuroChip/demo/models/yolo_hand.pt
+bda97d30463d2d253d15bd28f9b777417520523d6337ed7288d0e4d1cf7d2406  /home/jetson/NeuroChip/demo/models/snn_emnist_small.pth

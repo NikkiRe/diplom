@@ -1,0 +1,5 @@
+{"gpio": [
+  {"id": "vm_button", "chip": "gpiochip0", "line": 0, "direction": "input", "quantity": "button", "debounce_ms": 5},
+  {"id": "vm_relay", "chip": "gpiochip0", "line": 1, "direction": "output", "quantity": "switch"}
+ ],
+ "gate": {"devices": {"vm_relay": {"min_interval_s": 1, "safe_state": {"state": false}}}}}

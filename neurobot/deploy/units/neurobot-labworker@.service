@@ -1,0 +1,34 @@
+# HTTP-воркер лаборатории (YOLO-воркер 8765, «Robot Vision Demo Worker» 8766 и т. п.), экземпляр
+# neurobot-labworker@<имя> — вместо nohup из run_yolo_mcp_stack.sh (N7, N8): один экземпляр, Restart=always,
+# журнал в journald. Команда — NEUROBOT_LABWORKER_<имя>_CMD; готовность — GET NEUROBOT_LABWORKER_<имя>_URL отвечает 200
+# (воркер может сначала грузить модель: на Nano — до пары минут); всё — в @ETC@/neurobot.env.
+[Unit]
+Description=neurobot: воркер лаборатории %i
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+After=neurobot-perception.service neurobot-rosbridge.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=@USER@
+Group=@GROUP@
+SupplementaryGroups=@SUPPLEMENTARY_GROUPS@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 ROS_LOG_DIR=/run/neurobot/%N
+# журналы rcl — в tmpfs: у системного пользователя может не быть $HOME, а всё нужное и так в journald
+RuntimeDirectory=neurobot/%N
+ExecStartPre=@PREFIX@/bin/neurobot precheck labworker@%i
+ExecStart=@PREFIX@/bin/neurobot-run --ros --var NEUROBOT_LABWORKER_%i_CMD
+ExecStartPost=@PREFIX@/bin/neurobot wait-http labworker@%i
+Restart=always
+RestartSec=2
+# больше NEUROBOT_LABWORKER_WAIT_S (170 с): причину называет wait-http, а не таймаут systemd
+TimeoutStartSec=180
+TimeoutStopSec=15
+LimitCORE=0
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target

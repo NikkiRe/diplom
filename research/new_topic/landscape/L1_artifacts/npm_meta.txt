@@ -1,0 +1,36 @@
+langchain | 1.5.15	>=20	4	3238682	MIT | dl_month=12190315
+   deps: @langchain/langgraph, @langchain/langgraph-checkpoint, langsmith, zod
+@langchain/core | 1.2.16	>=20	7	7621006	MIT | dl_month=23758364
+   deps: @cfworker/json-schema, @standard-schema/spec, js-tiktoken, langsmith, mustache, p-queue, zod
+@langchain/langgraph | 1.4.19	>=18	4	4394291	MIT | dl_month=14444015
+   deps: @langchain/langgraph-checkpoint, @langchain/langgraph-sdk, @langchain/protocol, @standard-schema/spec
+@langchain/mcp-adapters |  | dl_month=1112969
+   deps: 
+@mastra/core | 1.74.0	>=22.13.0	30	71817672	Apache-2.0 | dl_month=7250377
+   deps: @a2a-js/sdk-v0_3, @a2a-js/sdk-v1, @ai-sdk/provider-utils-v6, @ai-sdk/provider-utils-v7, @ai-sdk/provider-v5, @ai-sdk/provider-v6, @ai-sdk/provider-v7, @isaacs/ttlcache, @lukeed/uuid, @mastra/schema-compat, @standard-schema/spec, chat, croner, dotenv, execa, fastq, gray-matter, hono, hono-openapi, ignore, jpeg-js, json-schema, lru-cache, p-map, p-retry, picomatch, posthog-node, re2js, ws, xxhash-wa
+mastra |  | dl_month=3103704
+   deps: 
+ai | 7.0.128	>=22	3	7899552	Apache-2.0 | dl_month=110341313
+   deps: @ai-sdk/gateway, @ai-sdk/provider, @ai-sdk/provider-utils
+@ai-sdk/mcp | 2.0.67	>=22	4	679947	Apache-2.0 | dl_month=17561592
+   deps: @ai-sdk/provider, @ai-sdk/provider-utils, cross-spawn, pkce-challenge
+@openai/agents | 0.19.0	-	4	23678	MIT | dl_month=7862025
+   deps: @openai/agents-core, @openai/agents-openai, @openai/agents-realtime, openai
+@openai/agents-core | 0.19.0	-	3	10548902	MIT | dl_month=8276098
+   deps: @standard-schema/spec, debug, openai
+@anthropic-ai/claude-agent-sdk | 0.3.291	>=18.0.0	0	5489497	SEE LICENSE IN README.md | dl_month=47817073
+   deps: 
+genkit | 1.42.0	-	3	655388	Apache-2.0 | dl_month=988496
+   deps: @genkit-ai/ai, @genkit-ai/core, uuid
+@strands-agents/sdk | 1.19.0	>=22.0.0	5	4128393	Apache-2.0 | dl_month=2134333
+   deps: @aws-sdk/client-bedrock-runtime, @smithy/fetch-http-handler, @types/json-schema, uuid, yaml
+@google/adk | 2.2.0	-	24	9840438	Apache-2.0 | dl_month=1033480
+   deps: @a2a-js/sdk, @google-cloud/vertexai, @google/genai, @mikro-orm/core, @opentelemetry/api, @opentelemetry/api-logs, @opentelemetry/exporter-logs-otlp-http, @opentelemetry/exporter-metrics-otlp-http, @opentelemetry/exporter-trace-otlp-http, @opentelemetry/resource-detector-gcp, @opentelemetry/resources, @opentelemetry/sdk-logs, @opentelemetry/sdk-metrics, @opentelemetry/sdk-trace-base, @opentelemetry
+beeai-framework | 0.1.31	-	24	4772317	Apache-2.0 | dl_month=5270
+   deps: @ai-zen/node-fetch-event-source, @streamparser/json, ai, ajv, ajv-formats, axios, ddg-kit, fast-xml-parser, joplin-turndown-plugin-gfm, jsonrepair, mathjs, mustache, object-hash, p-queue-compat, p-throttle, pino, promise-based-task, remeda, serialize-error-cjs, string-comparison, string-strip-html, turndown, wikipedia, zod-to-json-schema
+llamaindex | 0.12.1	>=18.0.0	8	973957	MIT | dl_month=514872
+   deps: @llamaindex/core, @llamaindex/env, @llamaindex/node-parser, @llamaindex/workflow, @types/lodash, @types/node, lodash, magic-bytes.js
+@modelcontextprotocol/sdk | 1.32.1	>=18	17	4490363	MIT | dl_month=242415494
+   deps: @hono/node-server, ajv, ajv-formats, content-type, cors, cross-spawn, eventsource, eventsource-parser, express, express-rate-limit, hono, jose, json-schema-typed, pkce-challenge, raw-body, zod, zod-to-json-schema
+@voltagent/core | 2.11.0	-	44	12925142	MIT | dl_month=136025
+   deps: @ai-sdk/amazon-bedrock, @ai-sdk/anthropic, @ai-sdk/azure, @ai-sdk/cerebras, @ai-sdk/cohere, @ai-sdk/deepinfra, @ai-sdk/gateway, @ai-sdk/google, @ai-sdk/google-vertex, @ai-sdk/groq, @ai-sdk/mistral, @ai-sdk/openai, @ai-sdk/openai-compatible, @ai-sdk/perplexity, @ai-sdk/togetherai, @ai-sdk/vercel, @ai-sdk/xai, @aihubmix/ai-sdk-provider, @gitlab/gitlab-ai-provider, @modelcontextprotocol/sdk, @mymedis

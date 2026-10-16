@@ -1,0 +1,150 @@
+{
+ "servers": {
+  "hw": [
+   {
+    "name": "invoke_action",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "device": {
+       "type": "string",
+       "enum": [
+        "camera",
+        "door",
+        "fan",
+        "heater",
+        "led",
+        "pump",
+        "thermo",
+        "valve"
+       ]
+      },
+      "action": {
+       "type": "string",
+       "minLength": 1
+      },
+      "args": {
+       "type": "object"
+      }
+     },
+     "additionalProperties": false,
+     "required": [
+      "device",
+      "action"
+     ]
+    }
+   },
+   {
+    "name": "read_property",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "device": {
+       "type": "string",
+       "enum": [
+        "room",
+        "tank",
+        "hall"
+       ]
+      },
+      "property": {
+       "type": "string",
+       "enum": [
+        "temperature",
+        "window_open",
+        "water_level",
+        "motion"
+       ]
+      }
+     },
+     "additionalProperties": false,
+     "required": [
+      "device",
+      "property"
+     ]
+    }
+   },
+   {
+    "name": "list_devices",
+    "inputSchema": {
+     "type": "object",
+     "properties": {},
+     "additionalProperties": false
+    }
+   },
+   {
+    "name": "board_health",
+    "inputSchema": {
+     "type": "object",
+     "properties": {},
+     "additionalProperties": false
+    }
+   }
+  ],
+  "local": [
+   {
+    "name": "notify_user",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "text": {
+       "type": "string",
+       "minLength": 1,
+       "maxLength": 500
+      },
+      "level": {
+       "enum": [
+        "info",
+        "warning",
+        "alarm"
+       ]
+      }
+     },
+     "additionalProperties": false,
+     "required": [
+      "text"
+     ]
+    }
+   },
+   {
+    "name": "create_rule",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "name": {
+       "type": "string"
+      },
+      "when": {
+       "type": "string"
+      },
+      "then": {
+       "type": "string"
+      }
+     },
+     "additionalProperties": false,
+     "required": [
+      "when",
+      "then"
+     ]
+    }
+   },
+   {
+    "name": "recent_events",
+    "inputSchema": {
+     "type": "object",
+     "properties": {
+      "k": {
+       "type": "integer",
+       "minimum": 1,
+       "maximum": 50
+      }
+     },
+     "additionalProperties": false,
+     "required": [
+      "k"
+     ]
+    }
+   }
+  ]
+ }
+}

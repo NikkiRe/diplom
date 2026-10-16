@@ -1,0 +1,44 @@
+langchain-ai/langchain	147497	24718	2022-10-17	2026-10-06	Python	MIT	false	The agent engineering platform.
+langchain-ai/langgraph	42777	7271	2023-08-09	2026-10-05	Python	MIT	false	Build resilient agents.
+langchain-ai/langchainjs	18249	3415	2023-02-06	2026-10-06	TypeScript	MIT	false	The agent engineering platform
+langchain-ai/langgraphjs	3337	601	2024-01-09	2026-10-05	TypeScript	MIT	false	Framework to build resilient language agents as graphs.
+run-llama/llama_index	52422	8291	2022-11-02	2026-10-05	Python	MIT	false	LlamaIndex is the document processing platform for AI
+run-llama/LlamaIndexTS	3080	523	2023-06-13	2026-03-11	TypeScript	MIT	true	Data framework for your LLM applications. Focus on server side solution
+microsoft/autogen	61275	9274	2023-08-18	2026-04-15	Python	CC-BY-4.0	false	A programming framework for agentic AI
+ag2ai/ag2	4978	737	2024-11-11	2026-10-06	Python	Apache-2.0	false	AG2 (formerly AutoGen): The Open-Source AgentOS.Join us at: https://discord.gg/sNGSwQME3x
+microsoft/agent-framework	13963	2430	2025-04-28	2026-10-06	Python	MIT	false	A framework for building, orchestrating and deploying AI agents and multi-agent workflows with support for Python and .NET.
+microsoft/semantic-kernel	28630	4813	2023-02-27	2026-10-06	C#	MIT	false	Integrate cutting-edge LLM technology quickly and easily into your apps
+crewAIInc/crewAI	59396	8655	2023-10-27	2026-10-06	Python	MIT	false	Framework for orchestrating role-playing, autonomous AI agents. By fostering collaborative intelligence, CrewAI empowers agents to work together seamlessly, tackling complex tasks.
+huggingface/smolagents	29701	3048	2024-12-05	2026-10-06	Python	Apache-2.0	false	🤗 smolagents: a barebones library for agents that think in code.
+openai/openai-agents-python	29857	4845	2025-03-11	2026-10-06	Python	MIT	false	A lightweight, powerful framework for multi-agent workflows
+openai/openai-agents-js	3890	989	2025-05-31	2026-10-06	TypeScript	MIT	false	A lightweight, powerful framework for multi-agent workflows and voice agents
+google/adk-python	21724	4107	2025-04-01	2026-10-06	Python	Apache-2.0	false	An open-source, code-first Python toolkit for building, evaluating, and deploying sophisticated AI agents with flexibility and control.
+google/adk-go	8848	1023	2025-05-05	2026-10-06	Go	Apache-2.0	false	An open-source, code-first Go toolkit for building, evaluating, and deploying sophisticated AI agents with flexibility and control.
+google/adk-java	1746	433	2025-05-05	2026-10-06	Java	Apache-2.0	false	An open-source, code-first Java toolkit for building, evaluating, and deploying sophisticated AI agents with flexibility and control.
+pydantic/pydantic-ai	20435	2872	2024-06-21	2026-10-06	Python	MIT	false	How Python does AI. Agents, realtime voice, image generation, embeddings. Every model, every interface, typed end to end.
+agno-agi/agno	42575	6107	2022-05-04	2026-10-06	Python	Apache-2.0	false	Build, run, and manage agent platforms.
+mastra-ai/mastra	28593	2920	2024-08-06	2026-10-06	TypeScript	NOASSERTION	false	Mastra is the modern TypeScript framework for AI-powered applications and agents.
+letta-ai/letta	25045	2643	2023-10-11	2026-09-10		Apache-2.0	false	Platform for stateful agents: AI with advanced memory that can learn and self-improve over time.
+strands-agents/harness-sdk	8686	1327	2025-05-14	2026-10-06	Python	Apache-2.0	false	Build an agent harness and control it end-to-end. Open-source SDK for production AI agents in Python & TypeScript - any model, any cloud.
+strands-agents/sdk-typescript	694	103	2025-09-19	2026-06-03	TypeScript	Apache-2.0	true	A model-driven approach to building AI agents in just a few lines of code. 
+stanfordnlp/dspy	38516	3398	2023-01-09	2026-10-05	Python	MIT	false	DSPy: The framework for programming—not prompting—language models
+deepset-ai/haystack	26684	3243	2019-11-14	2026-10-06	Python	Apache-2.0	false	Open-source AI orchestration framework for building context-engineered, production-ready LLM applications. Design modular pipelines and agent workflows with explicit control over retrieval, routing, memory, and generation. Built for scalable agents, RAG, multimodal applications, semantic search, and conversational systems.
+vercel/ai	27144	5268	2023-05-23	2026-10-06	TypeScript	NOASSERTION	false	The AI Toolkit for TypeScript. From the creators of Next.js, the AI SDK is a free open-source library for building AI-powered applications and agents 
+anthropics/claude-agent-sdk-python	8218	1326	2025-06-11	2026-10-06	Python	MIT	false	
+anthropics/claude-agent-sdk-typescript	1783	232	2025-09-27	2026-10-06	Shell	none	false	
+camel-ai/camel	17814	2106	2023-03-17	2026-10-05	Python	Apache-2.0	false	🐫 CAMEL: The first and the best multi-agent framework. Finding the Scaling Law of Agents. https://www.camel-ai.org
+i-am-bee/beeai-framework	3426	513	2024-08-23	2026-09-28	Python	Apache-2.0	false	Build production-ready AI agents in both Python and Typescript.
+lastmile-ai/mcp-agent	8568	893	2024-12-18	2026-01-25	Python	Apache-2.0	false	Build effective agents using Model Context Protocol and simple workflow patterns
+evalstate/fast-agent	3929	447	2025-01-18	2026-10-04	Python	Apache-2.0	false	Code, Build and Evaluate agents - excellent Model and Skills/MCP/ACP/A2A Support
+0xPlaygrounds/rig	8820	986	2024-06-05	2026-10-06	Rust	MIT	false	⚙️🦀 Build modular and scalable LLM Applications in Rust
+tmc/langchaingo	9711	1155	2023-02-18	2026-10-05	Go	MIT	false	LangChain for Go, the easiest way to write LLM-based programs in Go
+cloudwego/eino	13250	1124	2024-12-04	2026-09-29	Go	Apache-2.0	false	The ultimate LLM/AI application development framework in Go.
+genkit-ai/genkit	6474	858	2024-04-29	2026-10-06	TypeScript	Apache-2.0	false	Open-source framework for building agentic apps in JavaScript, Go, Dart, and Python, built and used in production by Google
+pipecat-ai/pipecat	16220	2835	2023-12-27	2026-10-06	Python	BSD-2-Clause	false	Open Source framework for voice agents, multimodal apps, and realtime AI. Maintained by Daily and the community.
+livekit/agents	14618	3881	2023-10-19	2026-10-06	Python	Apache-2.0	false	A framework for building realtime voice AI agents 🤖🎙️📹 
+dusty-nv/NanoLLM	381	67	2024-03-31	2024-10-18	Python	MIT	false	Optimized local inference for LLMs with HuggingFace-like APIs for quantization, vision/language models, multimodal agents, speech, vector DB, and RAG.
+dusty-nv/jetson-containers	4877	855	2020-04-29	2026-08-10	Jupyter Notebook	NOASSERTION	false	Machine Learning Containers for NVIDIA Jetson and JetPack-L4T
+nasa-jpl/rosa	1653	182	2024-08-05	2026-03-17	Python	Apache-2.0	false	ROSA 🤖 is an AI Agent designed to interact with ROS1- and ROS2-based robotics systems using natural language queries. ROSA helps robot developers inspect, diagnose, understand, and operate robots.
+langroid/langroid	4111	414	2023-04-16	2026-10-06	Python	MIT	false	Harness LLMs with Multi-Agent Programming
+Eigenwise/atomic-agents	6269	553	2024-06-03	2026-10-04	Python	MIT	false	Building AI agents, atomically
+FoundationAgents/MetaGPT	70762	8990	2023-06-30	2026-01-21	Python	MIT	false	🌟 The Multi-Agent Framework: First AI Software Company, Towards Natural Language Programming

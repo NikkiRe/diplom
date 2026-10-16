@@ -1,0 +1,13 @@
+ros_resolute_arm64.txt:Package: ros-lyrical-gz-sim-vendor
+ros_resolute_arm64.txt:Package: ros-lyrical-nav2-bringup
+ros_resolute_arm64.txt:Package: ros-lyrical-ros-gz-bridge
+ros_resolute_arm64.txt:Package: ros-lyrical-ros-gz-sim
+ros_resolute_arm64.txt:Package: ros-lyrical-rosbridge-server
+ros_resolute_arm64.txt:Package: ros-lyrical-turtlebot3-gazebo
+ros_noble_arm64.txt:Package: ros-jazzy-gz-sim-vendor
+ros_noble_arm64.txt:Package: ros-jazzy-nav2-bringup
+ros_noble_arm64.txt:Package: ros-jazzy-ros-gz-bridge
+ros_noble_arm64.txt:Package: ros-jazzy-ros-gz-sim
+ros_noble_arm64.txt:Package: ros-jazzy-rosbridge-server
+ros_noble_arm64.txt:Package: ros-jazzy-turtlebot3-gazebo
+ros_noble_arm64.txt:Package: ros-jazzy-turtlebot4-gz-bringup

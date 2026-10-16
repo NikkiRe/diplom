@@ -1,0 +1,158 @@
+# motion_executor v1 — исполнитель перед safety_gate
+
+Узел ROS 2 (rclpy) робота NeuroChip (PLAN §2.4, этап Э2; контракт безопасности v2 — §13.3). Демо лаборатории
+(perception v2, `--mode legacy`) пишет в `/cmd_vel_gesture`, агентский путь — в `/cmd_vel_agent`; исполнитель
+выбирает команду, сам запрещает движение вперёд у препятствия или без данных лидара и пишет **желаемую скорость в
+`/neurobot/cmd_vel_req`**. Единственный писатель `/cmd_vel` — safety_gate (`neurobot/safety`): он пропускает,
+урезает или обнуляет запрос. Исполнитель читает его `/neurobot/safety_state` и отменяет задачу, которую тот не
+пропустит. Python ≥ 3.8, ROS 2 Foxy (робот) и Jazzy (стенд). Внешних зависимостей, кроме rclpy и сообщений ROS, нет.
+
+| Файл | Что |
+|---|---|
+| `guard.py` | логика без rclpy: правила, сектор лидара, тормозная дальность, отмена по safety_gate, счётчики (`Guard`, `front_scan`, `parse_safety`) |
+| `sd_notify.py` | sd_notify(3) без libsystemd: READY, WATCHDOG, STOPPING через `$NOTIFY_SOCKET` |
+| `node.py` | узел rclpy вокруг `Guard`, `main()` |
+
+## Запуск
+
+```sh
+source /opt/ros/foxy/setup.bash            # на стенде: scripts/sim/vm_env.sh (Jazzy)
+PYTHONPATH=<корень проекта>:$PYTHONPATH python3 -m neurobot.executor \
+    [--ros-args -p d_stop:=0.35 -p cmd_vel_type:=Twist -r /cmd_vel_agent:=/имя_из_конфига_MCP]
+```
+
+Логи — в stderr, stdout не используется. Остановка — SIGTERM или SIGINT: последним в `/neurobot/cmd_vel_req`
+уходит ноль. Без safety_gate (нет свежего `/neurobot/safety_state`) задачи не исполняются (`require_safety`).
+
+## Правила
+
+1. Вход старше `input_timeout` (0,4 с) не считается заявкой (deadman).
+2. Нулевой Twist от жестов — не заявка: демо в покое шлёт нули 10 Гц.
+3. Свежая команда агента главнее жеста: ненулевая едет, нулевая — явный стоп. Вмешательство агента в идущий
+   манёвр жеста гасит этот манёвр до конца (пока вход жестов не станет нулевым или устаревшим): иначе после
+   стопа агента демо доехало бы остаток манёвра по своим часам. Это **дополнение к контракту** PLAN §2.4.
+4. Без заявок — явный ноль. Нечисловая скорость (NaN, ±inf) — явный ноль и счётчик `invalid`: NaN обходит любые
+   сравнения, в том числе запрет вперёд (находка ревью пакета 1).
+5. Вперёд (`linear.x > 0`) запрещено:
+   - если `/scan` старше `scan_timeout` (0,5 с) или ещё не приходил;
+   - если сектор ±`sector_deg` (30°) «слеп»: сплошной провал данных шире `max_gap_deg` (3°). Провал — NaN и
+     значения ниже `range_min` (коды ошибок URG, N14). На роботе D435i, вероятно, закрывает лидару −61…+4°
+     (R7, RS3: в скане с робота 186 лучей NaN подряд), и без этого правила страж формально работал бы, а
+     фактически был бы слеп. `allow_blind:=true` — работа под присмотром: провал не запрещает движение;
+   - если в секторе есть достоверная дальность (в `[range_min, range_max]`; −inf по REP 117 — это 0) ближе
+     тормозной `d_stop + v·react_s + v²/(2·decel)` от оси лидара (R7, RS2: край базы ≈0,21 м от оси, выбег при
+     0,5 м/с 0,16–0,23 м). При 0,5 м/с это 0,575 м, при толчке агента 0,08 м/с — 0,369 м.
+
+   Сектор — по `angle_min`/`angle_increment` (R8), годятся сканы −120…+120° (URG-04LX, 683 луча) и 0…2π
+   (TurtleBot3). Повороты и задний ход не трогаются: база круглая, поворот на месте не выходит за её круг (R7);
+   ограничение заднего хода — executor v2.
+6. Используются только `linear.x` и `angular.z` (дифференциальная база).
+7. **safety_gate.** Задача — манёвр жеста или команда агента — отменяется до конца своего входа (пока он не станет
+   нулевым или устаревшим), если safety_gate её не пропустит: `state` = `estop`, его предел по нужной оси
+   (`limits.v_max` вперёд, `v_rev` назад, `w_max` поворот) равен нулю, или его состояния нет дольше `safety_timeout`
+   (`safety_lost`, при `require_safety`). Отмена — событие `task_end` в `/neurobot/events`. Поэтому жест не
+   исполняется при защёлке и блоке: он отменяется на первом же шаге и не продолжится, когда блок снимут.
+   Толкование контракта: при `blocked` с `w_max` > 0 (вперёд нельзя — препятствие) поворот на месте исполняется —
+   его safety_gate пропускает, а развернуться от стены — частый выход из блока.
+8. Слепой сектор (правило 5) решает safety_gate, пока он на связи: у него есть глубина, которой перед в этом секторе
+   виден (на роботе — всегда RS3). Без него — правило v1. Метаданные скана, по которым сектор не построить (пустой
+   скан, не числа, шаг 0, пустой диапазон дальностей), — скан не принят и устареет (находка ревью).
+9. **Удержание старта.** Вход, впервые пришедший ненулевым раньше `start_quiet_s` (2 с) после первого шага
+   автомата, не исполняется, пока не станет нулевым или устаревшим: манёвр жеста или команда агента, начатые до
+   рестарта исполнителя, не продолжаются (PLAN §13.3; находка ревью W2 — прежний автомат брал идущий манёвр жеста с
+   первого же скана). Демо в покое шлёт нули — вход жестов взводится первым нулём; вход агента, молчавший
+   `start_quiet_s`, взведён. Цена: команда агента, пришедшая в первые 2 с после старта исполнителя, ждёт паузы.
+
+Публикация в `/neurobot/cmd_vel_req`: при смене команды — сразу из колбэка входа (L2); на тике 20 Гц — каждая
+ненулевая команда, нули в покое — каждый второй тик (10 Гц). Явный ноль — при старте (до READY), на SIGTERM/SIGINT и
+при исключении (`finally` в `main`); после нуля на выходе — пауза 0,1 с на доставку.
+
+## Параметры (`--ros-args -p имя:=значение`; дробные — с точкой: `1.0`)
+
+| Параметр | По умолчанию | Смысл |
+|---|---|---|
+| `cmd_vel_type` | `Twist` | тип `/neurobot/cmd_vel_req`: `Twist` (вход safety_gate) или `TwistStamped` |
+| `frame_id` | `base_link` | `header.frame_id` для `TwistStamped` |
+| `rate_hz` | 20.0 | тик автомата и WATCHDOG |
+| `state_hz` | 2.0 | `/neurobot/motion_state` без изменений (при изменении — сразу) |
+| `input_timeout` | 0.4 | с, deadman входов |
+| `scan_timeout` | 0.5 | с, возраст `/scan`, после которого вперёд нельзя |
+| `d_stop` | 0.35 | м от оси лидара при v → 0 (README лаборатории: 0,35; в коде демо 0,25 — S5) |
+| `react_s` | 0.2 | с, период скана и доставка — в тормозной дальности [оценка] |
+| `decel` | 1.0 | м/с², замедление базы [оценка до замера тормозного пути на роботе] |
+| `sector_deg` | 30.0 | полуширина переднего сектора, градусы |
+| `max_gap_deg` | 3.0 | самый широкий допустимый провал данных в секторе, градусы (≈8 лучей URG) |
+| `allow_blind` | false | провал не запрещает движение вперёд — только под присмотром |
+| `safety_timeout` | 1.0 | с; `/neurobot/safety_state` старше — safety_gate потерян |
+| `require_safety` | true | без свежего `safety_state` задачи не исполняются (`Guard()` без параметров — правила v1 без safety_gate, для тестов) |
+| `start_quiet_s` | 2.0 | с, удержание старта (правило 9): с запасом на discovery DDS [допущение; не мерено на Jetson] |
+
+Неверный параметр — код выхода 2 и причина в журнале; типы проверяет сам узел (на Foxy rclpy их не сверяет: строка
+`'"false"'` в `allow_blind` была бы истинной — находка ревью); исключение — код 1 (ноль уже отправлен).
+
+## Темы
+
+| Тема | Тип | Направление |
+|---|---|---|
+| `/cmd_vel_gesture` | `geometry_msgs/Twist` | вход (perception legacy, ремап `/cmd_vel`) |
+| `/cmd_vel_agent` | `geometry_msgs/Twist` | вход (агентский путь; имя — ремапом под конфиг MCP лаборатории) |
+| `/scan` | `sensor_msgs/LaserScan`, QoS сенсоров (best effort — совместим с reliable-издателем) | вход |
+| `/neurobot/safety_state` | `std_msgs/String`, JSON safety_gate | вход |
+| `/neurobot/cmd_vel_req` | `Twist` или `TwistStamped` | выход: вход safety_gate |
+| `/neurobot/motion_state` | `std_msgs/String`, JSON | выход |
+| `/neurobot/events` | `std_msgs/String`, JSON `{type: task_end, task: gesture\|agent, status: estop\|blocked\|safety_lost, reasons, boot, seq}` | выход |
+
+`/neurobot/motion_state`: `{boot, seq, moving, by: agent|gesture|none, blocked_front, front, cut, linear, angular,
+scan_age_s, front_min_m, front_gap_deg, safety, counters: {cut_forward, stale, preempted, safety_cancel, invalid,
+ticks, published}}`; `safety` — состояние safety_gate или `null`, если его нет дольше `safety_timeout`.
+- `front` — можно ли вперёд при скорости выбранной команды: `clear`, `obstacle`, `blind`, `stale`;
+  `blocked_front` = `front != clear`; `cut` — движение вперёд запрошено и срезано.
+- `front_min_m` — ближайшая достоверная дальность в секторе (`null` — ничего), `front_gap_deg` — самый широкий
+  провал.
+- Счётчики — переходы, а не вызовы: `cut_forward` — движение вперёд срезано; `stale` — ненулевой вход перестал
+  приходить; `preempted` — агент погасил манёвр жеста; `safety_cancel` — задача отменена по safety_gate. `invalid` —
+  нечисловые входы, по сообщениям.
+
+perception v2 по полю `moving` ставит детекцию на паузу, а по `cut` при `by=gesture` отменяет остаток манёвра.
+
+Расхождения с PLAN §2.3: там `motion_state` — поля исполнителя v2 (`task`, `reflex`, `last_gesture`); у стража их
+нет, зато есть `front`, `cut` и счётчики.
+
+## systemd
+
+`Type=notify`, `WatchdogSec=3`, `Restart=always`, `RestartSec=0.5` (PLAN §5.1; юниты — `neurobot/deploy`).
+READY уходит после первого нуля, WATCHDOG — с тика не чаще четверти `WatchdogSec`; без `NOTIFY_SOCKET`
+ничего не шлётся.
+
+**На роботе** (R7, N13): `/neurobot/cmd_vel_req` → safety_gate → `/cmd_vel` → `twist_mux` лаборатории →
+`diff_drive_controller` (по умолчанию `cmd_vel_timeout` 0,5 с). Если умрёт исполнитель, safety_gate через
+`req_timeout` (0,5 с) отдаст ноль. После рестарта исполнителя движение не продолжается: идущий манёвр жеста или
+команду агента не исполняет сам исполнитель (правило 9) — safety_gate этого не различает, молчание запроса для него
+тот же ноль. Юнит deploy держит ремап `-r /cmd_vel:=/neurobot/cmd_vel_req` — узлу, который `/cmd_vel` не пишет, он
+ничего не меняет.
+
+## Тесты
+
+```sh
+# логика (Mac: Python 3.12 и 3.8)
+.venv/bin/python -m pytest -q -p no:cacheprovider neurobot/tests/test_executor_guard.py neurobot/tests/test_perception_util.py
+# процесс ROS 2 (ВМ sim, Jazzy): темы, ноль на SIGTERM и на исключении, TwistStamped, allow_blind, код 2
+source scripts/sim/vm_env.sh && python3 -m pytest -q -p no:cacheprovider neurobot/tests/test_executor_node.py
+```
+
+`test_executor_guard.py` — таблица переходов (жест / агент / устарело / препятствие / слепой сектор / скан
+устарел; входы до таблицы в покое — удержание старта проверяет `test_safety_executor.py`), тормозная дальность,
+границы сектора, сканы TurtleBot3 и URG робота (683 луча, блок NaN RS3, коды ошибок N14). Ноль на выходе —
+`test_executor_node.py` (процесс; правила v1 — с `require_safety:=false`). Работа под safety_gate —
+`test_safety_executor.py` (логика: отмена и `task_end`, слепой сектор, нечисловые входы, вырожденный скан,
+удержание старта) и `test_safety_node.py` (процессы: исполнитель → safety_gate → `task_end{estop}`; новый процесс
+исполнителя не продолжает идущий манёвр жеста). Тесты ROS берут домен `NEUROBOT_TEST_DOMAIN`
+(41; стенд и его тесты — 30 и 70–99). Под Foxy узел не запускался — проверены синтаксис и логика под Python 3.8,
+API rclpy сверены по исходникам ветки foxy (`ParameterException`, `declare_parameter`, `qos_profile_sensor_data`,
+обработчик SIGINT только будит guard conditions — свой обработчик сигналов безопасен).
+
+Проверка 14–15.10.2026 — `experiments/results/neurobot_20261014_onboard_final/` (вместе с perception): тесты
+под 3.12 и 3.8 на Mac и в ВМ sim; в дымовых прогонах и на стенде Gazebo (stm32_sim hold) — 0 «едет без свежей
+команды», 0 касаний стены [замер, ориентир; TB3 оптимистичнее робота: запас до края ×3, нет слепого сектора RS3,
+лидар на 0,17 м], WATCHDOG без разрывов длиннее 3 с, после остановки последний Twist — ноль. Изменения под
+safety_gate (16.10) проверены там же, где safety_gate, — `experiments/results/neurobot_20261015_safety/`.

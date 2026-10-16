@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<!-- lab — лаборатория 5 × 5 м: робот (twin.sh up, мир lab) стоит в (−1,5; 0) лицом по +x.
+       low_box 0,15 м прямо по курсу (ближняя грань x = −0,15) — ниже плоскости скана 0,67 м, его видит
+       только глубина D435i (с ≈0,96 м); table — столешница 0,68–0,71 м: выше плоскости скана, но ниже
+       верха URG (0,688 м), лидар видит только ножки; chair — ножки и сиденье ниже плоскости, видна спинка;
+       person — стоящий человек (ноги, корпус, голова) на пеленге ≈ −18° — в слепом секторе лидара (RS3);
+       дверной проём 0,8 м в северной стене (x 0,8…1,6).
+     Мир двойника NeuroChip (neurobot/sim/twin/README.md §5). Имя мира — default, как у миров стенда: сервисы
+     /world/default/{control,create,remove,set_pose} и scripts/sim/world_events.py работают без ключа мира.
+     Препятствия — модели верхнего уровня с коллизиями box и cylinder: по ним truth.py считает расстояние до корпуса,
+     а наблюдатель жестов — касания (имена препятствий для него — README двойника §8). -->
+<sdf version="1.9">
+<world name="default">
+  <physics name="1ms" type="ignored">
+    <max_step_size>0.001</max_step_size>
+    <real_time_factor>1.0</real_time_factor>
+    <real_time_update_rate>1000</real_time_update_rate>
+  </physics>
+  <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+  <plugin filename="gz-sim-user-commands-system" name="gz::sim::systems::UserCommands"/>
+  <plugin filename="gz-sim-scene-broadcaster-system" name="gz::sim::systems::SceneBroadcaster"/>
+  <plugin filename="gz-sim-sensors-system" name="gz::sim::systems::Sensors"><render_engine>ogre2</render_engine></plugin>
+  <plugin filename="gz-sim-imu-system" name="gz::sim::systems::Imu"/>
+  <plugin filename="gz-sim-contact-system" name="gz::sim::systems::Contact"/>
+  <scene><ambient>0.6 0.6 0.6 1</ambient><background>0.8 0.8 0.8 1</background><shadows>false</shadows></scene>
+  <light type="directional" name="sun">
+    <cast_shadows>false</cast_shadows><pose>0 0 10 0 0 0</pose>
+    <diffuse>0.8 0.8 0.8 1</diffuse><specular>0.2 0.2 0.2 1</specular><direction>-0.5 0.1 -0.9</direction>
+  </light>
+  <model name="ground_plane"><static>true</static><link name="link">
+    <collision name="collision"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry></collision>
+    <visual name="visual"><geometry><plane><normal>0 0 1</normal><size>20 20</size></plane></geometry>
+      <material><ambient>0.7 0.7 0.7 1</ambient><diffuse>0.7 0.7 0.7 1</diffuse></material></visual>
+  </link></model>
+  <model name="wall_south"><static>true</static><pose>0 -2.55 0.5 0 0 0</pose><link name="link">
+    <collision name="c"><geometry><box><size>5.2 0.1 1</size></box></geometry></collision>
+    <visual name="v"><geometry><box><size>5.2 0.1 1</size></box></geometry>
+      <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+  </link></model>
+  <model name="wall_west"><static>true</static><pose>-2.55 0 0.5 0 0 0</pose><link name="link">
+    <collision name="c"><geometry><box><size>0.1 5 1</size></box></geometry></collision>
+    <visual name="v"><geometry><box><size>0.1 5 1</size></box></geometry>
+      <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+  </link></model>
+  <model name="wall_east"><static>true</static><pose>2.55 0 0.5 0 0 0</pose><link name="link">
+    <collision name="c"><geometry><box><size>0.1 5 1</size></box></geometry></collision>
+    <visual name="v"><geometry><box><size>0.1 5 1</size></box></geometry>
+      <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+  </link></model>
+  <model name="wall_north_w"><static>true</static><pose>-0.9 2.55 0.5 0 0 0</pose><link name="link">
+    <collision name="c"><geometry><box><size>3.4 0.1 1</size></box></geometry></collision>
+    <visual name="v"><geometry><box><size>3.4 0.1 1</size></box></geometry>
+      <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+  </link></model>
+  <model name="wall_north_e"><static>true</static><pose>2.1 2.55 0.5 0 0 0</pose><link name="link">
+    <collision name="c"><geometry><box><size>1 0.1 1</size></box></geometry></collision>
+    <visual name="v"><geometry><box><size>1 0.1 1</size></box></geometry>
+      <material><ambient>0.6 0.6 0.6 1</ambient><diffuse>0.6 0.6 0.6 1</diffuse></material></visual>
+  </link></model>
+  <model name="low_box"><static>true</static><pose>0 0 0.075 0 0 0</pose><link name="link">
+    <collision name="c"><geometry><box><size>0.3 0.3 0.15</size></box></geometry></collision>
+    <visual name="v"><geometry><box><size>0.3 0.3 0.15</size></box></geometry>
+      <material><ambient>0.8 0.5 0.2 1</ambient><diffuse>0.8 0.5 0.2 1</diffuse></material></visual>
+  </link></model>
+  <model name="table"><static>true</static><pose>-0.3 1.9 0 0 0 0</pose><link name="link">
+    <collision name="top"><pose>0 0 0.695 0 0 0</pose><geometry><box><size>1.0 0.6 0.03</size></box></geometry></collision>
+    <visual name="top"><pose>0 0 0.695 0 0 0</pose><geometry><box><size>1.0 0.6 0.03</size></box></geometry></visual>
+    <collision name="leg_1"><pose>0.45 0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></collision>
+    <visual name="leg_1"><pose>0.45 0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></visual>
+    <collision name="leg_2"><pose>-0.45 0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></collision>
+    <visual name="leg_2"><pose>-0.45 0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></visual>
+    <collision name="leg_3"><pose>0.45 -0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></collision>
+    <visual name="leg_3"><pose>0.45 -0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></visual>
+    <collision name="leg_4"><pose>-0.45 -0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></collision>
+    <visual name="leg_4"><pose>-0.45 -0.25 0.34 0 0 0</pose><geometry><box><size>0.04 0.04 0.68</size></box></geometry></visual>
+  </link></model>
+  <model name="chair"><static>true</static><pose>-0.3 -1.8 0 0 0 0</pose><link name="link">
+    <collision name="seat"><pose>0 0 0.465 0 0 0</pose><geometry><box><size>0.42 0.42 0.03</size></box></geometry></collision>
+    <visual name="seat"><pose>0 0 0.465 0 0 0</pose><geometry><box><size>0.42 0.42 0.03</size></box></geometry></visual>
+    <collision name="back"><pose>0 -0.2 0.705 0 0 0</pose><geometry><box><size>0.42 0.02 0.45</size></box></geometry></collision>
+    <visual name="back"><pose>0 -0.2 0.705 0 0 0</pose><geometry><box><size>0.42 0.02 0.45</size></box></geometry></visual>
+    <collision name="leg_1"><pose>0.19 0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></collision>
+    <visual name="leg_1"><pose>0.19 0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></visual>
+    <collision name="leg_2"><pose>-0.19 0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></collision>
+    <visual name="leg_2"><pose>-0.19 0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></visual>
+    <collision name="leg_3"><pose>0.19 -0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></collision>
+    <visual name="leg_3"><pose>0.19 -0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></visual>
+    <collision name="leg_4"><pose>-0.19 -0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></collision>
+    <visual name="leg_4"><pose>-0.19 -0.19 0.225 0 0 0</pose><geometry><box><size>0.025 0.025 0.45</size></box></geometry></visual>
+  </link></model>
+  <model name="person"><static>true</static><pose>1.2 -0.9 0 0 0 0</pose><link name="link">
+    <collision name="leg_l"><pose>0 0.1 0.425 0 0 0</pose><geometry><cylinder><radius>0.065</radius><length>0.85</length></cylinder></geometry></collision>
+    <visual name="leg_l"><pose>0 0.1 0.425 0 0 0</pose><geometry><cylinder><radius>0.065</radius><length>0.85</length></cylinder></geometry></visual>
+    <collision name="leg_r"><pose>0 -0.1 0.425 0 0 0</pose><geometry><cylinder><radius>0.065</radius><length>0.85</length></cylinder></geometry></collision>
+    <visual name="leg_r"><pose>0 -0.1 0.425 0 0 0</pose><geometry><cylinder><radius>0.065</radius><length>0.85</length></cylinder></geometry></visual>
+    <collision name="torso"><pose>0 0 1.15 0 0 0</pose><geometry><cylinder><radius>0.17</radius><length>0.6</length></cylinder></geometry></collision>
+    <visual name="torso"><pose>0 0 1.15 0 0 0</pose><geometry><cylinder><radius>0.17</radius><length>0.6</length></cylinder></geometry></visual>
+    <collision name="head"><pose>0 0 1.58 0 0 0</pose><geometry><sphere><radius>0.1</radius></sphere></geometry></collision>
+    <visual name="head"><pose>0 0 1.58 0 0 0</pose><geometry><sphere><radius>0.1</radius></sphere></geometry></visual>
+  </link></model>
+</world>
+</sdf>

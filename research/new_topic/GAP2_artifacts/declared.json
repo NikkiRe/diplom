@@ -1,0 +1,21 @@
+{
+  "_comment": "Слой 2 (по Octopus: 'device profiles'): то, чего ОС не знает. GPIO-линия - это просто линия; что к ней подключено (PIR, реле), где стоит датчик и как его назвать, задаёт человек. Значения line/offset синтетические.",
+  "locations": {
+    "iio:bme280@i2c-1/0x76": "kitchen",
+    "iio:dht11@dht11@4": "balcony",
+    "w1:28-0316a2795cff": "boiler_pipe",
+    "hwmon:cpu_thermal": "board"
+  },
+  "gpio": [
+    {"id": "pir_hall", "chip": "gpiochip0", "line": 17, "direction": "input",
+     "quantity": "motion", "location": "hall",
+     "description": "PIR HC-SR501, active high"},
+    {"id": "relay_fan", "chip": "gpiochip0", "line": 27, "direction": "output",
+     "quantity": "switch", "location": "kitchen",
+     "description": "Relay for kitchen fan, active high", "requires_confirmation": false}
+  ],
+  "serial": [
+    {"id": "esp32_bridge", "tty": "ttyUSB0", "description": "ESP32 with Modbus RTU soil sensor; register map in profile",
+     "observability_note": "VID:PID 1a86:7523 is a generic USB-UART bridge and says nothing about what is behind it"}
+  ]
+}

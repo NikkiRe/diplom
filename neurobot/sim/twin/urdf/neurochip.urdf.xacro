@@ -1,0 +1,222 @@
+<?xml version="1.0"?>
+<!-- Цифровой двойник робота NeuroChip для Gazebo Harmonic + ros2_control (neurobot/sim/twin/README.md).
+     Размеры — оценка по фото из презентации «Робот-сканер» (docs/neurobot/research/R7_robot_slides.md §2.3, там же
+     погрешности); масса — оценка по составу (там же, табл. «Оценка массы»); паспортные величины датчиков — Hokuyo
+     URG-04LX-UG01, Intel RealSense D435/D435i, Bosch BMI055. Когда лаборатория пришлёт свой URDF
+     (robot_state_publisher на роботе есть), числа заменить на их.
+     Начало base_link — на полу под центром палуб; x — вперёд (куда смотрит камера), y — влево, z — вверх.
+     Имена кадров и суставов — как на роботе, где они известны: laser_frame (frame_id /scan, R7b RS15), camera_*
+     (realsense2_camera), left_wheel_joint/right_wheel_joint (articubot_one, откуда у робота diff_cont и twist_mux,
+     R7a §1.5 — [гипотеза о происхождении]).
+     Аргументы:
+       controllers — путь к параметрам controller_manager (twin.launch.py пишет его в run_dir);
+       sim — true: элементы Gazebo (датчики, gz_ros2_control, истинная поза, касания); false — только кинематика
+             для robot_state_publisher и check_urdf. -->
+<robot name="neurochip" xmlns:xacro="http://www.ros.org/wiki/xacro">
+  <xacro:arg name="controllers" default=""/>
+  <xacro:arg name="sim" default="true"/>
+
+  <!-- Палубы: два фанерных диска; в столкновениях — один цилиндр от низа нижней до верха верхней. -->
+  <xacro:property name="deck_r" value="0.195"/>        <!-- Ø0,39 ±0,02 [оценка по фото] -->
+  <xacro:property name="deck_t" value="0.010"/>        <!-- толщина ±0,004 [оценка по фото] -->
+  <xacro:property name="deck_low_z" value="0.050"/>    <!-- низ нижней палубы ±0,015 [оценка по фото] -->
+  <xacro:property name="deck_top_z" value="0.175"/>    <!-- верх верхней палубы ±0,03 [оценка по фото] -->
+  <!-- Ведущие колёса JGB37-520 на поперечной оси через центр. -->
+  <xacro:property name="wheel_r" value="0.036"/>       <!-- Ø0,072 ±0,005 [оценка по фото] -->
+  <xacro:property name="wheel_w" value="0.027"/>       <!-- ширина ±0,005 [оценка по фото] -->
+  <xacro:property name="wheel_y" value="0.19"/>        <!-- колея 0,38 ±0,03 [оценка по фото] -->
+  <!-- Поворотные ролики спереди и сзади — в Gazebo сферы без трения. -->
+  <xacro:property name="caster_x" value="0.15"/>       <!-- ±0,03 [оценка по фото] -->
+  <xacro:property name="caster_r" value="0.025"/>      <!-- Ø0,04–0,05 ±0,01 [оценка по фото] -->
+  <!-- Мачта Jmary MT-49 (телескоп 42,5–98 см) до платформы датчиков; высота на роботе может меняться (RS10). -->
+  <xacro:property name="mast_x" value="-0.015"/>       <!-- ±0,015 [оценка по фото] -->
+  <xacro:property name="mast_r" value="0.0125"/>       <!-- Ø0,020–0,030 ±0,005 [оценка по фото] -->
+  <xacro:property name="platform_z" value="0.62"/>     <!-- ±0,05 [оценка по фото] -->
+  <!-- Голова: платформа датчиков и ЖК-экран под ней — один бокс. -->
+  <xacro:property name="head_size" value="0.12"/>      <!-- ширина платформы ±0,02 [оценка по фото] -->
+  <xacro:property name="head_low_z" value="0.535"/>    <!-- низ ЖК ≈0,57 − 0,035 ±0,02 [оценка по фото] -->
+  <!-- URG-04LX-UG01 над мачтой: корпус 50×50×70 мм, плоскость скана в 18 мм под верхом (чертёж URG). -->
+  <xacro:property name="urg_z" value="0.67"/>          <!-- плоскость скана ±0,07 [оценка по фото] -->
+  <xacro:property name="urg_low_z" value="0.618"/>     <!-- низ корпуса: 0,688 − 0,070 -->
+  <xacro:property name="urg_top_z" value="0.688"/>     <!-- верх: плоскость + 0,018 -->
+  <!-- D435i (90×25×25 мм, паспорт Intel) перед URG и правее: задняя грань в 48 мм перед осью лидара, корпус от −87 до
+       +3,5 мм по y — по скану с робота (R7b §3.3, сходится с фото ≈1 см); плоскость скана на 7,5 мм ниже верха
+       корпуса (по фото 5–10 мм, R7b §2.5), поэтому корпус сам закрывает лидару передний правый сектор (RS3). -->
+  <xacro:property name="cam_x" value="${mast_x + 0.048 + 0.0125}"/>
+  <xacro:property name="cam_y" value="-0.04175"/>
+  <xacro:property name="cam_z" value="0.665"/>         <!-- оптический центр ≈0,66 ±0,06 [оценка по фото] -->
+  <xacro:property name="cam_size_x" value="0.025"/>
+  <xacro:property name="cam_size_y" value="0.090"/>
+  <xacro:property name="cam_size_z" value="0.025"/>
+  <!-- Массы, кг [оценка по составу, R7b §2.3]: палубы 1,2 + батарея 0,4 + Jetson 0,25 + моторы 0,4 + платы и
+       провода 0,4 = 2,65 в базе; колёса по 0,05; ролики по 0,075; стойка 0,63 (карточка MT-49); голова 0,2 (ЖК и
+       пластик); URG 0,16; D435i 0,07. Итого ≈3,96 (4 ±1), центр масс ≈0,21 м над полом. -->
+  <xacro:property name="m_base" value="2.65"/>
+  <xacro:property name="m_wheel" value="0.05"/>
+  <xacro:property name="m_caster" value="0.075"/>
+  <xacro:property name="m_mast" value="0.63"/>
+  <xacro:property name="m_head" value="0.2"/>
+  <xacro:property name="m_urg" value="0.16"/>
+  <xacro:property name="m_cam" value="0.07"/>
+  <!-- Ведущее колесо: трение резины по полу и предел момента на валу — [оценка]. -->
+  <xacro:property name="wheel_mu" value="1.0"/>
+  <xacro:property name="wheel_effort" value="2.0"/>    <!-- Н·м -->
+  <xacro:property name="wheel_vel_max" value="20.0"/>  <!-- рад/с (0,72 м/с); пределы робота — в diff_cont -->
+
+  <xacro:property name="mast_h" value="${platform_z - deck_top_z}"/>
+  <xacro:property name="head_h" value="${platform_z - head_low_z}"/>
+  <xacro:property name="base_h" value="${deck_top_z - deck_low_z}"/>
+
+  <xacro:macro name="cylinder_inertia" params="m r h z:=0">
+    <inertial>
+      <origin xyz="0 0 ${z}"/>
+      <mass value="${m}"/>
+      <inertia ixx="${m * (3 * r * r + h * h) / 12}" iyy="${m * (3 * r * r + h * h) / 12}" izz="${m * r * r / 2}"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+  <xacro:macro name="box_inertia" params="m x y z oz:=0">
+    <inertial>
+      <origin xyz="0 0 ${oz}"/>
+      <mass value="${m}"/>
+      <inertia ixx="${m * (y * y + z * z) / 12}" iyy="${m * (x * x + z * z) / 12}" izz="${m * (x * x + y * y) / 12}"
+               ixy="0" ixz="0" iyz="0"/>
+    </inertial>
+  </xacro:macro>
+  <xacro:macro name="fixed" params="name parent xyz rpy:='0 0 0'">
+    <joint name="${name}_joint" type="fixed">
+      <parent link="${parent}"/><child link="${name}"/>
+      <origin xyz="${xyz}" rpy="${rpy}"/>
+    </joint>
+  </xacro:macro>
+
+  <!-- base_link без инерции, как в articubot_one (KDL не принимает инерцию у корневого звена);
+       масса базы — в chassis. -->
+  <link name="base_link"/>
+  <link name="chassis">
+    <xacro:cylinder_inertia m="${m_base}" r="${deck_r}" h="${base_h}" z="${deck_low_z + base_h / 2}"/>
+    <visual name="deck_low">
+      <origin xyz="0 0 ${deck_low_z + deck_t / 2}"/>
+      <geometry><cylinder radius="${deck_r}" length="${deck_t}"/></geometry>
+    </visual>
+    <visual name="deck_top">
+      <origin xyz="0 0 ${deck_top_z - deck_t / 2}"/>
+      <geometry><cylinder radius="${deck_r}" length="${deck_t}"/></geometry>
+    </visual>
+    <collision name="decks">
+      <origin xyz="0 0 ${deck_low_z + base_h / 2}"/>
+      <geometry><cylinder radius="${deck_r}" length="${base_h}"/></geometry>
+    </collision>
+  </link>
+  <xacro:fixed name="chassis" parent="base_link" xyz="0 0 0"/>
+
+  <link name="base_footprint"/>
+  <xacro:fixed name="base_footprint" parent="base_link" xyz="0 0 0"/>
+
+  <!-- Коллизия колеса — сфера того же радиуса: у цилиндра DART держит контакт на внешней кромке, и на повороте на
+       месте база поворачивается на ≈6 % меньше, чем считает одометрия [замер на двойнике]. Цена — сфера выступает
+       у пола на 2,3 см за колесо и на 3,1 см за палубы (|y| до 0,226 м против 0,2035 у колеса и 0,195 у палуб). -->
+  <xacro:macro name="wheel" params="side y roll axis">
+    <link name="${side}_wheel">
+      <xacro:cylinder_inertia m="${m_wheel}" r="${wheel_r}" h="${wheel_w}"/>
+      <visual><geometry><cylinder radius="${wheel_r}" length="${wheel_w}"/></geometry></visual>
+      <collision><geometry><sphere radius="${wheel_r}"/></geometry></collision>
+    </link>
+    <joint name="${side}_wheel_joint" type="continuous">
+      <parent link="base_link"/><child link="${side}_wheel"/>
+      <origin xyz="0 ${y} ${wheel_r}" rpy="${roll} 0 0"/>
+      <axis xyz="0 0 ${axis}"/>
+      <limit effort="${wheel_effort}" velocity="${wheel_vel_max}"/>
+    </joint>
+  </xacro:macro>
+  <xacro:wheel side="left" y="${wheel_y}" roll="${-pi / 2}" axis="1"/>
+  <xacro:wheel side="right" y="${-wheel_y}" roll="${pi / 2}" axis="-1"/>
+
+  <xacro:macro name="caster" params="name x">
+    <link name="${name}">
+      <inertial><mass value="${m_caster}"/>
+        <inertia ixx="${0.4 * m_caster * caster_r * caster_r}" iyy="${0.4 * m_caster * caster_r * caster_r}"
+                 izz="${0.4 * m_caster * caster_r * caster_r}" ixy="0" ixz="0" iyz="0"/>
+      </inertial>
+      <visual><geometry><sphere radius="${caster_r}"/></geometry></visual>
+      <collision><geometry><sphere radius="${caster_r}"/></geometry></collision>
+    </link>
+    <xacro:fixed name="${name}" parent="base_link" xyz="${x} 0 ${caster_r}"/>
+  </xacro:macro>
+  <xacro:caster name="caster_front" x="${caster_x}"/>
+  <xacro:caster name="caster_back" x="${-caster_x}"/>
+
+  <link name="mast">
+    <xacro:cylinder_inertia m="${m_mast}" r="${mast_r}" h="${mast_h}"/>
+    <visual><geometry><cylinder radius="${mast_r}" length="${mast_h}"/></geometry></visual>
+    <collision name="mast"><geometry><cylinder radius="${mast_r}" length="${mast_h}"/></geometry></collision>
+  </link>
+  <xacro:fixed name="mast" parent="base_link" xyz="${mast_x} 0 ${deck_top_z + mast_h / 2}"/>
+
+  <link name="head">
+    <xacro:box_inertia m="${m_head}" x="${head_size}" y="${head_size}" z="${head_h}"/>
+    <visual><geometry><box size="${head_size} ${head_size} ${head_h}"/></geometry></visual>
+    <collision name="head"><geometry><box size="${head_size} ${head_size} ${head_h}"/></geometry></collision>
+  </link>
+  <xacro:fixed name="head" parent="base_link" xyz="0 0 ${head_low_z + head_h / 2}"/>
+
+  <!-- Визуально корпус URG — основание и крышка, окно сканирования между ними пустое: лучи gpu_lidar выходят из
+       центра корпуса и иначе упёрлись бы в него самого. -->
+  <link name="laser_frame">
+    <xacro:box_inertia m="${m_urg}" x="0.05" y="0.05" z="${urg_top_z - urg_low_z}"
+                       oz="${(urg_low_z + urg_top_z) / 2 - urg_z}"/>
+    <visual name="body">
+      <origin xyz="0 0 ${urg_low_z + 0.041 / 2 - urg_z}"/>
+      <geometry><box size="0.05 0.05 0.041"/></geometry>
+    </visual>
+    <visual name="cap">
+      <origin xyz="0 0 ${urg_top_z - 0.006 - urg_z}"/>
+      <geometry><cylinder radius="0.021" length="0.012"/></geometry>
+    </visual>
+    <collision name="urg">
+      <origin xyz="0 0 ${(urg_low_z + urg_top_z) / 2 - urg_z}"/>
+      <geometry><box size="0.05 0.05 ${urg_top_z - urg_low_z}"/></geometry>
+    </collision>
+  </link>
+  <xacro:fixed name="laser_frame" parent="base_link" xyz="${mast_x} 0 ${urg_z}"/>
+
+  <!-- Кадры камеры — как у realsense2_camera: camera_link — центр корпуса, глубина у передней грани, цвет на 15 мм
+       левее; оптические кадры повёрнуты (z — вдоль оси, x — вправо, y — вниз). -->
+  <link name="camera_link">
+    <xacro:box_inertia m="${m_cam}" x="${cam_size_x}" y="${cam_size_y}" z="${cam_size_z}"/>
+    <visual><geometry><box size="${cam_size_x} ${cam_size_y} ${cam_size_z}"/></geometry></visual>
+    <collision name="d435i"><geometry><box size="${cam_size_x} ${cam_size_y} ${cam_size_z}"/></geometry></collision>
+  </link>
+  <xacro:fixed name="camera_link" parent="base_link" xyz="${cam_x} ${cam_y} ${cam_z}"/>
+  <link name="camera_depth_frame"/>
+  <xacro:fixed name="camera_depth_frame" parent="camera_link" xyz="${cam_size_x / 2} 0 0"/>
+  <link name="camera_depth_optical_frame"/>
+  <xacro:fixed name="camera_depth_optical_frame" parent="camera_depth_frame" xyz="0 0 0"
+               rpy="${-pi / 2} 0 ${-pi / 2}"/>
+  <link name="camera_color_frame"/>
+  <xacro:fixed name="camera_color_frame" parent="camera_link" xyz="${cam_size_x / 2} 0.015 0"/>
+  <link name="camera_color_optical_frame"/>
+  <xacro:fixed name="camera_color_optical_frame" parent="camera_color_frame" xyz="0 0 0"
+               rpy="${-pi / 2} 0 ${-pi / 2}"/>
+  <link name="camera_imu_optical_frame"/>
+  <xacro:fixed name="camera_imu_optical_frame" parent="camera_link" xyz="0 0 0" rpy="${-pi / 2} 0 ${-pi / 2}"/>
+
+  <ros2_control name="GazeboSimSystem" type="system">
+    <hardware><plugin>gz_ros2_control/GazeboSimSystem</plugin></hardware>
+    <xacro:macro name="wheel_iface" params="side">
+      <joint name="${side}_wheel_joint">
+        <command_interface name="velocity">
+          <param name="min">${-wheel_vel_max}</param><param name="max">${wheel_vel_max}</param>
+        </command_interface>
+        <state_interface name="velocity"/>
+        <state_interface name="position"/>
+      </joint>
+    </xacro:macro>
+    <xacro:wheel_iface side="left"/>
+    <xacro:wheel_iface side="right"/>
+  </ros2_control>
+
+  <xacro:if value="$(arg sim)">
+    <xacro:include filename="neurochip.gazebo.xacro"/>
+  </xacro:if>
+</robot>

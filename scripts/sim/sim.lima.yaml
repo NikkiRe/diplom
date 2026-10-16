@@ -1,0 +1,37 @@
+# Lima VM "sim": ROS 2 Jazzy + Gazebo Harmonic + TurtleBot3/Nav2 + rosbridge (сценарий «робот»).
+# Создание: scripts/sim/create_vm.sh (limactl create --name sim scripts/sim/sim.lima.yaml).
+# VM "sbc" (плата) этим файлом не затрагивается.
+minimumLimaVersion: 2.0.0
+vmType: vz
+arch: aarch64
+cpus: 6
+memory: 8GiB
+disk: 40GiB
+images:
+# Тот же образ, что у VM "sbc" (уже в кэше Lima), с проверкой дайджеста.
+- location: "https://cloud-images.ubuntu.com/releases/noble/release-20260321/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+  digest: "sha256:1ea801e659d2f5035ac294e0faab0aac9b6ba66753df933ba5c7beab0c689bd0"
+- location: "https://cloud-images.ubuntu.com/releases/noble/release/ubuntu-24.04-server-cloudimg-arm64.img"
+  arch: "aarch64"
+mountType: virtiofs
+mounts:
+# Проект — только чтение (скрипты запуска и launch-файлы берутся отсюда).
+- location: "~/Projects/diploma-edge-ai"
+  writable: false
+# Записываемых монтирований нет: результаты замеров забираются через `limactl shell sim -- cat …`.
+containerd:
+  system: false
+  user: false
+video:
+  display: none
+portForwards:
+# rosbridge_server (WebSocket). hostIP 127.0.0.1: VM "sbc" достаёт его через host.lima.internal:9090
+# (usernet Lima транслирует адрес шлюза в loopback хоста), наружу в LAN порт не публикуется.
+- guestPort: 9090
+  hostPort: 9090
+  hostIP: "127.0.0.1"
+  proto: tcp
+# Остальные порты гостя (DDS, gz-transport и т. п.) на хост не пробрасывать.
+- guestPortRange: [1, 65535]
+  ignore: true

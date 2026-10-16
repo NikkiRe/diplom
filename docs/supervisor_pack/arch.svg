@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="470" viewBox="0 0 1000 470" font-family="PT Sans, Helvetica, Arial, sans-serif">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#5b6170"/></marker>
+  </defs>
+  <rect width="1000" height="470" fill="#ffffff"/>
+  <!-- user -->
+  <rect x="20" y="40" width="150" height="70" rx="8" fill="#f3f5f8" stroke="#9aa3b2"/>
+  <text x="95" y="70" text-anchor="middle" font-size="16" font-weight="700" fill="#1b1d21">Пользователь</text>
+  <text x="95" y="92" text-anchor="middle" font-size="13" fill="#5b6170">веб-чат / мессенджер</text>
+  <!-- cloud -->
+  <rect x="780" y="30" width="200" height="90" rx="8" fill="#fff6e8" stroke="#d9a441"/>
+  <text x="880" y="60" text-anchor="middle" font-size="16" font-weight="700" fill="#1b1d21">Внешняя LLM</text>
+  <text x="880" y="82" text-anchor="middle" font-size="13" fill="#5b6170">RouterAI → GPT mini / nano</text>
+  <text x="880" y="102" text-anchor="middle" font-size="12" fill="#5b6170">(OpenAI-совместимый API)</text>
+  <!-- board -->
+  <rect x="200" y="20" width="540" height="300" rx="10" fill="#eef4fb" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="470" y="44" text-anchor="middle" font-size="13.5" font-weight="700" fill="#1f4e8c">Одноплатный компьютер (Jetson Nano / Raspberry Pi; сейчас — эмуляция на Mac)</text>
+  <rect x="220" y="58" width="500" height="250" rx="8" fill="#ffffff" stroke="#1f4e8c"/>
+  <text x="470" y="80" text-anchor="middle" font-size="15" font-weight="700" fill="#1b1d21">ИИ-агент (свой, Go, один бинарник)</text>
+  <g font-size="13" fill="#1b1d21">
+    <rect x="235" y="94" width="230" height="44" rx="6" fill="#f3f5f8" stroke="#c9ced8"/>
+    <text x="350" y="113" text-anchor="middle" font-weight="700">Контекст пользователя</text>
+    <text x="350" y="130" text-anchor="middle" fill="#5b6170">профиль, история, договорённости</text>
+    <rect x="475" y="94" width="230" height="44" rx="6" fill="#f3f5f8" stroke="#c9ced8"/>
+    <text x="590" y="113" text-anchor="middle" font-weight="700">Контекст оборудования</text>
+    <text x="590" y="130" text-anchor="middle" fill="#5b6170">что подключено, состояние, события</text>
+    <rect x="235" y="148" width="230" height="44" rx="6" fill="#e8f4ec" stroke="#7fb08f"/>
+    <text x="350" y="167" text-anchor="middle" font-weight="700">Событийный фильтр</text>
+    <text x="350" y="184" text-anchor="middle" fill="#5b6170" font-size="12">когда будить LLM + локальные правила</text>
+    <rect x="475" y="148" width="230" height="44" rx="6" fill="#e8f4ec" stroke="#7fb08f"/>
+    <text x="590" y="167" text-anchor="middle" font-weight="700">Сборщик запроса</text>
+    <text x="590" y="184" text-anchor="middle" fill="#5b6170" font-size="12">короткий контекст, кэшируемое начало</text>
+    <rect x="235" y="202" width="230" height="44" rx="6" fill="#fdecec" stroke="#d28b8b"/>
+    <text x="350" y="221" text-anchor="middle" font-weight="700">Проверка команд</text>
+    <text x="350" y="238" text-anchor="middle" fill="#5b6170">приводам — только допустимое</text>
+    <rect x="475" y="202" width="230" height="44" rx="6" fill="#f3f5f8" stroke="#c9ced8"/>
+    <text x="590" y="221" text-anchor="middle" font-weight="700">Журнал и метрики</text>
+    <text x="590" y="238" text-anchor="middle" fill="#5b6170">вызовы, токены, ₽, RAM, CPU, трафик</text>
+    <text x="470" y="275" text-anchor="middle" fill="#1f4e8c" font-weight="700">MCP-клиент</text>
+    <text x="470" y="294" text-anchor="middle" fill="#5b6170">инструменты = датчики и исполнительные устройства</text>
+  </g>
+  <!-- MCP servers -->
+  <g font-size="13" fill="#1b1d21">
+    <rect x="40" y="370" width="215" height="70" rx="8" fill="#f3f5f8" stroke="#9aa3b2"/>
+    <text x="147" y="395" text-anchor="middle" font-weight="700">MCP: датчики и реле</text>
+    <text x="147" y="414" text-anchor="middle" fill="#5b6170">температура, движение,</text>
+    <text x="147" y="431" text-anchor="middle" fill="#5b6170">реле/светодиод (Linux sysfs, GPIO)</text>
+    <rect x="275" y="370" width="215" height="70" rx="8" fill="#e8f4ec" stroke="#7fb08f"/>
+    <text x="382" y="395" text-anchor="middle" font-weight="700">MCP: камера</text>
+    <text x="382" y="414" text-anchor="middle" fill="#5b6170">детектор объектов на плате →</text>
+    <text x="382" y="431" text-anchor="middle" fill="#5b6170">текстовая сводка, а не кадр</text>
+    <rect x="510" y="370" width="215" height="70" rx="8" fill="#f3f5f8" stroke="#9aa3b2"/>
+    <text x="617" y="395" text-anchor="middle" font-weight="700">MCP: эмулятор помещения</text>
+    <text x="617" y="414" text-anchor="middle" fill="#5b6170">события по записям реальных</text>
+    <text x="617" y="431" text-anchor="middle" fill="#5b6170">домов (CASAS) — для замеров</text>
+    <rect x="745" y="370" width="215" height="70" rx="8" fill="#e8f4ec" stroke="#7fb08f"/>
+    <text x="852" y="395" text-anchor="middle" font-weight="700">MCP: мобильный робот</text>
+    <text x="852" y="414" text-anchor="middle" fill="#5b6170">сводки и события вместо</text>
+    <text x="852" y="431" text-anchor="middle" fill="#5b6170">сырых потоков (ROS 2, Gazebo)</text>
+  </g>
+  <!-- arrows -->
+  <g stroke="#5b6170" stroke-width="2" fill="none">
+    <path d="M170 75 L218 75" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path d="M722 75 L778 75" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path d="M147 368 L300 312" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path d="M382 368 L420 312" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path d="M617 368 L530 312" marker-end="url(#a)" marker-start="url(#a)"/>
+    <path d="M852 368 L640 312" marker-end="url(#a)" marker-start="url(#a)"/>
+  </g>
+  <text x="750" y="140" font-size="12" fill="#5b6170">HTTPS: только сжатый контекст</text>
+  <text x="20" y="345" font-size="12" fill="#5b6170">MCP (stdio / HTTP)</text>
+</svg>

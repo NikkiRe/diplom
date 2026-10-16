@@ -1,0 +1,5 @@
+{
+  "server": {"host": "127.0.0.1", "port": 18118},
+  "rosbridge": {"url": "ws://127.0.0.1:19090", "timeout_s": 3.0},
+  "topics": {"cmd_vel": {"name": "/cmd_vel_agent", "type": "geometry_msgs/msg/Twist", "access": "write"}}
+}

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Обзор аналогов</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<h1>Что я изучил: существующие ИИ-агенты для граничных устройств</h1>
+<table class="meta">
+  <tr><td>Студент</td><td>Евстигнеев Н.&nbsp;А., группа P3431</td></tr>
+  <tr><td>Тема</td><td>«Разработка ИИ-агента для приложений граничного искусственного интеллекта»</td></tr>
+  <tr><td>Дата</td><td>7&nbsp;октября 2026&nbsp;г.; данные о проектах (звёзды на GitHub, версии) — на 6&nbsp;октября 2026&nbsp;г.</td></tr>
+</table>
+
+<div class="box">
+<p><b>Итог обзора в трёх пунктах.</b> (1) Схема «тонкий агент на устройстве + внешняя языковая модель + MCP к оборудованию» уже стала распространённой практикой, поэтому новизна работы не в самой схеме. (2) Существующие агенты оценивались лишь на коротких задачах; многочасового профиля «вызовы модели + токены + рубли + память + процессор» на одноплатнике, а тем более при жёстких ограничениях ресурсов, в проверенных источниках нет. (3) Для робота и камеры главная статья затрат — сырые данные датчиков: их нельзя отдавать модели напрямую.</p>
+</div>
+
+<h2>1. Классы существующих агентов</h2>
+<table class="t">
+  <tr><th>Класс</th><th>Примеры</th><th>Где языковая модель</th><th>Что важно для ВКР</th></tr>
+  <tr><td>Личные агенты на собственном оборудовании пользователя и их облегчённые варианты</td><td>OpenClaw; NanoClaw, PicoClaw, nanobot, ZeroClaw; агенты на микроконтроллерах ESP32</td><td>облако</td><td>ближайшие аналоги и основа сравнения</td></tr>
+  <tr><td>Умный дом и голосовые ассистенты</td><td>Home Assistant с языковой моделью и MCP-сервером; xiaozhi-esp32</td><td>облако или локально</td><td>массовая практика «оборудование → MCP → модель», часто на Raspberry Pi</td></tr>
+  <tr><td>Робототехника (ROS)</td><td>ROSA (NASA JPL), ros-mcp-server, Nav2-MCP; агентные «ОС» роботов</td><td>облако или машина оператора</td><td>сценарий с роботом; пока в основном исследования, а не массовое использование</td></tr>
+  <tr><td>Экосистема NVIDIA Jetson</td><td>jetson-containers, руководства по запуску OpenClaw на Jetson Orin, jetson-inference</td><td>на борту (Orin)</td><td>для старого Jetson Nano применимо мало: локальные модели на нём медленные</td></tr>
+  <tr><td>Универсальные фреймворки</td><td>LangChain/LangGraph, OpenAI Agents SDK, smolagents и др.</td><td>любая</td><td>тяжёлые для слабых плат; в лёгких агентах вместо них реализован собственный минимальный цикл</td></tr>
+  <tr><td>Промышленный IoT</td><td>AWS Greengrass + облачный агент, решения Microsoft и Siemens</td><td>облако или локальный сервер</td><td>схема «дешёвый локальный фильтр → облачный агент»</td></tr>
+  <tr><td>Научные системы</td><td>SayCan, Code as Policies, ChatGPT for Robotics, Sasha, SimuHome, IoT-MCP</td><td>в основном облако</td><td>методы оценки, метрики, обоснование</td></tr>
+</table>
+
+<h2>2. Ближайшие аналоги: что они собой представляют и сколько потребляют</h2>
+<table class="t">
+  <tr><th>Система</th><th>Язык и запуск</th><th>Память (сторонние замеры; где указано — наш)</th><th>Старый Jetson Nano (Ubuntu 18.04)</th></tr>
+  <tr><td>OpenClaw (≈391&nbsp;тыс. звёзд)</td><td>TypeScript, Node.js ≥&nbsp;24.16</td><td>медиана пиковой памяти ≈2,9&nbsp;ГиБ (Docker на рабочей станции) [1]</td><td>штатно не запускается: сборки Node.js требуют более новой системы</td></tr>
+  <tr><td>NanoClaw (≈31&nbsp;тыс.)</td><td>TypeScript, Node.js ≥&nbsp;22, Docker</td><td>—</td><td>штатно не запускается</td></tr>
+  <tr><td>PicoClaw (≈30&nbsp;тыс.)</td><td>Go, один исполняемый файл</td><td>≈31&nbsp;МБ пиковой памяти на Raspberry Pi 4 [2]; в нашем пробном прогоне (v0.3.1, ноутбук) — ≈42&nbsp;МиБ</td><td>должен запускаться (статическая сборка)</td></tr>
+  <tr><td>nanobot (≈49&nbsp;тыс.)</td><td>Python</td><td>≈130&nbsp;МБ на Raspberry Pi 4 [2]; ≈136&nbsp;МиБ (версия 0.1.5) [1]; в нашем пробном прогоне (версия 0.3.5) — ≈166&nbsp;МиБ</td><td>только с ручной сборкой одной зависимости</td></tr>
+  <tr><td>ZeroClaw</td><td>Rust</td><td>≈20&nbsp;МБ [2]</td><td>сборка musl статическая — должна запускаться (сборка gnu — нет)</td></tr>
+  <tr><td>ros-mcp-server</td><td>Python, MCP-мост к роботу через rosbridge</td><td>≈110&nbsp;МиБ (собственный замер)</td><td>—</td></tr>
+</table>
+<p class="small">Какие приёмы экономии уже есть у аналогов: фильтр «будить ли модель» (NanoClaw), правила, которые модель создаёт один раз и которые затем исполняются без неё, событийные триггеры вместо опроса, облегчённый контекст фоновой проверки, лимиты вызовов, отложенная загрузка описаний инструментов. Эти приёмы в работе не выдаются за новые; измеряется, когда и насколько каждый из них окупается. Чего у PicoClaw и nanobot нет (проверено по их коду): их MCP-клиенты берут у сервера только инструменты и не подписываются на изменения ресурсов, поэтому события датчиков до них сами не доходят — на стенде их доставляет внешний фильтр.</p>
+
+<h2>3. Почему языковая модель внешняя (как и решили на встрече)</h2>
+<ul>
+  <li>На одноплатнике с несколькими гигабайтами памяти практически пригодны модели примерно до 1,5&nbsp;млрд параметров, но и они медленные: на Raspberry Pi 5 — 5–15 токенов в секунду [3]; на оригинальном Jetson Nano модели около 1&nbsp;млрд параметров дают 4–7 токенов в секунду (любительские замеры сообщества).</li>
+  <li>В независимом замере на Raspberry Pi 4 ни один из агентов не справился с задачами на локальных малых моделях (Qwen2.5-1.5B, SmolLM2-360M) [2].</li>
+  <li>В реальных умных домах облачные модели выбирают заметно чаще локальных: по данным открытой аналитики Home Assistant, интеграцию Gemini используют около 34,8&nbsp;тыс. установок, OpenAI — 24,5&nbsp;тыс., локальную Ollama — 12,6&nbsp;тыс.</li>
+</ul>
+
+<h2>4. Протокол MCP и «контекст оборудования»</h2>
+<p>MCP (Model Context Protocol) — открытый протокол, по которому агент получает от серверов <b>инструменты</b> (вызвать функцию: прочитать датчик, включить реле, поехать к точке) и <b>ресурсы</b> (данные, на изменения которых можно подписаться). В 2025–2026&nbsp;гг. он стал стандартом де-факто для доступа агентов к оборудованию: MCP-сервер Home Assistant (около 25,8&nbsp;тыс. установок), ros-mcp-server для роботов, xiaozhi-esp32 для микроконтроллеров [4, 5]. Практика подтверждает топологию, выбранную в работе: на стороне оборудования работает MCP-сервер, агент выступает клиентом.</p>
+
+<h2>5. Что я взял из научных работ</h2>
+<ul>
+  <li><b>Определения</b> граничного ИИ и агента [6, 7]; многоуровневая архитектура, в которой нижние уровни работают без «рассуждающего» модуля [8].</li>
+  <li><b>Оценка агентов по затратам</b>, а не только по точности, с обязательным простым базовым вариантом [9].</li>
+  <li><b>Реалистичная нагрузка дня</b>: частота команд голосовым ассистентам из многомесячного исследования 88 домов (в среднем 2,6; 5,6 и 30 команд в сутки у разных групп пользователей) [10] и записи датчиков реальных домов CASAS [11].</li>
+  <li><b>Сокращение истории</b>: простое скрытие старых результатов инструментов не хуже составления сводки моделью и дешевле [12].</li>
+  <li><b>Безопасность приводов</b>: правила, записанные в запросе, модель соблюдает не полностью, поэтому нужен отдельный детерминированный модуль проверки [13].</li>
+  <li><b>MCP для датчиков</b> на граничных узлах: среднее время ответа 205&nbsp;мс, 12-часовой прогон, но без учёта токенов и стоимости [5].</li>
+  <li><b>Бенчмарки умного дома</b> для формулировки задач и проверки по итоговому состоянию устройств [14, 15].</li>
+</ul>
+
+<h2>6. Пробел, который закрывает работа</h2>
+<p>Существующие решения либо ориентированы на функциональность и считают в лучшем случае токены и стоимость отдельных запросов (например, /usage cost в OpenClaw), но не профиль затрат и ресурсов платы за многочасовую работу (OpenClaw, PicoClaw, nanobot), либо дают доступ к оборудованию без агента и без метрик (ros-mcp-server, MCP-сервер Home Assistant). Независимые измерения агентов этого класса на одноплатниках ограничены отдельными задачами и не охватывают ни многочасовую работу, ни предельно слабое оборудование. Поэтому в работе разрабатывается агент с MCP-доступом к оборудованию и встроенным учётом ресурсов и затрат, а также методика оценки его работы во времени, включая сравнение с аналогами на одной и той же нагрузке.</p>
+
+<h2>Источники (основные)</h2>
+<ol class="refs">
+  <li>Salman A. Resource Constraints and Performance in Agentic AI Systems / A. Salman, M. Halgamuge, T. Susnjak. – 2026. – arXiv:2608.27886 (препринт).</li>
+  <li>Dehigaspitiyage Don S. Y. Benchmarking Lightweight AI-Agent Frameworks on a 2 GB Raspberry Pi 4: Framework Overhead, Offline Feasibility, and Fleet Density. – Zenodo, 2026. – DOI 10.5281/zenodo.20593332 (препринт).</li>
+  <li>Nguyen T. An Evaluation of LLMs Inference on Popular Single-board Computers / T. Nguyen, T. Nguyen. – 2025. – arXiv:2511.07425 (препринт).</li>
+  <li>Model Context Protocol : specification, version 2025-11-25. – URL: https://modelcontextprotocol.io/specification/2025-11-25 (дата обращения: 06.10.2026).</li>
+  <li>IoT-MCP: Bridging LLMs and IoT Systems Through Model Context Protocol / N. Yang, G. Lyu, M. Ma [et al.] // Proceedings of WiNTECH '25. – 2025. – P. 73–80. – DOI 10.1145/3737895.3768303.</li>
+  <li>Edge Intelligence: Paving the Last Mile of Artificial Intelligence With Edge Computing / Z. Zhou, X. Chen, E. Li [et al.] // Proceedings of the IEEE. – 2019. – Vol. 107, № 8. – P. 1738–1762. – DOI 10.1109/JPROC.2019.2918951.</li>
+  <li>Wooldridge M. Intelligent agents: theory and practice / M. Wooldridge, N. R. Jennings // The Knowledge Engineering Review. – 1995. – Vol. 10, № 2. – P. 115–152. – DOI 10.1017/S0269888900008122.</li>
+  <li>Brooks R. A. A robust layered control system for a mobile robot // IEEE Journal on Robotics and Automation. – 1986. – Vol. 2, № 1. – P. 14–23. – DOI 10.1109/JRA.1986.1087032.</li>
+  <li>AI Agents That Matter / S. Kapoor, B. Stroebl, Z. S. Siegel [et al.] // Transactions on Machine Learning Research. – 2025. – URL: https://openreview.net/forum?id=Zy4uFzMviZ.</li>
+  <li>Understanding the Long-Term Use of Smart Speaker Assistants / F. Bentley, C. Luvogt, M. Silverman [et al.] // Proceedings of the ACM on IMWUT. – 2018. – Vol. 2, № 3. – Art. 91. – DOI 10.1145/3264901.</li>
+  <li>CASAS: A Smart Home in a Box / D. J. Cook, A. S. Crandall, B. L. Thomas, N. C. Krishnan // Computer. – 2013. – Vol. 46, № 7. – P. 62–69. – DOI 10.1109/MC.2012.328.</li>
+  <li>The Complexity Trap: Simple Observation Masking Is as Efficient as LLM Summarization for Agent Context Management / T. Lindenbauer, I. Slinko, L. Felder [et al.] // DL4C Workshop at NeurIPS 2025. – 2025. – URL: https://openreview.net/forum?id=OHVzruJl5k.</li>
+  <li>Plug in the Safety Chip: Enforcing Constraints for LLM-driven Robot Agents / Z. Yang, S. S. Raman, A. Shah, S. Tellex // ICRA 2024. – 2024. – P. 14435–14442. – DOI 10.1109/ICRA57147.2024.10611447.</li>
+  <li>SimuHome: A Temporal- and Environment-Aware Benchmark for Smart Home LLM Agents / G. Seo, J. Yang, J. Pyo [et al.] // ICLR 2026. – 2026. – URL: https://openreview.net/forum?id=LCS1WsGvha.</li>
+  <li>HomeBench: Evaluating LLMs in Smart Homes with Valid and Invalid Instructions Across Single and Multiple Devices / S. Li, Y. Guo, J. Yao [et al.] // Proceedings of ACL 2025 (Volume 1: Long Papers). – 2025. – P. 12230–12250. – DOI 10.18653/v1/2025.acl-long.597.</li>
+</ol>
+<p class="small">Полная карта агентов с проверкой фактов — <code>research/new_topic/landscape/AGENT_LANDSCAPE.md</code>; полный список проверенных источников — <code>research/new_topic/SOURCES.md</code>.</p>
+</body>
+</html>

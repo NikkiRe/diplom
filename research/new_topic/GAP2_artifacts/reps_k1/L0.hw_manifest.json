@@ -1,0 +1,89 @@
+{
+ "devices": [
+  {
+   "id": "kitchen.bme280",
+   "ch": [
+    [
+     "humidity",
+     "%RH",
+     "r"
+    ],
+    [
+     "pressure",
+     "Pa",
+     "r"
+    ],
+    [
+     "temperature",
+     "Cel",
+     "r"
+    ]
+   ]
+  },
+  {
+   "id": "balcony.dht11",
+   "ch": [
+    [
+     "humidity",
+     "%RH",
+     "r"
+    ],
+    [
+     "temperature",
+     "Cel",
+     "r"
+    ]
+   ]
+  },
+  {
+   "id": "unplaced.ads1015",
+   "ch": [
+    [
+     "voltage0",
+     "V",
+     "r"
+    ]
+   ]
+  },
+  {
+   "id": "board.cpu_thermal",
+   "ch": [
+    [
+     "temperature1",
+     "Cel",
+     "r"
+    ]
+   ]
+  },
+  {
+   "id": "boiler_pipe.ds18b20",
+   "ch": [
+    [
+     "temperature",
+     "Cel",
+     "r"
+    ]
+   ]
+  },
+  {
+   "id": "hall.pir_hall",
+   "ch": [
+    [
+     "state",
+     "/",
+     "r"
+    ]
+   ]
+  },
+  {
+   "id": "kitchen.relay_fan",
+   "ch": [
+    [
+     "state",
+     "/",
+     "rw"
+    ]
+   ]
+  }
+ ]
+}

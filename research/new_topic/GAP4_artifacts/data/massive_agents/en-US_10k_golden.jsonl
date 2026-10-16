@@ -1,0 +1,190 @@
+{"audio.volume_up": {}}
+{"news.query": {"news_topic": ["terrorism"], "date": ["", "today"], "media_type": [""], "person": [""], "place_name": [""]}}
+{"recommendation.locations": {"business_type": ["shops"], "business_name": [""], "food_type": [""], "place_name": ["", "users location"]}}
+{"iot.hue_lightdim": {"house_place": ["overhead"], "change_amount": ["", "20 percent"]}}
+{"email.query": {"relation": ["dad"], "business_name": [""], "date": [""], "email_folder": [""], "event_name": [""], "person": [""], "time": [""], "timeofday": [""]}}
+{"weather.query": {"weather_descriptor": ["rain"], "place_name": ["seattle washington"], "date": ["today"], "event_name": [""], "general_frequency": [""], "time": ["", "now"], "timeofday": [""]}}
+{"calendar.remove": {"meal_type": ["breakfast"], "place_name": ["tiffany's house"], "date": [""], "event_name": [""], "person": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"takeaway.query": {"business_name": ["mr. pizza"], "order_type": ["delivers"], "business_type": [""], "food_type": [""], "meal_type": [""]}}
+{"audio.volume_down": {}}
+{"qa.stock": {"date": ["today"], "business_name": ["", "dow jones"]}}
+{"email.sendemail": {"person": ["yulia"], "email_address": [""], "event_name": ["", "empty"], "relation": [""]}}
+{"qa.factoid": {"query": ["for how many years was abraham lincoln president of united states"]}}
+{"play.audiobook": {"audiobook_name": ["the notebook"], "audiobook_author": [""], "media_type": [""], "player_setting": [""]}}
+{"alarm.remove": {"date": ["tomorrow"], "time": [""]}}
+{"iot.wemo_off": {"device_type": ["smart plug socket"]}}
+{"lists.query": {"date": [""], "list_name": [""]}}
+{"alarm.query": {"alarm_type": [""], "date": [""], "event_name": [""], "time": [""], "timeofday": [""]}}
+{"datetime.query": {"place_name": ["cleveland"], "date": [""], "time_zone": ["", "current"]}}
+{"calendar.set": {"event_name": ["wedding"], "business_name": [""], "date": [""], "general_frequency": [""], "meal_type": [""], "person": [""], "place_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"datetime.convert": {"query": ["time between us and canada"]}}
+{"takeaway.order": {"food_type": ["thai"], "business_type": ["restaurant"], "order_type": ["delivery"], "business_name": [""], "drink_type": [""], "ingredient": [""], "meal_type": [""], "timeofday": [""]}}
+{"iot.coffee": {"coffee_type": ["", "cappuccino"], "date": ["", "today"], "device_type": ["", "coffee machine"], "time": ["", "now"]}}
+{"music.query": {"artist_name": [""], "song_name": [""]}}
+{"iot.wemo_on": {"device_type": ["wemo"]}}
+{"lists.createoradd": {"event_name": [""], "list_name": [""], "person": [""]}}
+{"lists.remove": {"list_name": ["task"], "date": [""]}}
+{"transport.query": {"place_name": ["madison street"], "business_name": [""], "business_type": [""], "date": ["", "today"], "time": ["", "now"], "timeofday": [""], "transport_name": [""], "transport_type": [""]}}
+{"calendar.query": {"date": ["today"], "event_name": [""], "person": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"alarm.set": {"time": ["three thirty p. m."], "date": ["today"], "timeofday": [""]}}
+{"transport.traffic": {"place_name": ["", "current location, work"], "time": ["", "now"]}}
+{"qa.currency": {"query": ["what is the exchange rate with in one british pound"]}}
+{"cooking.recipe": {"food_type": ["meatballs"], "app_name": [""], "cooking_type": [""], "device_type": [""], "media_type": [""]}}
+{"iot.hue_lighton": {"house_place": [""]}}
+{"play.radio": {"radio_name": ["f. m."], "music_genre": ["pop"], "app_name": [""], "device_type": [""], "house_place": [""], "media_type": [""]}}
+{"music.likeness": {"artist_name": [""], "playlist_name": [""]}}
+{"recommendation.events": {"date": ["this weekend"], "business_name": [""], "event_name": [""], "place_name": ["", "users location"], "time": ["", "today"], "timeofday": [""]}}
+{"recommendation.movies": {"movie_type": ["action"], "business_type": [""], "date": ["", "today"], "movie_name": [""], "time": ["", "now"], "timeofday": [""]}}
+{"iot.hue_lightchange": {"color_type": ["red ish"], "house_place": [""], "time": ["", "now"]}}
+{"iot.hue_lightoff": {"house_place": ["kitchen"], "device_type": [""], "time": ["", "now"]}}
+{"audio.volume_mute": {"date": [""], "time": [""], "timeofday": [""]}}
+{"email.querycontact": {"person": ["john's"], "business_name": [""], "personal_info": [""], "relation": [""]}}
+{"qa.maths": {"query": ["show me the answer for this problem two hundred and forty six plus six hundred and fifty four"]}}
+{"play.podcasts": {"player_setting": ["move on"], "podcast_descriptor": ["next podcast episode"], "person": [""], "podcast_name": [""]}}
+{"email.addcontact": {"business_name": ["giant eagle"], "list_name": ["contact list"], "email_address": [""], "person": [""]}}
+{"social.query": {"media_type": [""], "person": [""], "relation": [""]}}
+{"music.dislikeness": {"music_genre": ["rock metal"]}}
+{"qa.definition": {"definition_word": ["resin tooth filling"]}}
+{"transport.taxi": {"transport_agency": ["uber"], "date": ["tomorrow"], "place_name": [""], "time": ["", "now"], "timeofday": [""], "transport_type": [""]}}
+{"social.post": {"media_type": ["tweet"], "business_name": ["j. crew"]}}
+{"play.game": {"game_name": [""]}}
+{"play.music": {"artist_name": [""], "device_type": [""], "media_type": [""], "music_album": [""], "music_descriptor": [""], "music_genre": [""], "player_setting": [""], "playlist_name": [""], "song_name": [""]}}
+{"iot.hue_lightup": {"device_type": ["all the lights"], "change_amount": ["", "20 percent"], "house_place": ["", "all"]}}
+{"general.joke": {"joke_type": ["funny"]}}
+{"transport.ticket": {"transport_type": ["train"], "date": ["", "today"], "place_name": [""], "time": [""], "timeofday": [""], "transport_descriptor": [""], "transport_name": [""]}}
+{"iot.cleaning": {"device_type": ["robot vacuum cleaner"], "general_frequency": [""], "house_place": [""], "time": ["", "now"]}}
+{"audio.volume_up": {}}
+{"news.query": {"date": ["", "today"], "media_type": [""], "news_topic": [""], "person": [""], "place_name": [""]}}
+{"recommendation.locations": {"business_type": ["gluten free bakery"], "business_name": [""], "food_type": [""], "place_name": ["", "users location"]}}
+{"iot.hue_lightdim": {"change_amount": ["", "20 percent"], "house_place": [""]}}
+{"email.query": {"business_name": [""], "date": [""], "email_folder": [""], "event_name": [""], "person": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"weather.query": {"date": ["this week"], "event_name": [""], "general_frequency": [""], "place_name": ["", "current location"], "time": ["", "now"], "timeofday": [""], "weather_descriptor": [""]}}
+{"calendar.remove": {"date": [""], "event_name": [""], "meal_type": [""], "person": [""], "place_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"takeaway.query": {"business_name": ["dominoes"], "business_type": [""], "food_type": [""], "meal_type": [""], "order_type": ["", "takeaway"]}}
+{"audio.volume_down": {}}
+{"qa.stock": {"business_name": ["starbuck's"], "date": ["", "today"]}}
+{"email.sendemail": {"person": ["susan"], "email_address": [""], "event_name": ["", "empty"], "relation": [""]}}
+{"qa.factoid": {"query": ["who was the current prime minister of britain"]}}
+{"play.audiobook": {"player_setting": ["resume"], "audiobook_author": ["karl pilkington"], "audiobook_name": [""], "media_type": [""]}}
+{"alarm.remove": {"time": ["three p. m."], "date": [""]}}
+{"iot.wemo_off": {"device_type": [""]}}
+{"lists.query": {"list_name": ["shopping"], "date": [""]}}
+{"alarm.query": {"date": ["tomorrow"], "alarm_type": [""], "event_name": [""], "time": [""], "timeofday": [""]}}
+{"datetime.query": {"date": [""], "place_name": ["", "current"], "time_zone": ["", "current"]}}
+{"calendar.set": {"event_name": ["meeting"], "person": ["eminem"], "business_name": [""], "date": [""], "general_frequency": [""], "meal_type": [""], "place_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"datetime.convert": {"query": ["time difference between u. k. and us"]}}
+{"takeaway.order": {"food_type": ["honey mustard wing combo"], "drink_type": ["sprite"], "business_name": [""], "business_type": [""], "ingredient": [""], "meal_type": [""], "order_type": [""], "timeofday": [""]}}
+{"iot.coffee": {"coffee_type": ["", "cappuccino"], "date": ["", "today"], "device_type": ["", "coffee machine"], "time": ["", "now"]}}
+{"music.query": {"artist_name": [""], "song_name": [""]}}
+{"iot.wemo_on": {"device_type": ["plug socket one"]}}
+{"lists.createoradd": {"event_name": [""], "list_name": [""], "person": [""]}}
+{"lists.remove": {"list_name": ["to do"], "date": [""]}}
+{"transport.query": {"transport_type": ["train"], "place_name": ["cstm"], "business_name": [""], "business_type": [""], "date": ["", "today"], "time": ["", "now"], "timeofday": [""], "transport_name": [""]}}
+{"calendar.query": {"date": ["", "today"], "event_name": [""], "person": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"alarm.set": {"date": ["friday"], "time": ["six thirty am"], "timeofday": [""]}}
+{"transport.traffic": {"place_name": ["", "current location, work"], "time": ["", "now"]}}
+{"qa.currency": {"query": ["how much is the euro worth versus u. s. dollar"]}}
+{"cooking.recipe": {"food_type": ["apple pie"], "app_name": [""], "cooking_type": [""], "device_type": [""], "media_type": [""]}}
+{"iot.hue_lighton": {"house_place": ["kitchen"]}}
+{"play.radio": {"app_name": [""], "device_type": [""], "house_place": [""], "media_type": [""], "music_genre": [""], "radio_name": ["", "latest"]}}
+{"music.likeness": {"artist_name": [""], "playlist_name": [""]}}
+{"recommendation.events": {"place_name": ["town"], "date": ["this week"], "business_name": [""], "event_name": [""], "time": ["", "today"], "timeofday": [""]}}
+{"recommendation.movies": {"movie_type": ["drama"], "time": ["weekend"], "business_type": [""], "date": ["", "today"], "movie_name": [""], "timeofday": [""]}}
+{"iot.hue_lightchange": {"color_type": ["dark"], "house_place": ["house"], "time": ["", "now"]}}
+{"iot.hue_lightoff": {"house_place": ["living room's"], "device_type": [""], "time": ["", "now"]}}
+{"audio.volume_mute": {"time": ["two hours"], "date": [""], "timeofday": [""]}}
+{"email.querycontact": {"person": ["seth"], "personal_info": ["lives"], "business_name": [""], "relation": [""]}}
+{"qa.maths": {"query": ["tell me what the product of eighteen and thirty one is"]}}
+{"play.podcasts": {"podcast_name": ["shadi special"], "person": [""], "player_setting": [""], "podcast_descriptor": [""]}}
+{"email.addcontact": {"person": ["michael"], "business_name": [""], "email_address": [""], "list_name": [""]}}
+{"social.query": {"media_type": [""], "person": [""], "relation": [""]}}
+{"music.dislikeness": {"music_genre": [""]}}
+{"qa.definition": {"definition_word": ["life"]}}
+{"transport.taxi": {"transport_type": ["taxi"], "place_name": ["leith"], "time": ["half an hour"], "date": ["", "today"], "timeofday": [""], "transport_agency": [""]}}
+{"social.post": {"media_type": ["tweet"], "business_name": ["consumer service"]}}
+{"play.game": {"game_name": ["parcheese game"]}}
+{"play.music": {"playlist_name": ["midnight love"], "artist_name": [""], "device_type": [""], "media_type": [""], "music_album": [""], "music_descriptor": [""], "music_genre": [""], "player_setting": [""], "song_name": [""]}}
+{"iot.hue_lightup": {"change_amount": ["", "20 percent"], "device_type": ["", "all"], "house_place": ["", "all"]}}
+{"general.joke": {"joke_type": ["", "random"]}}
+{"transport.ticket": {"place_name": ["new york city"], "transport_type": ["train"], "date": ["", "today"], "time": [""], "timeofday": [""], "transport_descriptor": [""], "transport_name": [""]}}
+{"iot.cleaning": {"house_place": ["living room"], "device_type": ["", "vacuum"], "general_frequency": [""], "time": ["", "now"]}}
+{"audio.volume_up": {}}
+{"news.query": {"media_type": ["c. n. n."], "date": ["", "today"], "news_topic": [""], "person": [""], "place_name": [""]}}
+{"recommendation.locations": {"business_type": ["wine bar"], "business_name": [""], "food_type": [""], "place_name": ["", "users location"]}}
+{"iot.hue_lightdim": {"change_amount": ["", "20 percent"], "house_place": [""]}}
+{"email.query": {"person": ["charlotte"], "business_name": [""], "date": [""], "email_folder": [""], "event_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"weather.query": {"date": ["", "today"], "event_name": [""], "general_frequency": [""], "place_name": ["", "current location"], "time": ["", "now"], "timeofday": [""], "weather_descriptor": [""]}}
+{"calendar.remove": {"event_name": ["meeting"], "time": ["nine am"], "date": [""], "meal_type": [""], "person": [""], "place_name": [""], "relation": [""], "timeofday": [""]}}
+{"takeaway.query": {"food_type": ["chinese"], "business_name": [""], "business_type": [""], "meal_type": [""], "order_type": ["", "takeaway"]}}
+{"audio.volume_down": {}}
+{"qa.stock": {"business_name": ["facebook"], "date": ["", "today"]}}
+{"email.sendemail": {"person": ["margaret"], "email_address": [""], "event_name": ["", "empty"], "relation": [""]}}
+{"qa.factoid": {"query": ["where on earth has the most volcanoes"]}}
+{"play.audiobook": {"player_setting": ["start"], "audiobook_name": ["twilight"], "audiobook_author": [""], "media_type": [""]}}
+{"alarm.remove": {"date": [""], "time": [""]}}
+{"iot.wemo_off": {"device_type": ["wemo plug socket"]}}
+{"lists.query": {"list_name": ["to do"], "date": [""]}}
+{"alarm.query": {"alarm_type": [""], "date": [""], "event_name": [""], "time": [""], "timeofday": [""]}}
+{"datetime.query": {"date": [""], "place_name": ["", "current"], "time_zone": ["", "current"]}}
+{"calendar.set": {"event_name": ["party"], "date": ["tomorrow"], "business_name": [""], "general_frequency": [""], "meal_type": [""], "person": [""], "place_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"datetime.convert": {"query": ["convert eight thirty from gtm four to g. m. t. five thirty"]}}
+{"iot.coffee": {"coffee_type": ["", "cappuccino"], "date": ["", "today"], "device_type": ["", "coffee machine"], "time": ["", "now"]}}
+{"music.query": {"artist_name": [""], "song_name": [""]}}
+{"iot.wemo_on": {"device_type": ["plug"]}}
+{"lists.createoradd": {"person": ["bob"], "list_name": ["list of contacts"], "event_name": [""]}}
+{"lists.remove": {"list_name": ["shopping"], "date": [""]}}
+{"transport.query": {"place_name": ["chennai"], "business_name": [""], "business_type": [""], "date": ["", "today"], "time": ["", "now"], "timeofday": [""], "transport_name": [""], "transport_type": [""]}}
+{"calendar.query": {"event_name": ["meetings"], "time": ["twenty to twenty five june"], "date": ["", "today"], "person": [""], "relation": [""], "timeofday": [""]}}
+{"alarm.set": {"time": ["seven am"], "date": [""], "timeofday": [""]}}
+{"transport.traffic": {"time": ["the moment"], "place_name": ["", "current location, work"]}}
+{"qa.currency": {"query": ["what is the prevailing exchange rate us versus indian rupees"]}}
+{"cooking.recipe": {"food_type": ["stuffed peppers"], "app_name": [""], "cooking_type": [""], "device_type": [""], "media_type": [""]}}
+{"iot.hue_lighton": {"house_place": ["balcony"]}}
+{"play.radio": {"radio_name": ["kiss f. m."], "app_name": [""], "device_type": [""], "house_place": [""], "media_type": [""], "music_genre": [""]}}
+{"music.likeness": {"artist_name": [""], "playlist_name": [""]}}
+{"recommendation.events": {"business_name": [""], "date": ["", "today"], "event_name": [""], "place_name": ["", "users location"], "time": ["", "today"], "timeofday": [""]}}
+{"recommendation.movies": {"business_type": [""], "date": ["", "today"], "movie_name": [""], "movie_type": [""], "time": ["", "now"], "timeofday": [""]}}
+{"iot.hue_lightchange": {"color_type": ["blue"], "house_place": [""], "time": ["", "now"]}}
+{"iot.hue_lightoff": {"device_type": [""], "house_place": [""], "time": ["", "now"]}}
+{"audio.volume_mute": {"time": ["fifteen minutes"], "date": [""], "timeofday": [""]}}
+{"email.querycontact": {"person": ["john smith"], "business_name": [""], "personal_info": [""], "relation": [""]}}
+{"qa.maths": {"query": ["what is four plus five"]}}
+{"play.podcasts": {"podcast_descriptor": ["next episode"], "podcast_name": ["hipsterhood"], "person": [""], "player_setting": [""]}}
+{"email.addcontact": {"email_address": ["macs at gmail dot com"], "business_name": [""], "list_name": [""], "person": [""]}}
+{"social.query": {"media_type": ["social networks"], "person": [""], "relation": [""]}}
+{"music.dislikeness": {"music_genre": [""]}}
+{"qa.definition": {"definition_word": ["orange"]}}
+{"transport.taxi": {"transport_type": ["taxi"], "date": ["", "today"], "place_name": [""], "time": ["", "now"], "timeofday": [""], "transport_agency": [""]}}
+{"social.post": {"media_type": ["twitter"], "business_name": [""]}}
+{"play.game": {"game_name": ["temple run"]}}
+{"play.music": {"music_descriptor": ["christian"], "artist_name": [""], "device_type": [""], "media_type": [""], "music_album": [""], "music_genre": [""], "player_setting": [""], "playlist_name": [""], "song_name": [""]}}
+{"iot.hue_lightup": {"change_amount": ["", "20 percent"], "device_type": ["", "all"], "house_place": ["", "all"]}}
+{"general.joke": {"joke_type": ["good"]}}
+{"transport.ticket": {"transport_descriptor": ["first class"], "transport_type": ["train"], "place_name": ["miami"], "date": ["", "today"], "time": [""], "timeofday": [""], "transport_name": [""]}}
+{"iot.cleaning": {"device_type": ["vacuum cleaner"], "general_frequency": [""], "house_place": [""], "time": ["", "now"]}}
+{"audio.volume_up": {}}
+{"news.query": {"media_type": ["b. b. c."], "date": ["", "today"], "news_topic": [""], "person": [""], "place_name": [""]}}
+{"recommendation.locations": {"business_type": ["shops"], "place_name": ["within ten miles"], "business_name": [""], "food_type": [""]}}
+{"iot.hue_lightdim": {"change_amount": ["", "20 percent"], "house_place": [""]}}
+{"email.query": {"business_name": [""], "date": [""], "email_folder": [""], "event_name": [""], "person": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"weather.query": {"weather_descriptor": ["hot"], "place_name": ["quebec"], "date": ["", "today"], "event_name": [""], "general_frequency": [""], "time": ["", "now"], "timeofday": [""]}}
+{"calendar.remove": {"date": [""], "event_name": [""], "meal_type": [""], "person": [""], "place_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"takeaway.query": {"business_name": ["charley's steakhouse"], "business_type": [""], "food_type": [""], "meal_type": [""], "order_type": ["", "takeaway"]}}
+{"audio.volume_down": {}}
+{"qa.stock": {"business_name": ["hdfc"], "date": ["", "today"]}}
+{"email.sendemail": {"email_address": ["john at gmail dot com"], "event_name": ["", "empty"], "person": [""], "relation": [""]}}
+{"qa.factoid": {"query": ["what's a parsec"]}}
+{"play.audiobook": {"audiobook_name": ["be more chill"], "audiobook_author": ["ned vizzini"], "media_type": [""], "player_setting": [""]}}
+{"alarm.remove": {"date": [""], "time": [""]}}
+{"iot.wemo_off": {"device_type": ["smart socket"]}}
+{"lists.query": {"date": [""], "list_name": [""]}}
+{"alarm.query": {"alarm_type": [""], "date": [""], "event_name": [""], "time": [""], "timeofday": [""]}}
+{"datetime.query": {"place_name": ["new york"], "date": [""], "time_zone": ["", "current"]}}
+{"calendar.set": {"event_name": ["meetings"], "business_name": [""], "date": [""], "general_frequency": [""], "meal_type": [""], "person": [""], "place_name": [""], "relation": [""], "time": [""], "timeofday": [""]}}
+{"datetime.convert": {"query": ["if it's sunrise in stockholm what time is it in okinawa"]}}
+{"takeaway.order": {"food_type": ["pizza"], "ingredient": ["sausage"], "business_name": ["domino's"], "business_type": [""], "drink_type": [""], "meal_type": [""], "order_type": [""], "timeofday": [""]}}
+{"iot.coffee": {"coffee_type": ["", "cappuccino"], "date": ["", "today"], "device_type": ["", "coffee machine"], "time": ["", "now"]}}
+{"music.query": {"artist_name": [""], "song_name": [""]}}
+{"iot.wemo_on": {"device_type": ["wemo"]}}
+{"lists.createoradd": {"event_name": [""], "list_name": [""], "person": [""]}}
+{"lists.remove": {"date": [""], "list_name": [""]}}

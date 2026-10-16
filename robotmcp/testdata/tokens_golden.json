@@ -1,0 +1,735 @@
+{
+"tokenizer": "o200k_base",
+"items": [
+{
+"name": "rosmcp_camera_compact_sbc/00_frame_00.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":395,\"w\":320},\"in_view\":{\"nearest_m\":1.0,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/01_frame_01.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":755,\"w\":320},\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/02_frame_02.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":622,\"w\":320},\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/03_frame_03.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":649,\"w\":320},\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/04_frame_04.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":692,\"w\":320},\"in_view\":{\"nearest_m\":1.02,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/05_frame_05.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":769,\"w\":320},\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/06_frame_06.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":637,\"w\":320},\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/07_frame_07.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":670,\"w\":320},\"in_view\":{\"nearest_m\":1.0,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/08_frame_08.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":746,\"w\":320},\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/09_frame_09.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.5,\"ms\":674,\"w\":320},\"in_view\":{\"nearest_m\":1.0,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_camera_compact_sbc/tool:status",
+"text": "{\"name\":\"status\",\"description\":\"Robot state: pose (map, m/deg), nearest named place, navigation state, lidar free space (front/left/right/back, m) and nearest obstacle.\",\"inputSchema\":{\"properties\":{},\"title\":\"statusArguments\",\"type\":\"object\"},\"annotations\":{\"readOnlyHint\":true}}",
+"o200k": 66
+},
+{
+"name": "rosmcp_camera_compact_sbc/desc:status",
+"text": "status:Robot state: pose (map, m/deg), nearest named place, navigation state, lidar free space (front/left/right/back, m) and nearest obstacle.",
+"o200k": 36
+},
+{
+"name": "rosmcp_camera_compact_sbc/tool:go_to",
+"text": "{\"name\":\"go_to\",\"description\":\"Drive to a named place with the on-board navigator; returns when arrived/failed.\",\"inputSchema\":{\"properties\":{\"place\":{\"enum\":[\"dock\",\"east\",\"east_south\",\"north\",\"south\",\"north_east\",\"center_ne\",\"center_sw\"],\"title\":\"Place\",\"type\":\"string\"}},\"required\":[\"place\"],\"title\":\"go_toArguments\",\"type\":\"object\"},\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":true}}",
+"o200k": 97
+},
+{
+"name": "rosmcp_camera_compact_sbc/desc:go_to",
+"text": "go_to:Drive to a named place with the on-board navigator; returns when arrived/failed.",
+"o200k": 20
+},
+{
+"name": "rosmcp_camera_compact_sbc/tool:patrol",
+"text": "{\"name\":\"patrol\",\"description\":\"Visit several named places in order (executed on board, one call).\",\"inputSchema\":{\"properties\":{\"places\":{\"items\":{\"enum\":[\"dock\",\"east\",\"east_south\",\"north\",\"south\",\"north_east\",\"center_ne\",\"center_sw\"],\"type\":\"string\"},\"title\":\"Places\",\"type\":\"array\"}},\"required\":[\"places\"],\"title\":\"patrolArguments\",\"type\":\"object\"},\"annotations\":{\"destructiveHint\":false}}",
+"o200k": 96
+},
+{
+"name": "rosmcp_camera_compact_sbc/desc:patrol",
+"text": "patrol:Visit several named places in order (executed on board, one call).",
+"o200k": 18
+},
+{
+"name": "rosmcp_camera_compact_sbc/tool:stop",
+"text": "{\"name\":\"stop\",\"description\":\"Stop: cancel the active navigation goal and command zero velocity.\",\"inputSchema\":{\"properties\":{},\"title\":\"stopArguments\",\"type\":\"object\"},\"annotations\":{\"destructiveHint\":false}}",
+"o200k": 44
+},
+{
+"name": "rosmcp_camera_compact_sbc/desc:stop",
+"text": "stop:Stop: cancel the active navigation goal and command zero velocity.",
+"o200k": 14
+},
+{
+"name": "rosmcp_camera_compact_sbc/tool:look",
+"text": "{\"name\":\"look\",\"description\":\"What is in front of the camera. Default: compact text summary (nearest object in the camera field of view). image=true: also attach one small JPEG frame.\",\"inputSchema\":{\"properties\":{\"image\":{\"default\":false,\"title\":\"Image\",\"type\":\"boolean\"}},\"title\":\"lookArguments\",\"type\":\"object\"},\"annotations\":{\"readOnlyHint\":true}}",
+"o200k": 78
+},
+{
+"name": "rosmcp_camera_compact_sbc/desc:look",
+"text": "look:What is in front of the camera. Default: compact text summary (nearest object in the camera field of view). image=true: also attach one small JPEG frame.",
+"o200k": 35
+},
+{
+"name": "rosmcp_camera_generic_sbc/00_connect_proxy.txt",
+"text": "{\"message\":\"WebSocket IP set to 127.0.0.1:43735\",\"connectivity_test\":{\"ip\":\"127.0.0.1\",\"port\":43735,\"ping\":{\"success\":true,\"error\":null,\"response_time_ms\":0.035},\"port_check\":{\"open\":true,\"error\":null},\"overall_status\":\"Fully_accessible. The robot is reachable and the port is open, indicating that we are likely able to connect to ROS\"}}",
+"o200k": 96
+},
+{
+"name": "rosmcp_camera_generic_sbc/01_frame_00.txt",
+"text": "{\"error\":\"Timeout waiting for message from topic\"}",
+"o200k": 10
+},
+{
+"name": "rosmcp_camera_generic_sbc/03_frame_02.txt",
+"text": "Image saved to ./camera/received_image.jpeg. Use view_saved_image() to re-view it.",
+"o200k": 20
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_actions",
+"text": "{\"name\":\"get_actions\",\"title\":\"Get Actions\",\"description\":\"Get list of all available ROS actions.\\nExample:\\nget_actions()\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Actions\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 79
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_actions",
+"text": "get_actions:Get list of all available ROS actions.\nExample:\nget_actions()",
+"o200k": 15
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_action_details",
+"text": "{\"name\":\"get_action_details\",\"title\":\"Get Action Details\",\"description\":\"Get complete action details including goal, result, and feedback structures. Requires the action type; if you don't know it, call without action_type to get the list of available types back in the error.\\nExample:\\nget_action_details('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute')\",\"inputSchema\":{\"properties\":{\"action\":{\"type\":\"string\"},\"action_type\":{\"default\":\"\",\"type\":\"string\"}},\"required\":[\"action\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Action Details\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 151
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_action_details",
+"text": "get_action_details:Get complete action details including goal, result, and feedback structures. Requires the action type; if you don't know it, call without action_type to get the list of available types back in the error.\nExample:\nget_action_details('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute')",
+"o200k": 65
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_action_status",
+"text": "{\"name\":\"get_action_status\",\"title\":\"Get Action Status\",\"description\":\"Get action status for a specific action name. Works only with ROS 2.\\nExample:\\nget_action_status('/turtle1/rotate_absolute')\",\"inputSchema\":{\"properties\":{\"action_name\":{\"type\":\"string\"}},\"required\":[\"action_name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Action Status\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 110
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_action_status",
+"text": "get_action_status:Get action status for a specific action name. Works only with ROS 2.\nExample:\nget_action_status('/turtle1/rotate_absolute')",
+"o200k": 32
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:send_action_goal",
+"text": "{\"name\":\"send_action_goal\",\"title\":\"Send Action Goal\",\"description\":\"Send a goal to a ROS action server. Works only with ROS 2.\\nExample:\\nsend_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})\",\"inputSchema\":{\"properties\":{\"action_name\":{\"type\":\"string\"},\"action_type\":{\"type\":\"string\"},\"goal\":{\"additionalProperties\":true,\"type\":\"object\"},\"timeout\":{\"default\":null,\"type\":\"number\"}},\"required\":[\"action_name\",\"action_type\",\"goal\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Send Action Goal\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 163
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:send_action_goal",
+"text": "send_action_goal:Send a goal to a ROS action server. Works only with ROS 2.\nExample:\nsend_action_goal('/turtle1/rotate_absolute', 'turtlesim/action/RotateAbsolute', {'theta': 1.57})",
+"o200k": 50
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:cancel_action_goal",
+"text": "{\"name\":\"cancel_action_goal\",\"title\":\"Cancel Action Goal\",\"description\":\"Cancel a specific action goal. Works only with ROS 2.\\nExample:\\ncancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')\",\"inputSchema\":{\"properties\":{\"action_name\":{\"type\":\"string\"},\"goal_id\":{\"type\":\"string\"}},\"required\":[\"action_name\",\"goal_id\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Cancel Action Goal\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 131
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:cancel_action_goal",
+"text": "cancel_action_goal:Cancel a specific action goal. Works only with ROS 2.\nExample:\ncancel_action_goal('/turtle1/rotate_absolute', 'goal_1758653551839_21acd486')",
+"o200k": 43
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:connect_to_robot",
+"text": "{\"name\":\"connect_to_robot\",\"title\":\"Connect to Robot\",\"description\":\"Connect to the robot by setting the IP/port. This tool also tests connectivity to confirm that the robot is reachable and the port is open.\",\"inputSchema\":{\"properties\":{\"ip\":{\"default\":\"127.0.0.1\",\"type\":\"string\"},\"port\":{\"anyOf\":[{\"type\":\"integer\"},{\"type\":\"string\"}],\"default\":9090},\"ping_timeout\":{\"default\":2.0,\"type\":\"number\"},\"port_timeout\":{\"default\":2.0,\"type\":\"number\"}},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Connect to Robot\",\"destructiveHint\":false},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 158
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:connect_to_robot",
+"text": "connect_to_robot:Connect to the robot by setting the IP/port. This tool also tests connectivity to confirm that the robot is reachable and the port is open.",
+"o200k": 33
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:ping_robots",
+"text": "{\"name\":\"ping_robots\",\"title\":\"Ping Robots\",\"description\":\"Ping one or more robot IP addresses and check if specific ports are open.\\nA successful ping to the IP but not the port can indicate that ROSbridge is not running.\\nExample:\\nping_robots(targets=[{'ip': '192.168.1.100', 'port': 9090}, {'ip': '192.168.1.101', 'port': 9090}])\",\"inputSchema\":{\"properties\":{\"targets\":{\"default\":null,\"items\":{\"additionalProperties\":true,\"type\":\"object\"},\"type\":\"array\"},\"ping_timeout\":{\"default\":2.0,\"type\":\"number\"},\"port_timeout\":{\"default\":2.0,\"type\":\"number\"}},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Ping Robots\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 198
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:ping_robots",
+"text": "ping_robots:Ping one or more robot IP addresses and check if specific ports are open.\nA successful ping to the IP but not the port can indicate that ROSbridge is not running.\nExample:\nping_robots(targets=[{'ip': '192.168.1.100', 'port': 9090}, {'ip': '192.168.1.101', 'port': 9090}])",
+"o200k": 85
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_verified_robot_spec",
+"text": "{\"name\":\"get_verified_robot_spec\",\"title\":\"Get Verified Robot Spec\",\"description\":\"Load specifications and usage context for a verified robot model. ONLY use if the robot model is in the verified list (use get_verified_robots_list first to check). Most robots won't have a spec - that's OK, connect directly using connect_to_robot instead.\",\"inputSchema\":{\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Verified Robot Spec\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 130
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_verified_robot_spec",
+"text": "get_verified_robot_spec:Load specifications and usage context for a verified robot model. ONLY use if the robot model is in the verified list (use get_verified_robots_list first to check). Most robots won't have a spec - that's OK, connect directly using connect_to_robot instead.",
+"o200k": 56
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_verified_robots_list",
+"text": "{\"name\":\"get_verified_robots_list\",\"title\":\"Get Verified Robots List\",\"description\":\"List pre-verified robot models that have specification files with usage guidance available. Use this to check if a robot model has additional context available before calling get_verified_robot_spec. If your robot is not in this list, you can still connect to it directly using connect_to_robot.\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Verified Robots List\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 125
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_verified_robots_list",
+"text": "get_verified_robots_list:List pre-verified robot models that have specification files with usage guidance available. Use this to check if a robot model has additional context available before calling get_verified_robot_spec. If your robot is not in this list, you can still connect to it directly using connect_to_robot.",
+"o200k": 61
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:detect_ros_version",
+"text": "{\"name\":\"detect_ros_version\",\"title\":\"Detect ROS Version\",\"description\":\"Detect the ROS version and distribution via rosbridge.\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Detect ROS Version\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 76
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:detect_ros_version",
+"text": "detect_ros_version:Detect the ROS version and distribution via rosbridge.",
+"o200k": 14
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:view_saved_image",
+"text": "{\"name\":\"view_saved_image\",\"title\":\"View Saved Image\",\"description\":\"View a previously saved image from disk.\\nImages are automatically saved when subscribing to image topics.\\nUse this tool to re-view a saved image without re-subscribing.\\n\",\"inputSchema\":{\"properties\":{\"image_path\":{\"default\":\"./camera/received_image.jpeg\",\"type\":\"string\"}},\"type\":\"object\"},\"annotations\":{\"title\":\"View Saved Image\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 105
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:view_saved_image",
+"text": "view_saved_image:View a previously saved image from disk.\nImages are automatically saved when subscribing to image topics.\nUse this tool to re-view a saved image without re-subscribing.\n",
+"o200k": 37
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_nodes",
+"text": "{\"name\":\"get_nodes\",\"title\":\"Get Nodes\",\"description\":\"Get list of all currently running ROS nodes.\\nExample:\\nget_nodes()\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Nodes\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 80
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_nodes",
+"text": "get_nodes:Get list of all currently running ROS nodes.\nExample:\nget_nodes()",
+"o200k": 16
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_node_details",
+"text": "{\"name\":\"get_node_details\",\"title\":\"Get Node Details\",\"description\":\"Get detailed information about a specific node including its publishers, subscribers, and services.\\nExample:\\nget_node_details('/turtlesim')\",\"inputSchema\":{\"properties\":{\"node\":{\"type\":\"string\"}},\"required\":[\"node\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Node Details\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 105
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_node_details",
+"text": "get_node_details:Get detailed information about a specific node including its publishers, subscribers, and services.\nExample:\nget_node_details('/turtlesim')",
+"o200k": 29
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_parameter",
+"text": "{\"name\":\"get_parameter\",\"title\":\"Get Parameter\",\"description\":\"Get a single ROS parameter value by name. Works only with ROS 2.\\nExample:\\nget_parameter('/turtlesim:background_b')\",\"inputSchema\":{\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Parameter\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 104
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_parameter",
+"text": "get_parameter:Get a single ROS parameter value by name. Works only with ROS 2.\nExample:\nget_parameter('/turtlesim:background_b')",
+"o200k": 30
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:set_parameter",
+"text": "{\"name\":\"set_parameter\",\"title\":\"Set Parameter\",\"description\":\"Set a single ROS parameter value. Works only with ROS 2.\\nExample:\\nset_parameter('/turtlesim:background_b', '255')\",\"inputSchema\":{\"properties\":{\"name\":{\"type\":\"string\"},\"value\":{\"type\":\"string\"}},\"required\":[\"name\",\"value\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Set Parameter\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 114
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:set_parameter",
+"text": "set_parameter:Set a single ROS parameter value. Works only with ROS 2.\nExample:\nset_parameter('/turtlesim:background_b', '255')",
+"o200k": 31
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:has_parameter",
+"text": "{\"name\":\"has_parameter\",\"title\":\"Has Parameter\",\"description\":\"Check if a ROS parameter exists. Works only with ROS 2.\\nExample:\\nhas_parameter('/turtlesim:background_b')\",\"inputSchema\":{\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Has Parameter\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 102
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:has_parameter",
+"text": "has_parameter:Check if a ROS parameter exists. Works only with ROS 2.\nExample:\nhas_parameter('/turtlesim:background_b')",
+"o200k": 29
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:delete_parameter",
+"text": "{\"name\":\"delete_parameter\",\"title\":\"Delete Parameter\",\"description\":\"Delete a ROS parameter. Works only with ROS 2.\\nExample:\\ndelete_parameter('/turtlesim:background_b')\",\"inputSchema\":{\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Delete Parameter\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 100
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:delete_parameter",
+"text": "delete_parameter:Delete a ROS parameter. Works only with ROS 2.\nExample:\ndelete_parameter('/turtlesim:background_b')",
+"o200k": 27
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_parameters",
+"text": "{\"name\":\"get_parameters\",\"title\":\"Get Parameters\",\"description\":\"Get list of all ROS parameter names for a specific node. Works only with ROS 2.\\nExample:\\nget_parameters('cam2image')\\nget_parameters('/cam2image')\",\"inputSchema\":{\"properties\":{\"node_name\":{\"type\":\"string\"}},\"required\":[\"node_name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Parameters\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 115
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_parameters",
+"text": "get_parameters:Get list of all ROS parameter names for a specific node. Works only with ROS 2.\nExample:\nget_parameters('cam2image')\nget_parameters('/cam2image')",
+"o200k": 37
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_parameter_details",
+"text": "{\"name\":\"get_parameter_details\",\"title\":\"Get Parameter Details\",\"description\":\"Get comprehensive details about a specific ROS parameter including value, type, and metadata. Works only with ROS 2.\\nExample:\\nget_parameter_details('/turtlesim:background_r')\",\"inputSchema\":{\"properties\":{\"name\":{\"type\":\"string\"}},\"required\":[\"name\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Parameter Details\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 115
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_parameter_details",
+"text": "get_parameter_details:Get comprehensive details about a specific ROS parameter including value, type, and metadata. Works only with ROS 2.\nExample:\nget_parameter_details('/turtlesim:background_r')",
+"o200k": 39
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_services",
+"text": "{\"name\":\"get_services\",\"title\":\"Get Services\",\"description\":\"Get list of all available ROS services.\\nExample:\\nget_services()\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Services\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 79
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_services",
+"text": "get_services:Get list of all available ROS services.\nExample:\nget_services()",
+"o200k": 15
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_service_type",
+"text": "{\"name\":\"get_service_type\",\"title\":\"Get Service Type\",\"description\":\"Get the service type for a specific service.\\nExample:\\nget_service_type('/rosapi/topics')\",\"inputSchema\":{\"properties\":{\"service\":{\"type\":\"string\"}},\"required\":[\"service\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Service Type\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 98
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_service_type",
+"text": "get_service_type:Get the service type for a specific service.\nExample:\nget_service_type('/rosapi/topics')",
+"o200k": 22
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_service_details",
+"text": "{\"name\":\"get_service_details\",\"title\":\"Get Service Details\",\"description\":\"Get complete service details including request/response structures and provider nodes.\\nExample:\\nget_service_details('/rosapi/topics')\",\"inputSchema\":{\"properties\":{\"service\":{\"type\":\"string\"}},\"required\":[\"service\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Service Details\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 102
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_service_details",
+"text": "get_service_details:Get complete service details including request/response structures and provider nodes.\nExample:\nget_service_details('/rosapi/topics')",
+"o200k": 26
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:call_service",
+"text": "{\"name\":\"call_service\",\"title\":\"Call Service\",\"description\":\"Call a ROS service with specified request data.\\nExample:\\ncall_service('/rosapi/topics', 'rosapi/Topics', {})\\ncall_service('/slow_service', 'my_package/SlowService', {}, timeout=10.0)  # Specify timeout only for slow services\\n\\nIMPORTANT: Field names in the request dict should match the field names shown by get_service_details(), which are already formatted for rosbridge (without leading underscores). For example, use {'topic': '/image'} not {'_topic': '/image'}.\",\"inputSchema\":{\"properties\":{\"service_name\":{\"type\":\"string\"},\"service_type\":{\"type\":\"string\"},\"request\":{\"additionalProperties\":true,\"type\":\"object\"},\"timeout\":{\"default\":null,\"type\":\"number\"}},\"required\":[\"service_name\",\"service_type\",\"request\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Call Service\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 221
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:call_service",
+"text": "call_service:Call a ROS service with specified request data.\nExample:\ncall_service('/rosapi/topics', 'rosapi/Topics', {})\ncall_service('/slow_service', 'my_package/SlowService', {}, timeout=10.0)  # Specify timeout only for slow services\n\nIMPORTANT: Field names in the request dict should match the field names shown by get_service_details(), which are already formatted for rosbridge (without leading underscores). For example, use {'topic': '/image'} not {'_topic': '/image'}.",
+"o200k": 107
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_topics",
+"text": "{\"name\":\"get_topics\",\"title\":\"Get Topics\",\"description\":\"Get list of all available ROS topics.\\nExample:\\nget_topics()\",\"inputSchema\":{\"properties\":{},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Topics\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 79
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_topics",
+"text": "get_topics:Get list of all available ROS topics.\nExample:\nget_topics()",
+"o200k": 15
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_topic_type",
+"text": "{\"name\":\"get_topic_type\",\"title\":\"Get Topic Type\",\"description\":\"Get the message type for a specific topic.\\nExample:\\nget_topic_type('/cmd_vel')\",\"inputSchema\":{\"properties\":{\"topic\":{\"type\":\"string\"}},\"required\":[\"topic\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Topic Type\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 97
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_topic_type",
+"text": "get_topic_type:Get the message type for a specific topic.\nExample:\nget_topic_type('/cmd_vel')",
+"o200k": 21
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_topic_details",
+"text": "{\"name\":\"get_topic_details\",\"title\":\"Get Topic Details\",\"description\":\"Get detailed information about a specific topic including its type, publishers, and subscribers.\\nExample:\\nget_topic_details('/cmd_vel')\",\"inputSchema\":{\"properties\":{\"topic\":{\"type\":\"string\"}},\"required\":[\"topic\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Topic Details\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 104
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_topic_details",
+"text": "get_topic_details:Get detailed information about a specific topic including its type, publishers, and subscribers.\nExample:\nget_topic_details('/cmd_vel')",
+"o200k": 28
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:get_message_details",
+"text": "{\"name\":\"get_message_details\",\"title\":\"Get Message Details\",\"description\":\"Get the complete structure/definition of a message type.\\nExample:\\nget_message_details('geometry_msgs/Twist')\",\"inputSchema\":{\"properties\":{\"message_type\":{\"type\":\"string\"}},\"required\":[\"message_type\"],\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Get Message Details\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 103
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:get_message_details",
+"text": "get_message_details:Get the complete structure/definition of a message type.\nExample:\nget_message_details('geometry_msgs/Twist')",
+"o200k": 25
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:subscribe_once",
+"text": "{\"name\":\"subscribe_once\",\"title\":\"Subscribe Once\",\"description\":\"Subscribe to a ROS topic and return the first message received.\\nExample:\\nsubscribe_once(topic='/cmd_vel', msg_type='geometry_msgs/msg/TwistStamped')\\nsubscribe_once(topic='/slow_topic', msg_type='my_package/SlowMsg', timeout=10.0)  # Use longer timeout for slow topics\\nsubscribe_once(topic='/high_rate_topic', msg_type='sensor_msgs/Image', timeout=5.0, queue_length=5, throttle_rate_ms=100)  # Control message buffering and rate\\nsubscribe_once(topic='/camera/image_raw', msg_type='sensor_msgs/Image', expects_image='true')  # Hint that this is an image for faster processing\\nsubscribe_once(topic='/point_cloud', msg_type='sensor_msgs/PointCloud2', expects_image='false')  # Skip image detection for non-image data\",\"inputSchema\":{\"properties\":{\"topic\":{\"default\":\"\",\"type\":\"string\"},\"msg_type\":{\"default\":\"\",\"type\":\"string\"},\"expects_image\":{\"default\":\"auto\",\"type\":\"string\"},\"timeout\":{\"default\":null,\"type\":\"number\"},\"queue_length\":{\"default\":null,\"type\":\"integer\"},\"throttle_rate_ms\":{\"default\":null,\"type\":\"integer\"}},\"type\":\"object\"},\"annotations\":{\"title\":\"Subscribe Once\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 286
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:subscribe_once",
+"text": "subscribe_once:Subscribe to a ROS topic and return the first message received.\nExample:\nsubscribe_once(topic='/cmd_vel', msg_type='geometry_msgs/msg/TwistStamped')\nsubscribe_once(topic='/slow_topic', msg_type='my_package/SlowMsg', timeout=10.0)  # Use longer timeout for slow topics\nsubscribe_once(topic='/high_rate_topic', msg_type='sensor_msgs/Image', timeout=5.0, queue_length=5, throttle_rate_ms=100)  # Control message buffering and rate\nsubscribe_once(topic='/camera/image_raw', msg_type='sensor_msgs/Image', expects_image='true')  # Hint that this is an image for faster processing\nsubscribe_once(topic='/point_cloud', msg_type='sensor_msgs/PointCloud2', expects_image='false')  # Skip image detection for non-image data",
+"o200k": 168
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:subscribe_for_duration",
+"text": "{\"name\":\"subscribe_for_duration\",\"title\":\"Subscribe for Duration\",\"description\":\"Subscribe to a topic for a duration and collect messages.\\nExample:\\nsubscribe_for_duration(topic='/cmd_vel', msg_type='geometry_msgs/msg/TwistStamped', duration=5, max_messages=10)\\nsubscribe_for_duration(topic='/high_rate_topic', msg_type='sensor_msgs/Image', duration=10, queue_length=5, throttle_rate_ms=100)  # Control message buffering and rate\\nsubscribe_for_duration(topic='/camera/image_raw', msg_type='sensor_msgs/Image', duration=5, expects_image='true')  # Hint that this is an image for faster processing\\nsubscribe_for_duration(topic='/point_cloud', msg_type='sensor_msgs/PointCloud2', duration=5, expects_image='false')  # Skip image detection for non-image data\",\"inputSchema\":{\"properties\":{\"topic\":{\"default\":\"\",\"type\":\"string\"},\"msg_type\":{\"default\":\"\",\"type\":\"string\"},\"duration\":{\"default\":5.0,\"type\":\"number\"},\"max_messages\":{\"default\":100,\"type\":\"integer\"},\"queue_length\":{\"default\":null,\"type\":\"integer\"},\"throttle_rate_ms\":{\"default\":null,\"type\":\"integer\"},\"expects_image\":{\"default\":\"auto\",\"type\":\"string\"}},\"type\":\"object\"},\"annotations\":{\"title\":\"Subscribe for Duration\",\"readOnlyHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 289
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:subscribe_for_duration",
+"text": "subscribe_for_duration:Subscribe to a topic for a duration and collect messages.\nExample:\nsubscribe_for_duration(topic='/cmd_vel', msg_type='geometry_msgs/msg/TwistStamped', duration=5, max_messages=10)\nsubscribe_for_duration(topic='/high_rate_topic', msg_type='sensor_msgs/Image', duration=10, queue_length=5, throttle_rate_ms=100)  # Control message buffering and rate\nsubscribe_for_duration(topic='/camera/image_raw', msg_type='sensor_msgs/Image', duration=5, expects_image='true')  # Hint that this is an image for faster processing\nsubscribe_for_duration(topic='/point_cloud', msg_type='sensor_msgs/PointCloud2', duration=5, expects_image='false')  # Skip image detection for non-image data",
+"o200k": 156
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:publish_for_durations",
+"text": "{\"name\":\"publish_for_durations\",\"title\":\"Publish for Durations\",\"description\":\"Publish a sequence of messages to a ROS topic, each held for a given duration.\\nWith rate_hz=0 (default): publishes each message once, then waits for the duration.\\nWith rate_hz>0: publishes each message repeatedly at the given rate for the duration (useful for controllers like diff_drive that need continuous commands).\\nExample (single publish with delay):\\npublish_for_durations(topic='/cmd_vel', msg_type='geometry_msgs/msg/Twist', messages=[{'linear': {'x': 1.0}}, {'linear': {'x': 0.0}}], durations=[1, 2])\\nExample (continuous streaming at 10 Hz for 2 seconds):\\npublish_for_durations(topic='/cmd_vel', msg_type='geometry_msgs/msg/Twist', messages=[{'angular': {'z': 0.5}}], durations=[2.0], rate_hz=10)\",\"inputSchema\":{\"properties\":{\"topic\":{\"default\":\"\",\"type\":\"string\"},\"msg_type\":{\"default\":\"\",\"type\":\"string\"},\"messages\":{\"default\":[],\"items\":{\"additionalProperties\":true,\"type\":\"object\"},\"type\":\"array\"},\"durations\":{\"default\":[],\"items\":{\"type\":\"number\"},\"type\":\"array\"},\"rate_hz\":{\"default\":0,\"type\":\"number\"}},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Publish for Durations\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 331
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:publish_for_durations",
+"text": "publish_for_durations:Publish a sequence of messages to a ROS topic, each held for a given duration.\nWith rate_hz=0 (default): publishes each message once, then waits for the duration.\nWith rate_hz>0: publishes each message repeatedly at the given rate for the duration (useful for controllers like diff_drive that need continuous commands).\nExample (single publish with delay):\npublish_for_durations(topic='/cmd_vel', msg_type='geometry_msgs/msg/Twist', messages=[{'linear': {'x': 1.0}}, {'linear': {'x': 0.0}}], durations=[1, 2])\nExample (continuous streaming at 10 Hz for 2 seconds):\npublish_for_durations(topic='/cmd_vel', msg_type='geometry_msgs/msg/Twist', messages=[{'angular': {'z': 0.5}}], durations=[2.0], rate_hz=10)",
+"o200k": 187
+},
+{
+"name": "rosmcp_camera_generic_sbc/tool:publish_once",
+"text": "{\"name\":\"publish_once\",\"title\":\"Publish Once\",\"description\":\"Publish a single message to a ROS topic.\\nExample:\\npublish_once(topic='/cmd_vel', msg_type='geometry_msgs/msg/TwistStamped', msg={'linear': {'x': 1.0}})\",\"inputSchema\":{\"properties\":{\"topic\":{\"default\":\"\",\"type\":\"string\"},\"msg_type\":{\"default\":\"\",\"type\":\"string\"},\"msg\":{\"additionalProperties\":true,\"default\":{},\"type\":\"object\"}},\"type\":\"object\"},\"outputSchema\":{\"additionalProperties\":true,\"type\":\"object\"},\"annotations\":{\"title\":\"Publish Once\",\"destructiveHint\":true},\"_meta\":{\"_fastmcp\":{\"tags\":[]}}}",
+"o200k": 140
+},
+{
+"name": "rosmcp_camera_generic_sbc/desc:publish_once",
+"text": "publish_once:Publish a single message to a ROS topic.\nExample:\npublish_once(topic='/cmd_vel', msg_type='geometry_msgs/msg/TwistStamped', msg={'linear': {'x': 1.0}})",
+"o200k": 44
+},
+{
+"name": "rosmcp_compact_json_sbc/00_status.txt",
+"text": "{\"free_m\":{\"back\":0.58,\"front\":1.0,\"left\":1.49,\"right\":0.56},\"nav\":\"idle\",\"nearest\":{\"deg\":-130,\"m\":0.53},\"pose\":{\"heading_deg\":-18,\"near\":\"dock\",\"near_m\":0.04,\"x\":-1.96,\"y\":-0.49}}",
+"o200k": 78
+},
+{
+"name": "rosmcp_compact_json_sbc/01_look_summary.txt",
+"text": "{\"detector\":\"none\",\"in_view\":{\"nearest_m\":1.01,\"occupied_pct\":71,\"side\":\"right\"}}",
+"o200k": 25
+},
+{
+"name": "rosmcp_compact_sbc/00_status.txt",
+"text": "{\"free_m\":{\"back\":0.49,\"front\":0.93,\"left\":1.15,\"right\":0.57},\"nav\":\"idle\",\"nearest\":{\"deg\":-147,\"m\":0.49},\"pose\":{\"heading_deg\":0,\"near\":\"dock\",\"near_m\":0.0,\"x\":-2.0,\"y\":-0.5}}",
+"o200k": 77
+},
+{
+"name": "rosmcp_compact_sbc/01_look_summary.txt",
+"text": "{\"detector\":\"none\",\"in_view\":{\"nearest_m\":0.92,\"occupied_pct\":68,\"side\":\"left\"}}",
+"o200k": 25
+},
+{
+"name": "rosmcp_compact_sbc/02_look_image.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.6,\"ms\":944,\"w\":320},\"in_view\":{\"nearest_m\":0.93,\"occupied_pct\":68,\"side\":\"left\"}}",
+"o200k": 45
+},
+{
+"name": "rosmcp_compact_sbc/03_go_east.txt",
+"text": "{\"err_m\":0.28,\"ok\":true,\"place\":\"east\",\"s\":16.0,\"status\":\"succeeded\"}",
+"o200k": 27
+},
+{
+"name": "rosmcp_compact_sbc/04_status_after.txt",
+"text": "{\"free_m\":{\"back\":1.46,\"front\":0.87,\"left\":1.05,\"right\":0.51},\"last\":{\"place\":\"east\",\"s\":16.0,\"status\":\"succeeded\"},\"nav\":\"idle\",\"nearest\":{\"deg\":-131,\"m\":0.46},\"pose\":{\"heading_deg\":-4,\"near\":\"east\",\"near_m\":0.28,\"x\":1.52,\"y\":0.48}}",
+"o200k": 94
+},
+{
+"name": "rosmcp_compact_sbc/05_patrol.txt",
+"text": "{\"legs\":[{\"place\":\"north\",\"s\":17.0,\"status\":\"succeeded\"},{\"place\":\"dock\",\"s\":23.9,\"status\":\"succeeded\"}],\"ok\":true}",
+"o200k": 39
+},
+{
+"name": "rosmcp_compact_sbc/06_go_unknown.txt",
+"text": "Error executing tool go_to: 1 validation error for go_toArguments\nplace\n  Input should be 'dock', 'east', 'east_south', 'north', 'south', 'north_east', 'center_ne' or 'center_sw' [type=literal_error, input_value='kitchen', input_type=str]\n    For further information visit https://errors.pydantic.dev/2.13/v/literal_error",
+"o200k": 88
+},
+{
+"name": "rosmcp_compact_sbc/07_stop.txt",
+"text": "{\"cancelled\":null,\"ok\":true}",
+"o200k": 10
+},
+{
+"name": "rosmcp_compact_sbc/08_status_end.txt",
+"text": "{\"free_m\":{\"back\":0.56,\"front\":1.01,\"left\":1.49,\"right\":0.55},\"last\":{\"place\":\"dock\",\"s\":23.9,\"status\":\"succeeded\"},\"nav\":\"idle\",\"nearest\":{\"deg\":-134,\"m\":0.53},\"pose\":{\"heading_deg\":-18,\"near\":\"dock\",\"near_m\":0.04,\"x\":-1.96,\"y\":-0.49}}",
+"o200k": 96
+},
+{
+"name": "rosmcp_generic_sbc/00_connect_direct.txt",
+"text": "{\"message\":\"WebSocket IP set to host.lima.internal:9090\",\"connectivity_test\":{\"ip\":\"host.lima.internal\",\"port\":9090,\"ping\":{\"success\":true,\"error\":null,\"response_time_ms\":0.147},\"port_check\":{\"open\":true,\"error\":null},\"overall_status\":\"Fully_accessible. The robot is reachable and the port is open, indicating that we are likely able to connect to ROS\"}}",
+"o200k": 89
+},
+{
+"name": "rosmcp_generic_sbc/01_connect_proxy.txt",
+"text": "{\"message\":\"WebSocket IP set to 127.0.0.1:40693\",\"connectivity_test\":{\"ip\":\"127.0.0.1\",\"port\":40693,\"ping\":{\"success\":true,\"error\":null,\"response_time_ms\":0.029},\"port_check\":{\"open\":true,\"error\":null},\"overall_status\":\"Fully_accessible. The robot is reachable and the port is open, indicating that we are likely able to connect to ROS\"}}",
+"o200k": 96
+},
+{
+"name": "rosmcp_generic_sbc/02_get_topics.txt",
+"text": "{\"topics\":[\"/amcl/transition_event\",\"/amcl_pose\",\"/battery_state\",\"/behavior_server/transition_event\",\"/behavior_tree_log\",\"/bond\",\"/bt_navigator/transition_event\",\"/camera/camera_info\",\"/camera/image_raw\",\"/camera/image_raw/compressed\",\"/client_count\",\"/clock\",\"/cmd_vel\",\"/cmd_vel_nav\",\"/cmd_vel_smoothed\",\"/cmd_vel_teleop\",\"/collision_monitor/collision_points_marker\",\"/collision_monitor/transition_event\",\"/collision_monitor_state\",\"/connected_clients\",\"/controller_selector\",\"/controller_server/transition_event\",\"/cost_cloud\",\"/diagnostics\",\"/dock_pose\",\"/docking_server/transition_event\",\"/docking_trajectory\",\"/evaluation\",\"/filtered_dock_pose\",\"/global_costmap/clearing_endpoints\",\"/global_costmap/costmap\",\"/global_costmap/costmap_raw\",\"/global_costmap/costmap_raw_updates\",\"/global_costmap/costmap_updates\",\"/global_costmap/footprint\",\"/global_costmap/global_costmap/transition_event\",\"/global_costmap/obstacle_layer\",\"/global_costmap/obstacle_layer_raw\",\"/global_costmap/obstacle_layer_raw_updates\",\"/global_costmap/obstacle_layer_updates\",\"/global_costmap/published_footprint\",\"/global_costmap/static_layer\",\"/global_costmap/static_layer_raw\",\"/global_costmap/static_layer_raw_updates\",\"/global_costmap/static_layer_updates\",\"/global_costmap/voxel_grid\",\"/global_costmap/voxel_layer\",\"/global_costmap/voxel_layer_raw\",\"/global_costmap/voxel_layer_raw_updates\",\"/global_costmap/voxel_layer_updates\",\"/goal_pose\",\"/ground_truth/pose\",\"/imu\",\"/initialpose\",\"/joint_states\",\"/local_costmap/clearing_endpoints\",\"/local_costmap/costmap\",\"/local_costmap/costmap_raw\",\"/local_costmap/costmap_raw_updates\",\"/local_costmap/costmap_updates\",\"/local_costmap/footprint\",\"/local_costmap/local_costmap/transition_event\",\"/local_costmap/obstacle_layer\",\"/local_costmap/obstacle_layer_raw\",\"/local_costmap/obstacle_layer_raw_updates\",\"/local_costmap/obstacle_layer_updates\",\"/local_costmap/published_footprint\",\"/local_costmap/voxel_grid\",\"/local_costmap/voxel_layer\",\"/local_costmap/voxel_layer_raw\",\"/local_costmap/voxel_layer_raw_updates\",\"/local_costmap/voxel_layer_updates\",\"/local_plan\",\"/map\",\"/map_server/transition_event\",\"/marker\",\"/odom\",\"/parameter_events\",\"/particle_cloud\",\"/plan\",\"/plan_smoothed\",\"/planner_selector\",\"/planner_server/transition_event\",\"/polygon_slowdown\",\"/polygon_stop\",\"/preempt_teleop\",\"/received_global_plan\",\"/robot_description\",\"/rosout\",\"/route_graph\",\"/route_server/transition_event\",\"/scan\",\"/smoother_server/transition_event\",\"/speed_limit\",\"/staging_pose\",\"/tf\",\"/tf_static\",\"/transformed_global_plan\",\"/velocity_smoother/transition_event\",\"/waypoint_follower/transition_event\"],\"types\":[\"lifecycle_msgs/msg/TransitionEvent\",\"geometry_msgs/msg/PoseWithCovarianceStamped\",\"sensor_msgs/msg/BatteryState\",\"lifecycle_msgs/msg/TransitionEvent\",\"nav2_msgs/msg/BehaviorTreeLog\",\"bond/msg/Status\",\"lifecycle_msgs/msg/TransitionEvent\",\"sensor_msgs/msg/CameraInfo\",\"sensor_msgs/msg/Image\",\"sensor_msgs/msg/CompressedImage\",\"std_msgs/msg/Int32\",\"rosgraph_msgs/msg/Clock\",\"geometry_msgs/msg/TwistStamped\",\"geometry_msgs/msg/TwistStamped\",\"geometry_msgs/msg/TwistStamped\",\"geometry_msgs/msg/TwistStamped\",\"visualization_msgs/msg/MarkerArray\",\"lifecycle_msgs/msg/TransitionEvent\",\"nav2_msgs/msg/CollisionMonitorState\",\"rosbridge_msgs/msg/ConnectedClients\",\"std_msgs/msg/String\",\"lifecycle_msgs/msg/TransitionEvent\",\"sensor_msgs/msg/PointCloud2\",\"diagnostic_msgs/msg/DiagnosticArray\",\"geometry_msgs/msg/PoseStamped\",\"lifecycle_msgs/msg/TransitionEvent\",\"nav_msgs/msg/Path\",\"dwb_msgs/msg/LocalPlanEvaluation\",\"geometry_msgs/msg/PoseStamped\",\"sensor_msgs/msg/PointCloud2\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"geometry_msgs/msg/Polygon\",\"lifecycle_msgs/msg/TransitionEvent\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"geometry_msgs/msg/PolygonStamped\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"nav2_msgs/msg/VoxelGrid\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"geometry_msgs/msg/PoseStamped\",\"geometry_msgs/msg/PoseStamped\",\"sensor_msgs/msg/Imu\",\"geometry_msgs/msg/PoseWithCovarianceStamped\",\"sensor_msgs/msg/JointState\",\"sensor_msgs/msg/PointCloud2\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"geometry_msgs/msg/Polygon\",\"lifecycle_msgs/msg/TransitionEvent\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"geometry_msgs/msg/PolygonStamped\",\"nav2_msgs/msg/VoxelGrid\",\"nav_msgs/msg/OccupancyGrid\",\"nav2_msgs/msg/Costmap\",\"nav2_msgs/msg/CostmapUpdate\",\"map_msgs/msg/OccupancyGridUpdate\",\"nav_msgs/msg/Path\",\"nav_msgs/msg/OccupancyGrid\",\"lifecycle_msgs/msg/TransitionEvent\",\"visualization_msgs/msg/MarkerArray\",\"nav_msgs/msg/Odometry\",\"rcl_interfaces/msg/ParameterEvent\",\"nav2_msgs/msg/ParticleCloud\",\"nav_msgs/msg/Path\",\"nav_msgs/msg/Path\",\"std_msgs/msg/String\",\"lifecycle_msgs/msg/TransitionEvent\",\"geometry_msgs/msg/PolygonStamped\",\"geometry_msgs/msg/PolygonStamped\",\"std_msgs/msg/Empty\",\"nav_msgs/msg/Path\",\"std_msgs/msg/String\",\"rcl_interfaces/msg/Log\",\"visualization_msgs/msg/MarkerArray\",\"lifecycle_msgs/msg/TransitionEvent\",\"sensor_msgs/msg/LaserScan\",\"lifecycle_msgs/msg/TransitionEvent\",\"nav2_msgs/msg/SpeedLimit\",\"geometry_msgs/msg/PoseStamped\",\"tf2_msgs/msg/TFMessage\",\"tf2_msgs/msg/TFMessage\",\"nav_msgs/msg/Path\",\"lifecycle_msgs/msg/TransitionEvent\",\"lifecycle_msgs/msg/TransitionEvent\"],\"topic_count\":100}",
+"o200k": 1454
+},
+{
+"name": "rosmcp_generic_sbc/03_get_topic_type_cmd_vel.txt",
+"text": "{\"topic\":\"/cmd_vel\",\"type\":\"geometry_msgs/msg/TwistStamped\"}",
+"o200k": 16
+},
+{
+"name": "rosmcp_generic_sbc/04_msg_details_twiststamped.txt",
+"text": "{\"message_type\":\"geometry_msgs/msg/TwistStamped\",\"structure\":{\"geometry_msgs/TwistStamped\":{\"fields\":{\"header\":\"std_msgs/Header\",\"twist\":\"geometry_msgs/Twist\"},\"field_count\":2},\"std_msgs/Header\":{\"fields\":{\"stamp\":\"builtin_interfaces/Time\",\"frame_id\":\"string\"},\"field_count\":2},\"builtin_interfaces/Time\":{\"fields\":{\"sec\":\"int32\",\"nanosec\":\"uint32\"},\"field_count\":2},\"geometry_msgs/Twist\":{\"fields\":{\"linear\":\"geometry_msgs/Vector3\",\"angular\":\"geometry_msgs/Vector3\"},\"field_count\":2},\"geometry_msgs/Vector3\":{\"fields\":{\"x\":\"double\",\"y\":\"double\",\"z\":\"double\"},\"field_count\":3}}}",
+"o200k": 146
+},
+{
+"name": "rosmcp_generic_sbc/05_odom.txt",
+"text": "{\"msg\":{\"header\":{\"stamp\":{\"sec\":14,\"nanosec\":660000000},\"frame_id\":\"odom\"},\"child_frame_id\":\"base_footprint\",\"pose\":{\"pose\":{\"position\":{\"x\":8.784025113115279e-9,\"y\":2.6808658130322922e-20,\"z\":0.0},\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":3.0519862014482083e-12,\"w\":1.0}},\"covariance\":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]},\"twist\":{\"twist\":{\"linear\":{\"x\":-1.9025154088719637e-21,\"y\":0.0,\"z\":0.0},\"angular\":{\"x\":0.0,\"y\":0.0,\"z\":4.035027378307452e-21}},\"covariance\":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]}}}",
+"o200k": 468
+},
+{
+"name": "rosmcp_generic_sbc/06_scan.txt",
+"text": "{\"msg\":{\"header\":{\"stamp\":{\"sec\":15,\"nanosec\":0},\"frame_id\":\"base_scan\"},\"angle_min\":0.0,\"angle_max\":6.28000020980835,\"angle_increment\":0.01749303564429283,\"time_increment\":0.0,\"scan_time\":0.0,\"range_min\":0.11999999731779099,\"range_max\":3.5,\"ranges\":[null,null,null,null,null,null,null,3.1165788173675537,3.0605995655059814,3.0558054447174072,2.049410104751587,1.9964479207992554,1.9997012615203857,1.9876766204833984,1.9866199493408203,1.976426601409912,2.0066142082214355,2.0329439640045166,null,null,1.0177562236785889,0.9827922582626343,0.9698653221130371,0.9432305097579956,0.9608685970306396,0.9475759267807007,0.942101776599884,0.9239773750305176,0.9253078103065491,0.9280654191970825,0.9496282935142517,0.9483780860900879,0.9869495034217834,0.9781306982040405,1.0029805898666382,1.0257601737976074,2.478309392929077,2.4633357524871826,2.4698307514190674,2.481139898300171,2.5079548358917236,2.567063093185425,null,null,null,null,null,null,null,null,null,null,null,null,null,1.7856473922729492,1.743108868598938,1.7201504707336426,1.7114665508270264,1.731596827507019,1.722967267036438,1.7346489429473877,1.78096342086792,1.7992454767227173,3.3881454467773438,3.349825859069824,3.319572687149048,3.292473554611206,3.258246660232544,3.239119529724121,3.2363295555114746,3.194746255874634,3.158100128173828,2.9724233150482178,2.7978720664978027,2.58335018157959,2.5795679092407227,2.572770833969116,2.5649006366729736,2.5343902111053467,2.5389254093170166,2.532172203063965,2.5489258766174316,2.5100255012512207,2.4565913677215576,2.3613853454589844,2.27614164352417,2.21470308303833,2.1514854431152344,2.011995792388916,1.9808534383773804,1.9208600521087646,1.8719769716262817,1.8153845071792603,1.7890350818634033,1.7459299564361572,1.7183444499969482,1.647419810295105,1.6101865768432617,1.576115608215332,1.5464694499969482,1.5273364782333374,1.491567850112915,1.4618967771530151,1.4288846254348755,1.4211177825927734,1.3874847888946533,1.3689018487930298,1.339921474456787,1.3138774633407593,1.3070850372314453,1.2739779949188232,1.25740385055542,1.2589892148971558,1.2415904998779297,1.2128608226776123,1.214316725730896,1.203953504562378,1.1704823970794678,1.1589570045471191,1.14570152759552,1.1524081230163574,1.1505343914031982,1.1318916082382202,1.1126245260238647,1.10396146774292,1.0876580476760864,1.0882869958877563,1.0791075229644775,1.0772944688796997,1.068591594696045,1.0766297578811646,1.0534592866897583,1.022369384765625,1.0297791957855225,1.0298261642456055,1.0287967920303345,1.0361641645431519,1.0297507047653198,1.0097912549972534,1.0311987400054932,1.0082155466079712,1.0097540616989136,1.0051957368850708,1.0023460388183594,1.0064815282821655,0.9941654801368713,0.9981058239936829,1.0111104249954224,1.0083720684051514,0.9943532943725586,0.9531790614128113,0.9390741586685181,0.9411926865577698,0.8880116939544678,0.871635377407074,0.8559277653694153,0.8393661379814148,0.8240063190460205,0.7978020906448364,0.7642497420310974,0.7619467973709106,0.7525922060012817,0.7498865127563477,0.7127182483673096,0.723185122013092,0.6968454122543335,0.6666409969329834,0.6773175001144409,0.6580489277839661,0.6514644026756287,0.6429809331893921,0.628707766532898,0.6294652223587036,0.6329667568206787,0.5947254300117493,0.5939730405807495,0.5844749808311462,0.5922542214393616,0.5851134657859802,0.579534113407135,0.5842292308807373,0.5672473311424255,0.5625657439231873,0.563711941242218,0.5535742044448853,0.54132080078125,0.5398037433624268,0.5574572086334229,0.5619223713874817,0.5196167826652527,0.5404766798019409,0.5164722204208374,0.5263545513153076,0.5224010944366455,0.5292073488235474,0.5072410106658936,0.5117095112800598,0.5216078758239746,0.481347918510437,0.5193263292312622,0.5054776072502136,0.5307702422142029,0.5038439035415649,0.4875473380088806,0.5007878541946411,0.5190606713294983,0.4900961220264435,0.5216158032417297,0.5163674354553223,0.5107330083847046,0.492655485868454,0.4799189567565918,0.5067780017852783,0.5083691477775574,0.4953879117965698,0.5167142152786255,0.5219740867614746,0.5212270021438599,0.5064926147460938,0.4970153570175171,0.5134831070899963,0.5248216390609741,0.5107912421226501,0.5073659420013428,0.515712320804596,0.5153343677520752,0.5217025279998779,0.5403986573219299,0.554911196231842,0.5349979400634766,0.5227488875389099,0.5443688631057739,0.5471587181091309,0.5513521432876587,0.5583965182304382,0.5605419874191284,0.5645235180854797,0.560168981552124,0.5992410182952881,0.5754858255386353,0.5816623568534851,0.6042172908782959,0.6007471084594727,0.6042018532752991,0.6023825407028198,0.6251258850097656,0.6408920884132385,0.6529205441474915,0.64560866355896,0.6418267488479614,0.6676118969917297,0.6806313395500183,0.6997805833816528,0.7010557055473328,0.7070660591125488,0.723296582698822,0.7513284683227539,0.7613596320152283,0.7805711627006531,0.7880315184593201,0.8049702048301697,0.8253839612007141,0.8452601432800293,0.8622124791145325,0.8866694569587708,0.9251231551170349,0.9406776428222656,0.9745585322380066,0.9915878772735596,1.0210539102554321,1.046915888786316,1.0764762163162231,1.1420880556106567,1.1740055084228516,1.226095199584961,1.26669180393219,1.3301910161972046,1.3622971773147583,1.418879508972168,1.5455667972564697,1.5340925455093384,1.5287797451019287,1.558340072631836,1.5597954988479614,1.5606449842453003,1.578507900238037,1.5867012739181519,1.5879969596862793,1.5902951955795288,1.6133860349655151,1.6098710298538208,1.6519092321395874,1.635733723640442,1.880513072013855,2.18788743019104,2.2853634357452393,2.2898917198181152,2.333277463912964,2.356768846511841,2.35886287689209,2.409412145614624,2.43412184715271,2.457662343978882,2.4719655513763428,2.496694326400757,2.550069808959961,2.5666120052337646,2.6289074420928955,2.6658616065979004,2.7080576419830322,2.7543795108795166,2.7871129512786865,2.8200554847717285,2.865337610244751,2.923234224319458,2.9909539222717285,3.0239830017089844,3.083787441253662,3.1408467292785645,1.1001321077346802,1.0598558187484741,1.0246158838272095,1.0067510604858398,0.9966855645179749,1.0031039714813232,0.9859218597412109,0.9766005873680115,0.9865491390228271,0.9782599210739136,0.9992261528968811,0.9951105713844299,1.0201914310455322,1.0464485883712769,1.0370755195617676,null,null,null,null,2.1271770000457764,2.0520176887512207,2.0298879146575928,2.009904384613037,2.0065603256225586,1.9941070079803467,2.0178561210632324,2.035923957824707,3.0759434700012207,3.048351764678955,3.0756099224090576,3.0899949073791504,3.1393282413482666,null,null,null,null,null,null,null,null],\"intensities\":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0]}}",
+"o200k": 4433
+},
+{
+"name": "rosmcp_generic_sbc/07_amcl_pose.txt",
+"text": "{\"msg\":{\"header\":{\"stamp\":{\"sec\":3,\"nanosec\":100000000},\"frame_id\":\"map\"},\"pose\":{\"pose\":{\"position\":{\"x\":-2.0,\"y\":-0.5,\"z\":0.0},\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":0.0,\"w\":1.0}},\"covariance\":[0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,1.0946799022804343e-13]}}}",
+"o200k": 235
+},
+{
+"name": "rosmcp_generic_sbc/10_cmd_vel_example_style.txt",
+"text": "{\"success\":true,\"note\":\"Message published using advertise → publish → unadvertise pattern\"}",
+"o200k": 19
+},
+{
+"name": "rosmcp_generic_sbc/13_cmd_vel_durations.txt",
+"text": "{\"success\":true,\"published_count\":25,\"total_messages\":2,\"topic\":\"/cmd_vel\",\"msg_type\":\"geometry_msgs/msg/TwistStamped\",\"rate_hz\":10.0,\"errors\":[]}",
+"o200k": 42
+},
+{
+"name": "rosmcp_generic_sbc/14_get_actions.txt",
+"text": "{\"actions\":[\"/assisted_teleop\",\"/backup\",\"/compute_and_track_route\",\"/compute_path_through_poses\",\"/compute_path_to_pose\",\"/compute_route\",\"/dock_robot\",\"/drive_on_heading\",\"/follow_gps_waypoints\",\"/follow_path\",\"/follow_waypoints\",\"/navigate_through_poses\",\"/navigate_to_pose\",\"/smooth_path\",\"/spin\",\"/undock_robot\",\"/wait\"],\"action_count\":17}",
+"o200k": 95
+},
+{
+"name": "rosmcp_generic_sbc/15_action_details_nav.txt",
+"text": "{\"action\":\"/navigate_to_pose\",\"action_type\":\"nav2_msgs/action/NavigateToPose\",\"goal\":{\"fields\":{\"pose\":\"geometry_msgs/PoseStamped\",\"behavior_tree\":\"string\"},\"field_count\":2},\"result\":{\"fields\":{\"error_code\":\"uint16\",\"error_msg\":\"string\"},\"field_count\":2},\"feedback\":{\"fields\":{\"current_pose\":\"geometry_msgs/PoseStamped\",\"navigation_time\":\"builtin_interfaces/Duration\",\"estimated_time_remaining\":\"builtin_interfaces/Duration\",\"number_of_recoveries\":\"int16\",\"distance_remaining\":\"float\"},\"field_count\":5}}",
+"o200k": 114
+},
+{
+"name": "rosmcp_generic_sbc/16_nav_east.txt",
+"text": "{\"action\":\"/navigate_to_pose\",\"action_type\":\"nav2_msgs/action/NavigateToPose\",\"success\":true,\"goal_id\":\"goal_1791323723542_8759a2c3\",\"status\":4,\"result\":{\"error_code\":0,\"error_msg\":\"\"}}",
+"o200k": 58
+},
+{
+"name": "rosmcp_generic_sbc/17_action_status.txt",
+"text": "{\"action_name\":\"/navigate_to_pose\",\"active_goals\":[{\"goal_id\":\"k+wJnvXjQtqiebaOofLQSg==\",\"status\":4,\"status_text\":\"STATUS_SUCCEEDED\",\"timestamp\":\"45.403000000\"}],\"goal_count\":1}",
+"o200k": 59
+},
+{
+"name": "rosmcp_generic_sbc/18_nav_dock_default_timeout.txt",
+"text": "{\"action\":\"/navigate_to_pose\",\"action_type\":\"nav2_msgs/action/NavigateToPose\",\"success\":false,\"goal_id\":\"goal_1791323743105_816c5358\",\"error\":\"Action timed out after 5.0 seconds\",\"last_feedback\":{\"current_pose\":{\"header\":{\"stamp\":{\"sec\":69,\"nanosec\":660000000},\"frame_id\":\"map\"},\"pose\":{\"position\":{\"x\":1.1359227695301488,\"y\":0.6066198452731085,\"z\":0.01},\"orientation\":{\"x\":0.0,\"y\":0.0,\"z\":0.9925456151857267,\"w\":-0.1218737124058642}}},\"navigation_time\":{\"sec\":4,\"nanosec\":954000000},\"estimated_time_remaining\":{\"sec\":13,\"nanosec\":89127520},\"number_of_recoveries\":0,\"distance_remaining\":3.845710515975952},\"feedback_count\":500}",
+"o200k": 205
+},
+{
+"name": "compact_sbc/00_status.txt",
+"text": "{\"alert\":\"none\",\"battery_pct\":100,\"free_m\":{\"back\":0.52,\"front\":0.9,\"left\":1.08,\"right\":0.72},\"nav\":\"idle\",\"place\":\"dock\",\"place_m\":0.05}",
+"o200k": 52
+},
+{
+"name": "compact_sbc/01_look_summary.txt",
+"text": "{\"detector\":\"none\",\"in_view\":{\"nearest_m\":0.9,\"occupied_pct\":74,\"side\":\"left\"},\"place\":\"dock\"}",
+"o200k": 30
+},
+{
+"name": "compact_sbc/02_look_image.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.2,\"w\":320},\"in_view\":{\"nearest_m\":0.9,\"occupied_pct\":74,\"side\":\"left\"},\"place\":\"dock\"}",
+"o200k": 46
+},
+{
+"name": "compact_sbc/03_go_door.txt",
+"text": "{\"accepted\":\"door\",\"eta_s\":20,\"ok\":true}",
+"o200k": 14
+},
+{
+"name": "compact_sbc/04_status_after.txt",
+"text": "{\"alert\":\"none\",\"battery_pct\":100,\"free_m\":{\"back\":1.45,\"front\":0.94,\"left\":0.56,\"right\":1.52},\"nav\":\"succeeded\",\"place\":\"door\",\"place_m\":0.5}",
+"o200k": 53
+},
+{
+"name": "compact_sbc/05_look_at_door.txt",
+"text": "{\"detector\":\"none\",\"in_view\":{\"nearest_m\":0.94,\"occupied_pct\":100,\"side\":\"left\"},\"place\":\"door\"}",
+"o200k": 30
+},
+{
+"name": "compact_sbc/06_patrol.txt",
+"text": "{\"accepted\":2,\"eta_s\":34,\"ok\":true}",
+"o200k": 14
+},
+{
+"name": "compact_sbc/07_go_unknown.txt",
+"text": "{\"error\":\"unknown place\",\"known\":[\"dock\",\"door\",\"corridor\",\"window\",\"shelf\",\"desk\",\"pass_ne\",\"pass_sw\"],\"ok\":false}",
+"o200k": 33
+},
+{
+"name": "compact_sbc/08_go_window_stop.txt",
+"text": "{\"accepted\":\"window\",\"eta_s\":18,\"ok\":true}",
+"o200k": 14
+},
+{
+"name": "compact_sbc/09_status_end.txt",
+"text": "{\"alert\":\"none\",\"battery_pct\":100,\"free_m\":{\"back\":0.91,\"front\":0.65,\"left\":0.33,\"right\":0.53},\"nav\":\"canceled\",\"place\":\"between\",\"place_m\":0.9}",
+"o200k": 53
+},
+{
+"name": "compact_sbc/10_return_dock.txt",
+"text": "{\"accepted\":\"dock\",\"eta_s\":13,\"ok\":true}",
+"o200k": 14
+},
+{
+"name": "compact_sbc/11_diag.txt",
+"text": "{\"calls\":{\"go_to\":{\"image_bytes\":0,\"images\":0,\"ms\":1.098,\"n\":4,\"text_bytes\":237,\"tokens_est\":74},\"look\":{\"image_bytes\":4279,\"images\":1,\"ms\":903.196,\"n\":3,\"text_bytes\":319,\"tokens_est\":107},\"patrol\":{\"image_bytes\":0,\"images\":0,\"ms\":0.186,\"n\":1,\"text_bytes\":35,\"tokens_est\":14},\"status\":{\"image_bytes\":0,\"images\":0,\"ms\":170.916,\"n\":3,\"text_bytes\":423,\"tokens_est\":160},\"stop\":{\"image_bytes\":0,\"images\":0,\"ms\":0.189,\"n\":1,\"text_bytes\":32,\"tokens_est\":10}},\"connected\":true,\"notify\":{\"coalesced\":0,\"enqueued\":5,\"queued\":0,\"sent\":5},\"robot\":{\"counters\":{\"amcl_rx\":48,\"frames\":1,\"notify_alert\":1,\"notify_task_end\":4,\"scan_cache_hit\":3,\"scan_once\":3,\"task_end_canceled\":1,\"task_end_succeeded\":3,\"task_go_to\":3,\"task_patrol\":1},\"motion_scan\":false,\"task_active\":false},\"rosbridge\":{\"bytes_rx\":47226,\"bytes_tx\":2423,\"conns\":1,\"dial_fail\":0,\"msg_rx\":57,\"msg_tx\":17,\"rx\":{\"action_result\":{\"bytes\":656,\"n\":5},\"publish /amcl_pose\":{\"bytes\":24971,\"n\":48},\"publish /camera/image_raw/compressed\":{\"bytes\":12191,\"n\":1},\"publish /scan\":{\"bytes\":9408,\"n\":3}},\"tcp_rx\":47647,\"tcp_tx\":2725,\"tx\":{\"advertise\":{\"bytes\":77,\"n\":1},\"cancel_action_goal\":{\"bytes\":69,\"n\":1},\"publish /cmd_vel\":{\"bytes\":88,\"n\":1},\"send_action_goal\":{\"bytes\":1310,\"n\":5},\"subscribe\":{\"bytes\":656,\"n\":5},\"unsubscribe\":{\"bytes\":223,\"n\":4}}}}",
+"o200k": 438
+},
+{
+"name": "compact_sbc/tool:go_to",
+"text": "{\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Drive to a named place. Returns at once with eta_s; the result arrives later as a state update.\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{\"place\":{\"enum\":[\"dock\",\"door\",\"corridor\",\"window\",\"shelf\",\"desk\",\"pass_ne\",\"pass_sw\"],\"type\":\"string\"}},\"required\":[\"place\"],\"type\":\"object\"},\"name\":\"go_to\"}",
+"o200k": 107
+},
+{
+"name": "compact_sbc/desc:go_to",
+"text": "go_to:Drive to a named place. Returns at once with eta_s; the result arrives later as a state update.",
+"o200k": 25
+},
+{
+"name": "compact_sbc/tool:look",
+"text": "{\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Short summary of what is ahead of the camera. place: go there first (result arrives as a state update).\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{\"image\":{\"description\":\"attach a 320x240 JPEG (here only)\",\"type\":\"boolean\"},\"place\":{\"enum\":[\"dock\",\"door\",\"corridor\",\"window\",\"shelf\",\"desk\",\"pass_ne\",\"pass_sw\"],\"type\":\"string\"}},\"type\":\"object\"},\"name\":\"look\"}",
+"o200k": 124
+},
+{
+"name": "compact_sbc/desc:look",
+"text": "look:Short summary of what is ahead of the camera. place: go there first (result arrives as a state update).",
+"o200k": 25
+},
+{
+"name": "compact_sbc/tool:patrol",
+"text": "{\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Visit places in order on board in one call; the result arrives as a state update.\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{\"look\":{\"description\":\"detector at each place\",\"type\":\"boolean\"},\"places\":{\"items\":{\"enum\":[\"dock\",\"door\",\"corridor\",\"window\",\"shelf\",\"desk\",\"pass_ne\",\"pass_sw\"],\"type\":\"string\"},\"maxItems\":12,\"minItems\":1,\"type\":\"array\"}},\"required\":[\"places\"],\"type\":\"object\"},\"name\":\"patrol\"}",
+"o200k": 135
+},
+{
+"name": "compact_sbc/desc:patrol",
+"text": "patrol:Visit places in order on board in one call; the result arrives as a state update.",
+"o200k": 21
+},
+{
+"name": "compact_sbc/tool:status",
+"text": "{\"annotations\":{\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":true},\"description\":\"Robot state: place (between = moving), nav, battery, alert, task progress, free space by lidar sector (m).\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"name\":\"status\"}",
+"o200k": 72
+},
+{
+"name": "compact_sbc/desc:status",
+"text": "status:Robot state: place (between = moving), nav, battery, alert, task progress, free space by lidar sector (m).",
+"o200k": 28
+},
+{
+"name": "compact_sbc/tool:stop",
+"text": "{\"annotations\":{\"destructiveHint\":false,\"idempotentHint\":false,\"openWorldHint\":false,\"readOnlyHint\":false},\"description\":\"Cancel the active task and stop.\",\"inputSchema\":{\"additionalProperties\":false,\"properties\":{},\"type\":\"object\"},\"name\":\"stop\"}",
+"o200k": 58
+},
+{
+"name": "compact_sbc/desc:stop",
+"text": "stop:Cancel the active task and stop.",
+"o200k": 9
+},
+{
+"name": "camera_sbc/00_frame_00.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.4,\"w\":320},\"in_view\":{\"nearest_m\":0.92,\"occupied_pct\":74,\"side\":\"left\"},\"place\":\"dock\"}",
+"o200k": 46
+},
+{
+"name": "camera_sbc/05_frame_05.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.3,\"w\":320},\"in_view\":{\"nearest_m\":0.92,\"occupied_pct\":74,\"side\":\"left\"},\"place\":\"dock\"}",
+"o200k": 46
+},
+{
+"name": "raw_sbc/00_status.txt",
+"text": "{\"alert\":\"none\",\"amcl_pose\":{\"header\":{\"frame_id\":\"map\",\"stamp\":{\"nanosec\":300000000,\"sec\":407}},\"pose\":{\"covariance\":[0.013587488640866128,0.002985577045444435,0,0,0,0,0.002985577045444435,0.037233749334873265,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0.03977974846568505],\"pose\":{\"orientation\":{\"w\":0.9868755118886797,\"x\":0,\"y\":0,\"z\":0.16148289084127845},\"position\":{\"x\":-1.968094260725972,\"y\":-0.5247903295695361,\"z\":0}}}},\"battery_pct\":100,\"nav\":\"idle\",\"place\":\"dock\",\"scan\":{\"angle_increment\":0.01749303564429283,\"angle_max\":6.28000020980835,\"angle_min\":0,\"header\":{\"frame_id\":\"base_scan\",\"stamp\":{\"nanosec\":0,\"sec\":617}},\"intensities\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"range_max\":3.5,\"range_min\":0.11999999731779099,\"ranges\":[2.00461745262146,1.9653936624526978,1.9669886827468872,1.9874982833862305,1.9972150325775146,2.0195226669311523,2.074036121368408,null,1.0035303831100464,0.9928072690963745,0.9591370820999146,0.9524835348129272,0.9544046521186829,0.9514123201370239,0.9402867555618286,0.9270154237747192,0.9188733696937561,0.9276124835014343,0.9475548267364502,0.934090793132782,0.9692113995552063,0.9777511358261108,0.9886327385902405,1.0226490497589111,2.4897520542144775,2.4787774085998535,2.440538167953491,2.470973491668701,2.506462335586548,2.537980556488037,null,null,null,null,null,null,null,null,null,null,null,null,null,1.810492753982544,1.7353371381759644,1.7303528785705566,1.7125405073165894,1.7045315504074097,1.7164043188095093,1.7267357110977173,1.7520514726638794,1.7868572473526,3.38128399848938,3.353965997695923,3.3385117053985596,3.313380241394043,3.2794413566589355,3.2538883686065674,3.2237350940704346,3.2080636024475098,3.193052053451538,3.0590951442718506,2.77148175239563,2.640852212905884,2.605834484100342,2.5619964599609375,2.555255174636841,2.553952217102051,2.514819622039795,2.531564712524414,2.53216814994812,2.5263619422912598,2.4727632999420166,2.390491247177124,2.3304591178894043,2.180839776992798,2.1238410472869873,2.0797548294067383,2.0232059955596924,1.9750994443893433,1.9354760646820068,1.8186559677124023,1.783182978630066,1.741634488105774,1.729925274848938,1.6773817539215088,1.6349846124649048,1.5928170680999756,1.5982885360717773,1.5230380296707153,1.5016489028930664,1.4694507122039795,1.4597715139389038,1.4319802522659302,1.3945554494857788,1.383661150932312,1.3559551239013672,1.3199108839035034,1.3117282390594482,1.2843856811523438,1.283704161643982,1.2672537565231323,1.2565444707870483,1.2111637592315674,1.2183030843734741,1.1924480199813843,1.167016625404358,1.1824326515197754,1.1449366807937622,1.1396836042404175,1.1421780586242676,1.1408756971359253,1.1170027256011963,1.1175872087478638,1.0875850915908813,1.0792840719223022,1.0760687589645386,1.0666353702545166,1.058943748474121,1.0584379434585571,1.0498416423797607,1.0557786226272583,1.0480568408966064,1.036885380744934,1.051377534866333,1.0171315670013428,1.0431954860687256,1.0237690210342407,1.0177910327911377,1.022513747215271,1.0024216175079346,1.0328632593154907,1.0021475553512573,1.0222688913345337,0.9986699223518372,1.0098720788955688,0.9890449643135071,1.011929988861084,1.0041548013687134,0.9961480498313904,0.9757333993911743,0.9350733757019043,0.9067062139511108,0.8908707499504089,0.8604788780212402,0.830429196357727,0.8251378536224365,0.8118461966514587,0.7810210585594177,0.7547176480293274,0.7442570328712463,0.7460885047912598,0.7180566787719727,0.7407914400100708,0.7019509077072144,0.6799124479293823,0.6883880496025085,0.6802517771720886,0.6644188165664673,0.6568303108215332,0.6300201416015625,0.6228776574134827,0.6517018675804138,0.6225670576095581,0.5957603454589844,0.5899480581283569,0.5919101238250732,0.5987476706504822,0.5875863432884216,0.5907695293426514,0.569495677947998,0.5706603527069092,0.5615239143371582,0.5580008029937744,0.5715110898017883,0.5361475944519043,0.5396595001220703,0.5246461033821106,0.5344105362892151,0.5293654203414917,0.5268900990486145,0.5358474850654602,0.531878650188446,0.5374294519424438,0.5554953217506409,0.5143587589263916,0.5255655646324158,0.5156834125518799,0.5037569403648376,0.5217365622520447,0.5108480453491211,0.5085024237632751,0.5101141929626465,0.5140863656997681,0.5115761160850525,0.5198507308959961,0.5114145278930664,0.5131792426109314,0.5108560919761658,0.5080668330192566,0.5134316682815552,0.500066339969635,0.5048919916152954,0.4967087507247925,0.5200653672218323,0.5012043714523315,0.5090711116790771,0.5037391781806946,0.5145736336708069,0.5152550339698792,0.5147804617881775,0.5354737043380737,0.5416130423545837,0.520976722240448,0.5275720953941345,0.5343822836875916,0.552936315536499,0.5168865919113159,0.5566346645355225,0.5324400663375854,0.5635837912559509,0.5337359309196472,0.5521154999732971,0.5611405372619629,0.5688686966896057,0.5609828233718872,0.5870867967605591,0.5960343480110168,0.6032872796058655,0.5689531564712524,0.602775514125824,0.6109997034072876,0.5987886786460876,0.6187619566917419,0.6581293940544128,0.6245182156562805,0.6502557992935181,0.6553183794021606,0.6510001420974731,0.6709728837013245,0.6847763061523438,0.7144463658332825,0.7231945395469666,0.7379484176635742,0.7276352047920227,0.7497619986534119,0.779897928237915,0.7699584364891052,0.7943584322929382,0.8138523101806641,0.8347728252410889,0.8451311588287354,0.8589739799499512,0.8887580037117004,0.9191159009933472,0.9467555284500122,0.9718026518821716,0.9769877195358276,1.0337579250335693,1.0566070079803467,1.0890599489212036,1.1139432191848755,1.179542899131775,1.206371784210205,1.2348079681396484,1.3317406177520752,1.4116162061691284,1.4569875001907349,1.5016958713531494,1.541662573814392,1.5613826513290405,1.5589416027069092,1.521601915359497,1.5595651865005493,1.5788445472717285,1.5785890817642212,1.5775922536849976,1.6085261106491089,1.593466877937317,1.604430913925171,1.639194130897522,1.6537375450134277,1.8432421684265137,2.187201738357544,2.2731151580810547,2.2904679775238037,2.3170571327209473,2.340418815612793,2.3560245037078857,2.376049518585205,2.441094160079956,2.4686522483825684,2.4770331382751465,2.5070862770080566,2.5258231163024902,2.574636936187744,2.6076676845550537,2.623135805130005,2.700547218322754,2.7054338455200195,2.743372678756714,2.808786630630493,2.8809914588928223,2.9045934677124023,2.958099603652954,3.0012359619140625,3.058394193649292,3.1370418071746826,1.089577555656433,1.0365411043167114,1.0292290449142456,1.0076385736465454,0.9909884333610535,0.9970995187759399,0.983234167098999,0.9913156032562256,0.9779037237167358,0.9845663905143738,0.997443437576294,0.9979869723320007,1.0326223373413086,1.0022642612457275,1.0433381795883179,null,null,null,null,null,2.0347118377685547,2.0239405632019043,2.0043578147888184,1.9940685033798218,1.9763880968093872,2.0239357948303223,2.0225539207458496,3.087061643600464,3.068086624145508,3.066680431365967,3.118929147720337,3.135995388031006,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3.1111204624176025,3.072827100753784,3.048468828201294,3.0603065490722656,2.029200792312622,1.98336660861969],\"scan_time\":0,\"time_increment\":0}}",
+"o200k": 3931
+},
+{
+"name": "raw_sbc/01_look_summary.txt",
+"text": "{\"detector\":\"none\",\"place\":\"dock\",\"scan\":{\"angle_increment\":0.01749303564429283,\"angle_max\":6.28000020980835,\"angle_min\":0,\"header\":{\"frame_id\":\"base_scan\",\"stamp\":{\"nanosec\":0,\"sec\":617}},\"intensities\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"range_max\":3.5,\"range_min\":0.11999999731779099,\"ranges\":[2.00461745262146,1.9653936624526978,1.9669886827468872,1.9874982833862305,1.9972150325775146,2.0195226669311523,2.074036121368408,null,1.0035303831100464,0.9928072690963745,0.9591370820999146,0.9524835348129272,0.9544046521186829,0.9514123201370239,0.9402867555618286,0.9270154237747192,0.9188733696937561,0.9276124835014343,0.9475548267364502,0.934090793132782,0.9692113995552063,0.9777511358261108,0.9886327385902405,1.0226490497589111,2.4897520542144775,2.4787774085998535,2.440538167953491,2.470973491668701,2.506462335586548,2.537980556488037,null,null,null,null,null,null,null,null,null,null,null,null,null,1.810492753982544,1.7353371381759644,1.7303528785705566,1.7125405073165894,1.7045315504074097,1.7164043188095093,1.7267357110977173,1.7520514726638794,1.7868572473526,3.38128399848938,3.353965997695923,3.3385117053985596,3.313380241394043,3.2794413566589355,3.2538883686065674,3.2237350940704346,3.2080636024475098,3.193052053451538,3.0590951442718506,2.77148175239563,2.640852212905884,2.605834484100342,2.5619964599609375,2.555255174636841,2.553952217102051,2.514819622039795,2.531564712524414,2.53216814994812,2.5263619422912598,2.4727632999420166,2.390491247177124,2.3304591178894043,2.180839776992798,2.1238410472869873,2.0797548294067383,2.0232059955596924,1.9750994443893433,1.9354760646820068,1.8186559677124023,1.783182978630066,1.741634488105774,1.729925274848938,1.6773817539215088,1.6349846124649048,1.5928170680999756,1.5982885360717773,1.5230380296707153,1.5016489028930664,1.4694507122039795,1.4597715139389038,1.4319802522659302,1.3945554494857788,1.383661150932312,1.3559551239013672,1.3199108839035034,1.3117282390594482,1.2843856811523438,1.283704161643982,1.2672537565231323,1.2565444707870483,1.2111637592315674,1.2183030843734741,1.1924480199813843,1.167016625404358,1.1824326515197754,1.1449366807937622,1.1396836042404175,1.1421780586242676,1.1408756971359253,1.1170027256011963,1.1175872087478638,1.0875850915908813,1.0792840719223022,1.0760687589645386,1.0666353702545166,1.058943748474121,1.0584379434585571,1.0498416423797607,1.0557786226272583,1.0480568408966064,1.036885380744934,1.051377534866333,1.0171315670013428,1.0431954860687256,1.0237690210342407,1.0177910327911377,1.022513747215271,1.0024216175079346,1.0328632593154907,1.0021475553512573,1.0222688913345337,0.9986699223518372,1.0098720788955688,0.9890449643135071,1.011929988861084,1.0041548013687134,0.9961480498313904,0.9757333993911743,0.9350733757019043,0.9067062139511108,0.8908707499504089,0.8604788780212402,0.830429196357727,0.8251378536224365,0.8118461966514587,0.7810210585594177,0.7547176480293274,0.7442570328712463,0.7460885047912598,0.7180566787719727,0.7407914400100708,0.7019509077072144,0.6799124479293823,0.6883880496025085,0.6802517771720886,0.6644188165664673,0.6568303108215332,0.6300201416015625,0.6228776574134827,0.6517018675804138,0.6225670576095581,0.5957603454589844,0.5899480581283569,0.5919101238250732,0.5987476706504822,0.5875863432884216,0.5907695293426514,0.569495677947998,0.5706603527069092,0.5615239143371582,0.5580008029937744,0.5715110898017883,0.5361475944519043,0.5396595001220703,0.5246461033821106,0.5344105362892151,0.5293654203414917,0.5268900990486145,0.5358474850654602,0.531878650188446,0.5374294519424438,0.5554953217506409,0.5143587589263916,0.5255655646324158,0.5156834125518799,0.5037569403648376,0.5217365622520447,0.5108480453491211,0.5085024237632751,0.5101141929626465,0.5140863656997681,0.5115761160850525,0.5198507308959961,0.5114145278930664,0.5131792426109314,0.5108560919761658,0.5080668330192566,0.5134316682815552,0.500066339969635,0.5048919916152954,0.4967087507247925,0.5200653672218323,0.5012043714523315,0.5090711116790771,0.5037391781806946,0.5145736336708069,0.5152550339698792,0.5147804617881775,0.5354737043380737,0.5416130423545837,0.520976722240448,0.5275720953941345,0.5343822836875916,0.552936315536499,0.5168865919113159,0.5566346645355225,0.5324400663375854,0.5635837912559509,0.5337359309196472,0.5521154999732971,0.5611405372619629,0.5688686966896057,0.5609828233718872,0.5870867967605591,0.5960343480110168,0.6032872796058655,0.5689531564712524,0.602775514125824,0.6109997034072876,0.5987886786460876,0.6187619566917419,0.6581293940544128,0.6245182156562805,0.6502557992935181,0.6553183794021606,0.6510001420974731,0.6709728837013245,0.6847763061523438,0.7144463658332825,0.7231945395469666,0.7379484176635742,0.7276352047920227,0.7497619986534119,0.779897928237915,0.7699584364891052,0.7943584322929382,0.8138523101806641,0.8347728252410889,0.8451311588287354,0.8589739799499512,0.8887580037117004,0.9191159009933472,0.9467555284500122,0.9718026518821716,0.9769877195358276,1.0337579250335693,1.0566070079803467,1.0890599489212036,1.1139432191848755,1.179542899131775,1.206371784210205,1.2348079681396484,1.3317406177520752,1.4116162061691284,1.4569875001907349,1.5016958713531494,1.541662573814392,1.5613826513290405,1.5589416027069092,1.521601915359497,1.5595651865005493,1.5788445472717285,1.5785890817642212,1.5775922536849976,1.6085261106491089,1.593466877937317,1.604430913925171,1.639194130897522,1.6537375450134277,1.8432421684265137,2.187201738357544,2.2731151580810547,2.2904679775238037,2.3170571327209473,2.340418815612793,2.3560245037078857,2.376049518585205,2.441094160079956,2.4686522483825684,2.4770331382751465,2.5070862770080566,2.5258231163024902,2.574636936187744,2.6076676845550537,2.623135805130005,2.700547218322754,2.7054338455200195,2.743372678756714,2.808786630630493,2.8809914588928223,2.9045934677124023,2.958099603652954,3.0012359619140625,3.058394193649292,3.1370418071746826,1.089577555656433,1.0365411043167114,1.0292290449142456,1.0076385736465454,0.9909884333610535,0.9970995187759399,0.983234167098999,0.9913156032562256,0.9779037237167358,0.9845663905143738,0.997443437576294,0.9979869723320007,1.0326223373413086,1.0022642612457275,1.0433381795883179,null,null,null,null,null,2.0347118377685547,2.0239405632019043,2.0043578147888184,1.9940685033798218,1.9763880968093872,2.0239357948303223,2.0225539207458496,3.087061643600464,3.068086624145508,3.066680431365967,3.118929147720337,3.135995388031006,null,null,null,null,null,null,null,null,null,null,null,null,null,null,3.1111204624176025,3.072827100753784,3.048468828201294,3.0603065490722656,2.029200792312622,1.98336660861969],\"scan_time\":0,\"time_increment\":0}}",
+"o200k": 3720
+},
+{
+"name": "paused_simstep/00_status.txt",
+"text": "{\"alert\":\"none\",\"battery_pct\":100,\"free_m\":{\"back\":0.49,\"front\":0.92,\"left\":1.16,\"right\":0.58},\"nav\":\"idle\",\"place\":\"dock\",\"place_m\":0}",
+"o200k": 50
+},
+{
+"name": "paused_simstep/02_look_image.txt",
+"text": "{\"detector\":\"none\",\"frame\":{\"h\":240,\"kb\":4.6,\"w\":320},\"in_view\":{\"nearest_m\":0.92,\"occupied_pct\":68,\"side\":\"left\"},\"place\":\"dock\"}",
+"o200k": 46
+},
+{
+"name": "ru:0",
+"text": "подъедь к двери",
+"o200k": 5
+},
+{
+"name": "ru:1",
+"text": "что в коридоре?",
+"o200k": 6
+},
+{
+"name": "ru:2",
+"text": "с 9 до 18 каждый час объезжай коридор, дверь и окно, потом на базу",
+"o200k": 23
+},
+{
+"name": "ru:3",
+"text": "Готово: робот на месте east, препятствий рядом нет.",
+"o200k": 14
+},
+{
+"name": "ru:4",
+"text": "робот: место=дверь 0.1 м, навигация=стоит, заряд=75 %",
+"o200k": 25
+},
+{
+"name": "ru:5",
+"text": "Мобильный робот TurtleBot3. Места (x,y в м, карта): dock(-2,-0.5), east(1.8,0.5).",
+"o200k": 36
+},
+{
+"name": "ru:6",
+"text": "Внимание: заряд робота 20 %, возвращаюсь на базу.",
+"o200k": 17
+}
+]
+}

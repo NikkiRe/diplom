@@ -1,0 +1,22 @@
+G7 pilot (2026-10-05/06): стоимость thinking-режима Qwen3-8B-Q4_K_M на 16 рукописных function-calling задачах.
+Машина: MacBook Pro M4 Pro (8P+4E), 24 ГБ, macOS 27; llama.cpp brew build 11146 (commit 7fe450e19), Metal, -ngl 99.
+Это разведочный замер (N=16, 1 прогон на конфигурацию, сэмплирование с seed=1234), не результат ВКР.
+
+Сервер (для каждой конфигурации перезапускался, менялся только --reasoning-budget / --reasoning-budget-message):
+  llama-server -m /Users/chosenundead/Projects/rudojo/models/Qwen3-8B-Q4_K_M.gguf --jinja -ngl 99 -c 16384 -np 1 \
+     --port 18437 --host 127.0.0.1 --reasoning-format deepseek --reasoning-budget {-1|128|32|0} \
+     [--reasoning-budget-message "Considering the limited time by the user, I have to give the solution based on the thinking directly now."]
+
+Клиент:
+  python3 thinking_pilot.py nothink           18437 0 pilot_results.jsonl   # сервер с --reasoning-budget -1, enable_thinking=false
+  python3 thinking_pilot.py think_unl         18437 1 pilot_results.jsonl   # тот же сервер, enable_thinking=true
+  python3 thinking_pilot.py think_b128        18437 1 pilot_results.jsonl   # --reasoning-budget 128
+  python3 thinking_pilot.py think_b32         18437 1 pilot_results.jsonl   # --reasoning-budget 32
+  python3 thinking_pilot.py think_b0          18437 1 pilot_results.jsonl   # --reasoning-budget 0
+  python3 thinking_pilot.py think_b32_qwenmsg 18437 1 pilot_results.jsonl   # --reasoning-budget 32 + сообщение из тех. отчёта Qwen3
+  python3 analyze_pilot.py > pilot_summary.txt
+
+Сэмплинг: thinking T=0.6, top_p=0.95, top_k=20; non-thinking T=0.7, top_p=0.8, top_k=20 (как в тех. отчёте Qwen3, но БЕЗ presence penalty 1.5).
+Токены рассуждения считались через /tokenize по полю reasoning_content (без тегов <think>).
+Известные артефакты: в think_unl запросы idx 7 и 8 шли на 17.7–24.8 ток/с вместо ~44 (фоновая нагрузка от параллельных процессов);
+медианы устойчивы, p90 wall для think_unl завышен этими двумя точками.

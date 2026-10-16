@@ -1,0 +1,43 @@
+# Исполнитель (motion_executor; в пакете 1 — страж v1): желаемая скорость из жестов и агента -> /neurobot/cmd_vel_req
+# (в env-файле — ремап его /cmd_vel), дальше решает safety_gate. READY — после первого нуля, WATCHDOG — от тика 20 Гц;
+# нет тика 3 с -> SIGABRT и рестарт. Перед стартом: в команде есть ремап /cmd_vel:=/neurobot/cmd_vel_req, safety_gate
+# слушает /neurobot/cmd_vel_req (без него исполнитель не запускается), других писателей там нет. После READY
+# (wait-graph): узел пишет в /neurobot/cmd_vel_req и не пишет в /cmd_vel и прочие входы цепочки, иначе отказ — systemd
+# снимает процесс, а метка в $STATE_DIRECTORY (/var/lib/neurobot/executor) не даёт precheck запустить его снова с той
+# же командой: иначе каждый рестарт снова писал бы мимо safety_gate. Три запуска rclpy (precheck, исполнитель,
+# wait-graph) под нагрузкой — десятки секунд, отсюда TimeoutStartSec. Код ставит install.sh в @PREFIX@/src; setup.bash
+# ROS 2 дописывает свои пути к PYTHONPATH, не затирая его.
+[Unit]
+Description=neurobot: исполнитель (жесты и агент -> /neurobot/cmd_vel_req)
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+@AFTER_DRIVERS@
+After=neurobot-safety.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=@USER@
+Group=@GROUP@
+SupplementaryGroups=@SUPPLEMENTARY_GROUPS@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 ROS_LOG_DIR=/run/neurobot/%N
+Environment=PYTHONPATH=@PREFIX@/src
+# журналы rcl — в tmpfs: у системного пользователя может не быть $HOME, а всё нужное и так в journald
+RuntimeDirectory=neurobot/%N
+StateDirectory=neurobot/executor
+ExecStartPre=@PREFIX@/bin/neurobot precheck executor
+ExecStart=@PREFIX@/bin/neurobot-run --ros --var NEUROBOT_EXECUTOR_CMD
+ExecStartPost=@PREFIX@/bin/neurobot wait-graph executor
+WatchdogSec=3
+Restart=always
+RestartSec=500ms
+TimeoutStartSec=60
+TimeoutStopSec=5
+LimitCORE=0
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target

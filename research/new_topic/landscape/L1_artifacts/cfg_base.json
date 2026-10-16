@@ -1,0 +1,4 @@
+{"baseline openai+mcp": ["openai", "mcp"],
+ "langchain[mcp](v1 MCPAdapter)+langchain-openai": ["langchain[mcp]", "langchain-openai"],
+ "agent-framework-core+openai+mcp": ["agent-framework-core","agent-framework-openai","mcp"],
+ "strands-agents(bare)": ["strands-agents"]}

@@ -1,0 +1,18 @@
+{
+  "version": 3,
+  "agents": {"defaults": {"workspace": "/var/lib/neurobot-fake/picoclaw/workspace", "model_name": "mock",
+                          "max_tokens": 1024, "max_tool_iterations": 8, "max_parallel_turns": 2}},
+  "model_list": [{"model_name": "mock", "provider": "openai", "model": "gpt-5-mini", "api_base": "http://127.0.0.1:18100/v1",
+                  "request_timeout": 20}],
+  "gateway": {"host": "127.0.0.1", "port": 18797, "hot_reload": false, "log_level": "info"},
+  "heartbeat": {"enabled": false},
+  "tools": {
+    "mcp": {"enabled": true, "discovery": {"enabled": false},
+            "servers": {"robot_mcp": {"enabled": true, "type": "http", "url": "http://127.0.0.1:18118/mcp"}}},
+    "append_file": {"enabled": false}, "edit_file": {"enabled": false}, "write_file": {"enabled": false},
+    "list_dir": {"enabled": false}, "read_file": {"enabled": false}, "send_file": {"enabled": false},
+    "spawn": {"enabled": false}, "subagent": {"enabled": false}, "exec": {"enabled": false},
+    "cron": {"enabled": false}, "skills": {"enabled": false}, "find_skills": {"enabled": false},
+    "install_skill": {"enabled": false}, "web": {"enabled": false}, "web_fetch": {"enabled": false}
+  }
+}

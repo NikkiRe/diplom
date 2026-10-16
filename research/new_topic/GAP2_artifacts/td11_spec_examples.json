@@ -1,0 +1,286 @@
+[
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "title": "Smart Ventilator",
+  "securityDefinitions": {
+   "basic_sc": {
+    "scheme": "basic",
+    "in": "header"
+   }
+  },
+  "security": "basic_sc",
+  "links": [
+   {
+    "rel": "item",
+    "href": "./Ventilation.td.jsonld",
+    "type": "application/td+json"
+   },
+   {
+    "rel": "item",
+    "href": "./LED.td.jsonld",
+    "type": "application/td+json"
+   },
+   {
+    "rel": "type",
+    "href": "./SmartVentilator.tm.jsonld",
+    "type": "application/tm+json"
+   }
+  ],
+  "properties": {
+   "status": {
+    "type": "string",
+    "enum": [
+     "on_value",
+     "off_value",
+     "error_value"
+    ],
+    "forms": [
+     {
+      "href": "http://127.0.13.232:4563/status"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "title": "Ventilator",
+  "securityDefinitions": {
+   "basic_sc": {
+    "scheme": "basic",
+    "in": "header"
+   }
+  },
+  "security": "basic_sc",
+  "links": [
+   {
+    "rel": "collection",
+    "href": "./SmartVentilation.td.jsonld",
+    "type": "application/td+json"
+   },
+   {
+    "rel": "type",
+    "href": "./Ventilation.tm.jsonld",
+    "type": "application/tm+json"
+   }
+  ],
+  "properties": {
+   "switch": {
+    "type": "boolean",
+    "description": "True=On; False=Off",
+    "forms": [
+     {
+      "href": "http://127.0.13.212:4563/switch"
+     }
+    ]
+   },
+   "adjustRpm": {
+    "type": "number",
+    "minimum": 200,
+    "maximum": 1200,
+    "forms": [
+     {
+      "href": "http://127.0.13.212:4563/adjustRpm"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "title": "LED Thing Model",
+  "securityDefinitions": {
+   "basic_sc": {
+    "scheme": "basic",
+    "in": "header"
+   }
+  },
+  "security": "basic_sc",
+  "links": [
+   {
+    "rel": "collection",
+    "href": "./SmartVentilation.td.jsonld",
+    "type": "application/td+json"
+   },
+   {
+    "rel": "type",
+    "href": "./LED.tm.jsonld",
+    "type": "application/tm+json"
+   }
+  ],
+  "properties": {
+   "R": {
+    "type": "number",
+    "description": "Red color",
+    "forms": [
+     {
+      "href": "http://127.0.13.211:4563/R"
+     }
+    ]
+   },
+   "G": {
+    "type": "number",
+    "description": "Green color",
+    "forms": [
+     {
+      "href": "http://127.0.13.211:4563/G"
+     }
+    ]
+   },
+   "B": {
+    "type": "number",
+    "description": "Blue color",
+    "forms": [
+     {
+      "href": "http://127.0.13.211:4563/B"
+     }
+    ]
+   }
+  },
+  "actions": {
+   "fadeIn": {
+    "title": "fadeIn",
+    "input": {
+     "type": "number",
+     "description": "fadeIn in ms"
+    },
+    "forms": [
+     {
+      "href": "http://127.0.13.211:4563/fadeIn"
+     }
+    ]
+   },
+   "fadeOut": {
+    "title": "fadeOut",
+    "input": {
+     "type": "number",
+     "description": "fadeOut in ms"
+    },
+    "forms": [
+     {
+      "href": "http://127.0.13.211:4563/fadeOut"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:uuid:4778f80a-4c78-4cbb-a0e4-fa37b7d748df",
+  "title": "WebhookThing",
+  "description": "Webhook-based Event with subscription and unsubscribe form.",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": [
+   "nosec_sc"
+  ],
+  "events": {
+   "temperature": {
+    "description": "Provides periodic temperature value updates.",
+    "subscription": {
+     "type": "object",
+     "properties": {
+      "callbackURL": {
+       "type": "string",
+       "format": "uri",
+       "description": "Callback URL provided by subscriber for Webhook notifications.",
+       "writeOnly": true
+      },
+      "subscriptionID": {
+       "type": "string",
+       "description": "Unique subscription ID for cancellation provided by WebhookThing.",
+       "readOnly": true
+      }
+     }
+    },
+    "data": {
+     "type": "number",
+     "description": "Latest temperature value that is sent to the callback URL."
+    },
+    "cancellation": {
+     "type": "object",
+     "properties": {
+      "subscriptionID": {
+       "type": "integer",
+       "description": "Required subscription ID to cancel subscription.",
+       "writeOnly": true
+      }
+     }
+    },
+    "forms": [
+     {
+      "op": "subscribeevent",
+      "href": "http://192.168.0.124:8080/events/temp/subscribe",
+      "contentType": "application/json",
+      "htv:methodName": "POST"
+     },
+     {
+      "op": "unsubscribeevent",
+      "href": "http://192.168.0.124:8080/events/temp/cancel",
+      "htv:methodName": "POST"
+     }
+    ]
+   }
+  }
+ },
+ {
+  "@context": "https://www.w3.org/2022/wot/td/v1.1",
+  "id": "urn:uuid:3c1b4716-247f-4cda-ba53-d3307ac6feb0",
+  "title": "WebhookThing",
+  "description": "Webhook-based Event with subscription and unsubscribe form.",
+  "securityDefinitions": {
+   "nosec_sc": {
+    "scheme": "nosec"
+   }
+  },
+  "security": [
+   "nosec_sc"
+  ],
+  "events": {
+   "temperature": {
+    "description": "Provides periodic temperature value updates.",
+    "subscription": {
+     "type": "object",
+     "properties": {
+      "callbackURL": {
+       "type": "string",
+       "format": "uri",
+       "description": "Callback URL provided by subscriber for Webhook notifications.",
+       "writeOnly": true
+      },
+      "subscriptionID": {
+       "type": "string",
+       "description": "Unique subscription ID for cancellation provided by WebhookThing.",
+       "readOnly": true
+      }
+     }
+    },
+    "data": {
+     "type": "number",
+     "description": "Latest temperature value that is sent to the callback URL."
+    },
+    "uriVariables": {
+     "subscriptionID": {
+      "type": "string"
+     }
+    },
+    "forms": [
+     {
+      "op": "subscribeevent",
+      "href": "http://192.168.0.124:8080/events/temp/subscribe",
+      "contentType": "application/json",
+      "htv:methodName": "POST"
+     },
+     {
+      "op": "unsubscribeevent",
+      "href": "http://192.168.0.124:8080/events/temp/{subscriptionID}",
+      "htv:methodName": "DELETE"
+     }
+    ]
+   }
+  }
+ }
+]

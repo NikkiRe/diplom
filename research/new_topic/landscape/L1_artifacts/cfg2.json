@@ -1,0 +1,107 @@
+{
+ "langchain(+openai,+mcp-adapters)": [
+  "langchain",
+  "langchain-openai",
+  "langchain-mcp-adapters"
+ ],
+ "langgraph(+langchain-openai)": [
+  "langgraph",
+  "langchain-openai"
+ ],
+ "llama-index-core(+openai-like,+mcp)": [
+  "llama-index-core",
+  "llama-index-llms-openai-like",
+  "llama-index-tools-mcp"
+ ],
+ "autogen-agentchat(+ext[openai,mcp])": [
+  "autogen-agentchat",
+  "autogen-ext[openai,mcp]"
+ ],
+ "ag2[openai,mcp]": [
+  "ag2[openai,mcp]"
+ ],
+ "semantic-kernel": [
+  "semantic-kernel"
+ ],
+ "crewai": [
+  "crewai"
+ ],
+ "smolagents[openai,mcp]": [
+  "smolagents[openai,mcp]"
+ ],
+ "openai-agents": [
+  "openai-agents"
+ ],
+ "google-adk(+litellm)": [
+  "google-adk",
+  "litellm"
+ ],
+ "google-adk": [
+  "google-adk"
+ ],
+ "pydantic-ai-slim[openai,mcp]": [
+  "pydantic-ai-slim[openai,mcp]"
+ ],
+ "pydantic-ai(full)": [
+  "pydantic-ai"
+ ],
+ "agno(+openai,+mcp)": [
+  "agno",
+  "openai",
+  "mcp"
+ ],
+ "strands-agents[openai]": [
+  "strands-agents[openai]"
+ ],
+ "dspy": [
+  "dspy"
+ ],
+ "haystack-ai(+mcp-haystack)": [
+  "haystack-ai",
+  "mcp-haystack"
+ ],
+ "claude-agent-sdk": [
+  "claude-agent-sdk"
+ ],
+ "camel-ai": [
+  "camel-ai"
+ ],
+ "beeai-framework": [
+  "beeai-framework"
+ ],
+ "mcp-agent[openai]": [
+  "mcp-agent[openai]"
+ ],
+ "fast-agent-mcp": [
+  "fast-agent-mcp"
+ ],
+ "langroid": [
+  "langroid"
+ ],
+ "atomic-agents": [
+  "atomic-agents"
+ ],
+ "letta-client": [
+  "letta-client"
+ ],
+ "pipecat-ai[openai]": [
+  "pipecat-ai[openai]"
+ ],
+ "livekit-agents[openai,mcp]": [
+  "livekit-agents[openai,mcp]"
+ ],
+ "mcp(sdk only)": [
+  "mcp"
+ ],
+ "openai(sdk only)": [
+  "openai"
+ ],
+ "agent-framework-core+openai+mcp": [
+  "agent-framework-core",
+  "agent-framework-openai",
+  "mcp"
+ ],
+ "strands-agents(bare)": [
+  "strands-agents"
+ ]
+}

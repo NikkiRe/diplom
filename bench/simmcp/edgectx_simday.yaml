@@ -1,0 +1,88 @@
+# Конфигурация edgectx для дня daygen + sim-mcp (режим T0: виртуальные часы, mock-llm, sim-mcp).
+# Отличие от agent/configs/example.yaml — сигналы гейта под имена устройств daygen (DECISIONS: [simday]):
+#   door_front.open, leak_<комната>.wet, boiler.temperature > 85 °C (перегрев; норма ≈ 60 °C),
+#   thermo_<комната>.temperature > 30 °C (жара в комнате), pir_<локация>.motion (эпизоды).
+# Свет, розетка, кран, кофемашина, пылесос и дверцы шкафов (contact_*) гейт не будят (default: ignore).
+# Относительные пути отсчитываются от каталога этого файла; реплеер/тест переопределяют -trace и -listen.
+
+run_id: ""
+
+clock:
+  mode: virtual
+  epoch: "2026-10-06T00:00:00+03:00"   # полночь дня прогона; t дня = секунды от неё (daygen: t_origin midnight)
+  start_t: 25200                        # 07:00 — начало окна дня daygen
+  settle_timeout_s: 120
+
+listen: 127.0.0.1:18080
+
+llm:
+  base_url: http://127.0.0.1:18100/v1   # mock-llm (oracle)
+  model: openai/gpt-5-mini
+  api_key_env: ROUTERAI_API_KEY
+  timeout_s: 60
+  max_tokens: 0
+  retries: 1
+  retry_backoff_ms: 500
+  trace_headers: true
+
+mcp:
+  - name: sim
+    transport: http
+    url: http://127.0.0.1:18090/mcp
+    subscribe: ["*/state/*"]
+    inventory_uri: hw://inventory
+
+policy:
+  wake: hybrid
+  heartbeat_min: 30
+  heartbeat_task: >-
+    Плановая проверка помещения: оцени состояние устройств и недавние события.
+    Если нужно действие или уведомление пользователя — выполни его, иначе ответь NO_ACTION.
+  max_steps: 6
+  gate:
+    debounce_s: 2
+    cooldown_s: 300
+    coalesce_s: 10
+    self_echo_s: 10
+    rules_path: ""
+    rules_enabled: true
+    default: ignore
+    signals:
+      - {device: "door_front", property: "open", kind: change}
+      - {device: "leak_*", property: "wet", kind: change, priority: safety}
+      - {device: "boiler", property: "temperature", kind: threshold, above: 85, hysteresis: 1, priority: safety}
+      - {device: "thermo_*", property: "temperature", kind: threshold, above: 30, hysteresis: 1}
+      - {device: "pir_*", property: "motion", kind: episode, gap_s: 600}
+  history: mask
+  window_turns: 8
+  mask_keep_turns: 2
+  summary_threshold_tokens: 4000
+  history_background: true
+  hwctx: delta_tail
+  snapshot_period_s: 60
+  catalog: generic
+  local_tools: [notify_user, create_rule, delete_rule, update_profile, recent_events]
+  noop_reply: NO_ACTION
+  recent_events_k: 10
+  profile_consolidate_s: 600
+  max_tool_result_chars: 4000
+
+budget:
+  daily_calls: 500
+  daily_input_tokens: 2000000
+  degrade_at: 0.8
+
+sched:
+  max_in_flight: 1
+  queue_max: 64
+
+trace: ../../agent/run/edgectx_simday.trace.jsonl
+
+userctx:
+  db: ../../agent/run/edgectx_simday.db
+  reset: true
+  profile:
+    - {id: f1, text: "Пользователь предпочитает температуру 22 °C"}
+
+prompt:
+  system: ""

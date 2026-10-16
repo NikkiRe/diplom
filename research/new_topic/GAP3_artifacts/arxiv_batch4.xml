@@ -1,0 +1,185 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/ZoEO5LsVPNRfz3zd/miXLdZoOVU</id>
+  <title>arXiv Query: search_query=&amp;id_list=2607.22868,2608.17386,2609.06326,2608.28518,2605.09387,2512.15163&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-06T14:04:51Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=50&amp;id_list=2607.22868,2608.17386,2609.06326,2608.28518,2605.09387,2512.15163" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>6</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2512.15163v2</id>
+    <title>MCP-SafetyBench: A Benchmark for Safety Evaluation of Large Language Models with Real-World MCP Servers</title>
+    <updated>2026-03-05T04:41:49Z</updated>
+    <link href="https://arxiv.org/abs/2512.15163v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2512.15163v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Large language models (LLMs) are evolving into agentic systems that reason, plan, and operate external tools. The Model Context Protocol (MCP) is a key enabler of this transition, offering a standardized interface for connecting LLMs with heterogeneous tools and services. Yet MCP's openness and multi-server workflows introduce new safety risks that existing benchmarks fail to capture, as they focus on isolated attacks or lack real-world coverage. We present MCP-SafetyBench, a comprehensive benchmark built on real MCP servers that supports realistic multi-turn evaluation across five domains: browser automation, financial analysis, location navigation, repository management, and web search. It incorporates a unified taxonomy of 20 MCP attack types spanning server, host, and user sides, and includes tasks requiring multi-step reasoning and cross-server coordination under uncertainty. Using MCP-SafetyBench, we systematically evaluate leading open- and closed-source LLMs, revealing that all models remain vulnerable to MCP attacks, with a notable safety-utility trade-off. Our results highlight the urgent need for stronger defenses and establish MCP-SafetyBench as a foundation for diagnosing and mitigating safety risks in real-world MCP deployments.</summary>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-12-17T08:00:32Z</published>
+    <arxiv:comment>Our benchmark is available at https://github.com/xjzzzzzzzz/MCPSafety</arxiv:comment>
+    <arxiv:primary_category term="cs.CL"/>
+    <author>
+      <name>Xuanjun Zong</name>
+    </author>
+    <author>
+      <name>Zhiqi Shen</name>
+    </author>
+    <author>
+      <name>Lei Wang</name>
+    </author>
+    <author>
+      <name>Yunshi Lan</name>
+    </author>
+    <author>
+      <name>Chao Yang</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2609.06326v1</id>
+    <title>Rethinking Safety for Generalist Robots</title>
+    <updated>2026-09-06T01:23:02Z</updated>
+    <link href="https://arxiv.org/abs/2609.06326v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2609.06326v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Generalist robots promise to transform our society: the same system that prepares a meal or folds laundry might also repair a car, inspect infrastructure, or care for a loved one. Yet this versatility introduces risks far beyond the collision- and force-based safety notions that have long dominated robotics. Notions of safety must now consider context (e.g., turning off a building's electricity is only safe during scheduled maintenance), user intent (e.g., asking the robot to ``clean the kitchen'' includes unspoken expectations that the robot should not mix dangerous but powerful cleaning agents like bleach and ammonia), hard-to-model physical consequences (e.g., burning food during meal preparation), and more. We argue the need for a new era of robot safety---embodied AI safety---that broadens the hazards considered across the robot's lifecycle while recognizing that the safety of bits cannot be separated from the safety of atoms. We present a taxonomy of emerging risks and a full-stack research agenda to guide the safe deployment of generalist robots.</summary>
+    <category term="eess.SY" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-09-06T01:23:02Z</published>
+    <arxiv:comment>11 pages, 2 figures</arxiv:comment>
+    <arxiv:primary_category term="eess.SY"/>
+    <author>
+      <name>Rohan Sinha</name>
+    </author>
+    <author>
+      <name>Anushri Dixit</name>
+    </author>
+    <author>
+      <name>Ran Tian</name>
+    </author>
+    <author>
+      <name>Anirudha Majumdar</name>
+    </author>
+    <author>
+      <name>Andrea Bajcsy</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2608.28518v1</id>
+    <title>When Robots Mishear Us: Mapping the Safety Risks of Voice-Controlled Embodied AI</title>
+    <updated>2026-08-28T16:55:32Z</updated>
+    <link href="https://arxiv.org/abs/2608.28518v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2608.28518v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>We investigate whether automatic speech recognition (ASR) errors in user input can lead to unsafe outputs from Embodied AI (EAI) models. We find that ASR errors can lead to harmful instructions being accepted and executed by EAI models, thereby reducing safety. We simulate ASR errors and combine them with existing safety benchmarks (SafeAgentBench and POEX) to evaluate how different errors affect embodied AI safety. We find that some of them preserve semantic structure but increase harmful ambiguity, while others weaken the model refusal behaviour and allow unsafe plans to be generated and executed. We show that in some cases automatic correction of ASR errors can reduce the risk, but this is not always effective. Overall, we show that ASR errors lead to significant safety risks for embodied AI.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-08-28T16:55:32Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Sihan Jia</name>
+    </author>
+    <author>
+      <name>Oliver Lemon</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2608.17386v1</id>
+    <title>MANIGUARD: A Benchmark and Data Suite for Specification-Grounded Safety Evaluation and Improvement of Robotic Manipulation</title>
+    <updated>2026-08-18T05:27:35Z</updated>
+    <link href="https://arxiv.org/abs/2608.17386v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2608.17386v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Foundation-model policies for robotic manipulation are advancing rapidly on task success, but rigorous evaluation of whether they succeed safely is still lacking. We introduce ManiGuard, a specification-grounded framework for evaluating and improving the safety of foundation-model manipulation, comprising the ManiGuard-Bench task suite and a paired safety-annotated trajectory-generation pipeline. ManiGuard-Bench organizes six contact-rich household task families into 200 locked base tasks along a skill $\times$ constraint taxonomy, with safety specified independently of task success. Each task is evaluated under one in-distribution and four single-axis out-of-distribution perturbations that hold the safety specification fixed, giving 1,000 locked scenarios. Every rollout is runtime-checked by LTL$_f$-grounded automaton monitors over physics-grounded predicates rather than learned classifiers or LLM judges, in simulation and on a physical Franka platform. The pipeline pairs an automated motion-planning generator with human teleoperation, annotated by the same per-step monitor, and directly supports safety-aware fine-tuning; we release 8,000 safety-annotated demonstrations, 40 per base task. Benchmarking zero-shot and fine-tuned VLAs across more than 23,000 rollouts, we find: (i) safety must be evaluated independently of task success, as 6-21% of successful rollouts violate the specification; (ii) fine-tuning on our suite raises safe task completion from near zero to 7.5-29.8% and engaged-and-safe behavior from 16-40% to 51-72%; but (iii) a gap remains that scaling demonstrations does not close, with 21-42% of engaged rollouts still violating, two of six families below 2% safe success for every policy, and these failures persisting under distribution shift and on hardware.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-08-18T05:27:35Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Yiyan Peng</name>
+    </author>
+    <author>
+      <name>Philip Wang</name>
+    </author>
+    <author>
+      <name>Simon Sinong Zhan</name>
+    </author>
+    <author>
+      <name>Yiqi Lyu</name>
+    </author>
+    <author>
+      <name>Zhenyang Ni</name>
+    </author>
+    <author>
+      <name>Jixin Yan</name>
+    </author>
+    <author>
+      <name>Fiorelli Wong</name>
+    </author>
+    <author>
+      <name>Ruochen Jiao</name>
+    </author>
+    <author>
+      <name>Hang Yin</name>
+    </author>
+    <author>
+      <name>Xinyu Cao</name>
+    </author>
+    <author>
+      <name>Huajie Shao</name>
+    </author>
+    <author>
+      <name>Manling Li</name>
+    </author>
+    <author>
+      <name>Ruohan Zhang</name>
+    </author>
+    <author>
+      <name>Qi Zhu</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2607.22868v1</id>
+    <title>What Can Be Enforced? A Theory of Certified Runtime Safety for Tool-Using Agents</title>
+    <updated>2026-07-24T19:14:26Z</updated>
+    <link href="https://arxiv.org/abs/2607.22868v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2607.22868v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Runtime guardrails act before irreversible tool calls, but their guarantees depend on what policy state is representable, what a judge observes, and whether intervention changes future behavior. We separate three questions. First, relative to fixed oracle predicates, a deterministic gate enforces exactly the nonempty safety policies whose good prefixes its register model recognizes; policy nontriviality is undecidable with two decrementable counters but in PSPACE for a separable monotone fragment. Second, under a fixed exogenous law, Neyman-Pearson gives the exact false-block/miss frontier and conformal calibration gives a finite-sample marginal certificate, possibly via block-all. Third, once blocking changes future proposals, static scores and ungated trajectories need not identify the closed-loop frontier; a specified finite controlled model instead yields an occupancy program. Bounded representation attacks add a robustness margin, so benign calibration alone does not transfer. Experiments target these distinctions through static diagnostics, controlled-model enumeration, representation rewrites, and paired closed-loop reruns.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CR" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.LG" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-07-24T19:14:26Z</published>
+    <arxiv:comment>26 pages, 8 figures. Extended version with complete proofs and additional experiments</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Shawn Ray</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2605.09387v1</id>
+    <title>NEXUS: Continual Learning of Symbolic Constraints for Safe and Robust Embodied Planning</title>
+    <updated>2026-05-10T07:25:38Z</updated>
+    <link href="https://arxiv.org/abs/2605.09387v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2605.09387v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>While Large Language Models (LLMs) have catalyzed progress in embodied intelligence, a fundamental gap between their inherent probabilistic uncertainty and the strict determinism and verifiable safety required in the physical world. To mitigate this gap, this paper introduces NEXUS, a modular framework designed for continual learning in embodied agents. Different from prior works that treat symbolic artifacts merely as static interfaces, NEXUS leverages them for symbolic grounding and knowledge evolution. The framework explicitly decouples physical feasibility from safety specifications: capability of agents is improved through closed-loop execution feedback, while probabilistic risk assessments are grounded into deterministic hard constraints to establish a rigorous pre-action defense. Experiments on SafeAgentBench demonstrate that NEXUS achieves superior task success rates while effectively refusing unsafe instructions, exhibiting robust defense against adversarial attacks, and progressively improving planning efficiency through knowledge accumulation.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2026-05-10T07:25:38Z</published>
+    <arxiv:primary_category term="cs.AI"/>
+    <author>
+      <name>Tiehan Cui</name>
+    </author>
+    <author>
+      <name>Peipei Liu</name>
+    </author>
+    <author>
+      <name>Yanxu Mao</name>
+    </author>
+    <author>
+      <name>Congying Liu</name>
+    </author>
+    <author>
+      <name>Mingzhe Xing</name>
+    </author>
+    <author>
+      <name>Datao You</name>
+    </author>
+  </entry>
+</feed>

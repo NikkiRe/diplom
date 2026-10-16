@@ -1,0 +1,11 @@
+# neurobot: одна точка входа — драйверы, safety_gate, исполнитель, распознавание, rosbridge, воркеры лаборатории,
+# MCP-сервер, агент и сторож.
+# Состав — юниты с WantedBy=neurobot.target (install.sh включает их по NEUROBOT_COMPONENTS, NEUROBOT_DRIVERS и
+# NEUROBOT_LABWORKERS).
+# Цель становится active, когда завершены задания запуска всех компонентов; порядок между ними задают их After=.
+[Unit]
+Description=neurobot: робот NeuroChip (жест -> движение) и агент
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,31 @@
+# rosbridge — нужен лишь агентскому контуру; рефлекс жеста идёт мимо него. Перед стартом: в команде address:=127.0.0.1
+# (иначе rosbridge слушает все интерфейсы) и глобы — списки разрешённого: тема агента, /rosapi/…, ни одного параметра.
+# Готовность — ExecStartPost: WebSocket отвечает на NEUROBOT_ROSBRIDGE_PORT.
+[Unit]
+Description=neurobot: rosbridge для агента
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+After=neurobot-safety.service neurobot-executor.service neurobot-perception.service
+StartLimitIntervalSec=0
+
+[Service]
+Type=exec
+User=@USER@
+Group=@GROUP@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env ROS_LOG_DIR=/run/neurobot/%N
+# журналы rcl — в tmpfs: у системного пользователя может не быть $HOME, а всё нужное и так в journald
+RuntimeDirectory=neurobot/%N
+ExecStartPre=@PREFIX@/bin/neurobot precheck rosbridge
+ExecStart=@PREFIX@/bin/neurobot-run --ros --var NEUROBOT_ROSBRIDGE_CMD
+ExecStartPost=@PREFIX@/bin/neurobot wait-port rosbridge
+KillSignal=SIGINT
+Restart=always
+RestartSec=1
+TimeoutStartSec=60
+TimeoutStopSec=10
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target

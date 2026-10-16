@@ -1,0 +1,20 @@
+| Конфигурация | N | Верно | Токены рассуждения p50 / p90 / max | Всего decode-токенов p50 / p90 | Decode, с p50 / p90 | ток/с decode (медиана) | Wall, с p50 / p90 |
+|---|---:|---:|---|---|---|---:|---|
+| nothink | 16 | 16/16 | 0 / 0 / 0 | 30 / 52 | 0.66 / 1.16 | 45.2 | 0.82 / 1.57 |
+| think_unl | 16 | 16/16 | 126 / 175 / 225 | 161 / 228 | 3.75 / 7.35 | 43.7 | 3.87 / 7.50 |
+| think_b128 | 16 | 16/16 | 126 / 127 / 127 | 158 / 175 | 3.61 / 4.14 | 43.7 | 3.78 / 4.57 |
+| think_b32 | 16 | 16/16 | 31 / 31 / 31 | 70 / 108 | 1.59 / 2.47 | 44.0 | 1.75 / 2.59 |
+| think_b0 | 16 | 16/16 | 0 / 0 / 0 | 33 / 54 | 0.77 / 1.27 | 43.6 | 0.93 / 1.71 |
+| think_b32_qwenmsg | 16 | 16/16 | 52 / 53 / 53 | 87 / 116 | 2.07 / 2.84 | 41.4 | 2.21 / 3.18 |
+
+first-request prefill (cold within server run): [('nothink', 774, 3, 2201), ('think_unl', 19, 754, 109), ('think_b128', 773, 0, 2196), ('think_b32', 773, 0, 2264), ('think_b0', 773, 0, 2244), ('think_b32_qwenmsg', 773, 0, 2199)]
+warm requests: prompt_n median 16.0 cache_n median 754.0 prompt_ms median 107
+think_unl reasoning tokens by category (mean): {'simple': 106, 'multiple': 156, 'parallel': 130, 'irrelevance': 159}
+decode tokens ratio think_unl/nothink (median of per-task ratio): 4.94
+wall ratio think_unl/nothink (median per-task): 4.61
+sum decode seconds:  {'nothink': 12.0, 'think_unl': 72.3, 'think_b128': 57.1, 'think_b32': 28.3, 'think_b0': 13.6, 'think_b32_qwenmsg': 35.1}
+finish reasons: {'nothink': Counter({'tool_calls': 12, 'stop': 4}), 'think_unl': Counter({'tool_calls': 12, 'stop': 4}), 'think_b128': Counter({'tool_calls': 12, 'stop': 4}), 'think_b32': Counter({'tool_calls': 12, 'stop': 4}), 'think_b0': Counter({'tool_calls': 12, 'stop': 4}), 'think_b32_qwenmsg': Counter({'tool_calls': 12, 'stop': 4})}
+think_b128 reasoning tokens list: [104, 91, 124, 97, 127, 86, 119, 127, 112, 127, 100, 127, 127, 127, 127, 127]
+think_b32 reasoning tokens list: [31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31, 31]
+think_b32_qwenmsg reasoning tokens list: [52, 53, 52, 52, 52, 52, 53, 52, 52, 52, 52, 52, 52, 52, 53, 52]
+think_unl reasoning tokens list: [104, 91, 124, 97, 133, 86, 119, 168, 112, 225, 100, 161, 170, 129, 157, 180]

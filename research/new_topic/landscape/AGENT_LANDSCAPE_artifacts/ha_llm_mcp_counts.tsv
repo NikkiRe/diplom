@@ -1,0 +1,18 @@
+# source: https://analytics.home-assistant.io/current_data.json ; reports_integrations=551020 ; active_installations=694568 ; last_updated_ms=1791204082276
+integration	installations	share_of_reporting_pct
+mcp_server	25826	4.69
+mcp	434	0.08
+google_generative_ai_conversation	34840	6.32
+openai_conversation	24517	4.45
+ollama	12576	2.28
+anthropic	6231	1.13
+wyoming	50674	9.20
+esphome	150121	27.24
+haos_board:rpi5-64	46201	
+haos_board:rpi4-64	77008	
+haos_board:rpi3-64	10426	
+haos_board:green	76209	
+haos_board:yellow	9369	
+haos_board:generic-aarch64	5180	
+haos_board:generic-x86-64	88428	
+haos_board:ova	144369	

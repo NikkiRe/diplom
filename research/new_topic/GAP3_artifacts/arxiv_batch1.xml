@@ -1,0 +1,200 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<feed xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/" xmlns:arxiv="http://arxiv.org/schemas/atom" xmlns="http://www.w3.org/2005/Atom">
+  <id>https://arxiv.org/api/eRUmj3qvsf5ohMekOx6FNnaKYs0</id>
+  <title>arXiv Query: search_query=&amp;id_list=2503.07885,2309.09919,2412.13178,2503.08663,2503.18666,2409.19471&amp;start=0&amp;max_results=50</title>
+  <updated>2026-10-06T13:54:49Z</updated>
+  <link href="https://arxiv.org/api/query?search_query=&amp;start=0&amp;max_results=50&amp;id_list=2503.07885,2309.09919,2412.13178,2503.08663,2503.18666,2409.19471" type="application/atom+xml"/>
+  <opensearch:itemsPerPage>50</opensearch:itemsPerPage>
+  <opensearch:totalResults>6</opensearch:totalResults>
+  <opensearch:startIndex>0</opensearch:startIndex>
+  <entry>
+    <id>http://arxiv.org/abs/2309.09919v3</id>
+    <title>Plug in the Safety Chip: Enforcing Constraints for LLM-driven Robot Agents</title>
+    <updated>2023-11-28T07:08:29Z</updated>
+    <link href="https://arxiv.org/abs/2309.09919v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2309.09919v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Recent advancements in large language models (LLMs) have enabled a new research domain, LLM agents, for solving robotics and planning tasks by leveraging the world knowledge and general reasoning abilities of LLMs obtained during pretraining. However, while considerable effort has been made to teach the robot the "dos," the "don'ts" received relatively less attention. We argue that, for any practical usage, it is as crucial to teach the robot the "don'ts": conveying explicit instructions about prohibited actions, assessing the robot's comprehension of these restrictions, and, most importantly, ensuring compliance. Moreover, verifiable safe operation is essential for deployments that satisfy worldwide standards such as ISO 61508, which defines standards for safely deploying robots in industrial factory environments worldwide. Aiming at deploying the LLM agents in a collaborative environment, we propose a queryable safety constraint module based on linear temporal logic (LTL) that simultaneously enables natural language (NL) to temporal constraints encoding, safety violation reasoning and explaining, and unsafe action pruning. To demonstrate the effectiveness of our system, we conducted experiments in VirtualHome environment and on a real robot. The experimental results show that our system strictly adheres to the safety constraints and scales well with complex safety constraints, highlighting its potential for practical utility.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.FL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2023-09-18T16:33:30Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Ziyi Yang</name>
+    </author>
+    <author>
+      <name>Shreyas S. Raman</name>
+    </author>
+    <author>
+      <name>Ankit Shah</name>
+    </author>
+    <author>
+      <name>Stefanie Tellex</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2409.19471v2</id>
+    <title>SELP: Generating Safe and Efficient Task Plans for Robot Agents with Large Language Models</title>
+    <updated>2025-02-14T02:40:55Z</updated>
+    <link href="https://arxiv.org/abs/2409.19471v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2409.19471v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Despite significant advancements in large language models (LLMs) that enhance robot agents' understanding and execution of natural language (NL) commands, ensuring the agents adhere to user-specified constraints remains challenging, particularly for complex commands and long-horizon tasks. To address this challenge, we present three key insights, equivalence voting, constrained decoding, and domain-specific fine-tuning, which significantly enhance LLM planners' capability in handling complex tasks. Equivalence voting ensures consistency by generating and sampling multiple Linear Temporal Logic (LTL) formulas from NL commands, grouping equivalent LTL formulas, and selecting the majority group of formulas as the final LTL formula. Constrained decoding then uses the generated LTL formula to enforce the autoregressive inference of plans, ensuring the generated plans conform to the LTL. Domain-specific fine-tuning customizes LLMs to produce safe and efficient plans within specific task domains. Our approach, Safe Efficient LLM Planner (SELP), combines these insights to create LLM planners to generate plans adhering to user commands with high confidence. We demonstrate the effectiveness and generalizability of SELP across different robot agents and tasks, including drone navigation and robot manipulation. For drone navigation tasks, SELP outperforms state-of-the-art planners by 10.8% in safety rate (i.e., finishing tasks conforming to NL commands) and by 19.8% in plan efficiency. For robot manipulation tasks, SELP achieves 20.4% improvement in safety rate. Our datasets for evaluating NL-to-LTL and robot task planning will be released in github.com/lt-asset/selp.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.FL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-09-28T22:33:44Z</published>
+    <arxiv:comment>This paper has been accepted for presentation at the 2025 IEEE International Conference on Robotics and Automation (ICRA), May 19-23, 2025, Atlanta, USA, and for inclusion in the conference proceeding</arxiv:comment>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Yi Wu</name>
+    </author>
+    <author>
+      <name>Zikang Xiong</name>
+    </author>
+    <author>
+      <name>Yiran Hu</name>
+    </author>
+    <author>
+      <name>Shreyash S. Iyengar</name>
+    </author>
+    <author>
+      <name>Nan Jiang</name>
+    </author>
+    <author>
+      <name>Aniket Bera</name>
+    </author>
+    <author>
+      <name>Lin Tan</name>
+    </author>
+    <author>
+      <name>Suresh Jagannathan</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2503.07885v2</id>
+    <title>Safety Guardrails for LLM-Enabled Robots</title>
+    <updated>2026-03-03T23:39:07Z</updated>
+    <link href="https://arxiv.org/abs/2503.07885v2" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2503.07885v2" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Although the integration of large language models (LLMs) into robotics has unlocked transformative capabilities, it has also introduced significant safety concerns, ranging from average-case LLM errors (e.g., hallucinations) to adversarial jailbreaking attacks, which can produce harmful robot behavior in real-world settings. Traditional robot safety approaches do not address the contextual vulnerabilities of LLMs, and current LLM safety approaches overlook the physical risks posed by robots operating in real-world environments. To ensure the safety of LLM-enabled robots, we propose RoboGuard, a two-stage guardrail architecture. RoboGuard first contextualizes pre-defined safety rules by grounding them in the robot's environment using a root-of-trust LLM. This LLM is shielded from malicious prompts and employs chain-of-thought (CoT) reasoning to generate context-dependent safety specifications, such as temporal logic constraints. RoboGuard then resolves conflicts between these contextual safety specifications and potentially unsafe plans using temporal logic control synthesis, ensuring compliance while minimally violating user preferences. In simulation and real-world experiments that consider worst-case jailbreaking attacks, RoboGuard reduces the execution of unsafe plans from over 92% to below 3% without compromising performance on safe plans. We also demonstrate that RoboGuard is resource-efficient, robust against adaptive attacks, and enhanced by its root-of-trust LLM's CoT reasoning. These results demonstrate the potential of RoboGuard to mitigate the safety risks and enhance the reliability of LLM-enabled robots. We provide additional resources at https://robo-guard.github.io/.</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-03-10T22:01:56Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Zachary Ravichandran</name>
+    </author>
+    <author>
+      <name>Alexander Robey</name>
+    </author>
+    <author>
+      <name>Vijay Kumar</name>
+    </author>
+    <author>
+      <name>George J. Pappas</name>
+    </author>
+    <author>
+      <name>Hamed Hassani</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2412.13178v5</id>
+    <title>SafeAgentBench: A Benchmark for Safe Task Planning of Embodied LLM Agents</title>
+    <updated>2025-10-31T08:18:50Z</updated>
+    <link href="https://arxiv.org/abs/2412.13178v5" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2412.13178v5" rel="related" type="application/pdf" title="pdf"/>
+    <summary>With the integration of large language models (LLMs), embodied agents have strong capabilities to understand and plan complicated natural language instructions. However, a foreseeable issue is that those embodied agents can also flawlessly execute some hazardous tasks, potentially causing damages in the real world. Existing benchmarks predominantly overlook critical safety risks, focusing solely on planning performance, while a few evaluate LLMs' safety awareness only on non-interactive image-text data. To address this gap, we present SafeAgentBench -- the first comprehensive benchmark for safety-aware task planning of embodied LLM agents in interactive simulation environments, covering both explicit and implicit hazards. SafeAgentBench includes: (1) an executable, diverse, and high-quality dataset of 750 tasks, rigorously curated to cover 10 potential hazards and 3 task types; (2) SafeAgentEnv, a universal embodied environment with a low-level controller, supporting multi-agent execution with 17 high-level actions for 9 state-of-the-art baselines; and (3) reliable evaluation methods from both execution and semantic perspectives. Experimental results show that, although agents based on different design frameworks exhibit substantial differences in task success rates, their overall safety awareness remains weak. The most safety-conscious baseline achieves only a 10% rejection rate for detailed hazardous tasks. Moreover, simply replacing the LLM driving the agent does not lead to notable improvements in safety awareness. Dataset and codes are available in https://github.com/shengyin1224/SafeAgentBench and https://huggingface.co/datasets/safeagentbench/SafeAgentBench.</summary>
+    <category term="cs.CR" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2024-12-17T18:55:58Z</published>
+    <arxiv:comment>28 pages, 19 tables, 15 figures</arxiv:comment>
+    <arxiv:primary_category term="cs.CR"/>
+    <author>
+      <name>Sheng Yin</name>
+    </author>
+    <author>
+      <name>Xianghe Pang</name>
+    </author>
+    <author>
+      <name>Yuanzhuo Ding</name>
+    </author>
+    <author>
+      <name>Menglan Chen</name>
+    </author>
+    <author>
+      <name>Yutong Bi</name>
+    </author>
+    <author>
+      <name>Yichen Xiong</name>
+    </author>
+    <author>
+      <name>Wenhao Huang</name>
+    </author>
+    <author>
+      <name>Zhen Xiang</name>
+    </author>
+    <author>
+      <name>Jing Shao</name>
+    </author>
+    <author>
+      <name>Siheng Chen</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2503.08663v1</id>
+    <title>Generating Robot Constitutions &amp; Benchmarks for Semantic Safety</title>
+    <updated>2025-03-11T17:50:47Z</updated>
+    <link href="https://arxiv.org/abs/2503.08663v1" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2503.08663v1" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Until recently, robotics safety research was predominantly about collision avoidance and hazard reduction in the immediate vicinity of a robot. Since the advent of large vision and language models (VLMs), robots are now also capable of higher-level semantic scene understanding and natural language interactions with humans. Despite their known vulnerabilities (e.g. hallucinations or jail-breaking), VLMs are being handed control of robots capable of physical contact with the real world. This can lead to dangerous behaviors, making semantic safety for robots a matter of immediate concern. Our contributions in this paper are two fold: first, to address these emerging risks, we release the ASIMOV Benchmark, a large-scale and comprehensive collection of datasets for evaluating and improving semantic safety of foundation models serving as robot brains. Our data generation recipe is highly scalable: by leveraging text and image generation techniques, we generate undesirable situations from real-world visual scenes and human injury reports from hospitals. Secondly, we develop a framework to automatically generate robot constitutions from real-world data to steer a robot's behavior using Constitutional AI mechanisms. We propose a novel auto-amending process that is able to introduce nuances in written rules of behavior; this can lead to increased alignment with human preferences on behavior desirability and safety. We explore trade-offs between generality and specificity across a diverse set of constitutions of different lengths, and demonstrate that a robot is able to effectively reject unconstitutional actions. We measure a top alignment rate of 84.3% on the ASIMOV Benchmark using generated constitutions, outperforming no-constitution baselines and human-written constitutions. Data is available at asimov-benchmark.github.io</summary>
+    <category term="cs.RO" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CV" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CY" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.HC" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-03-11T17:50:47Z</published>
+    <arxiv:primary_category term="cs.RO"/>
+    <author>
+      <name>Pierre Sermanet</name>
+    </author>
+    <author>
+      <name>Anirudha Majumdar</name>
+    </author>
+    <author>
+      <name>Alex Irpan</name>
+    </author>
+    <author>
+      <name>Dmitry Kalashnikov</name>
+    </author>
+    <author>
+      <name>Vikas Sindhwani</name>
+    </author>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2503.18666v3</id>
+    <title>AgentSpec: Customizable Runtime Enforcement for Safe and Reliable LLM Agents</title>
+    <updated>2025-07-31T04:00:48Z</updated>
+    <link href="https://arxiv.org/abs/2503.18666v3" rel="alternate" type="text/html"/>
+    <link href="https://arxiv.org/pdf/2503.18666v3" rel="related" type="application/pdf" title="pdf"/>
+    <summary>Agents built on LLMs are increasingly deployed across diverse domains, automating complex decision-making and task execution. However, their autonomy introduces safety risks, including security vulnerabilities, legal violations, and unintended harmful actions. Existing mitigation methods, such as model-based safeguards and early enforcement strategies, fall short in robustness, interpretability, and adaptability. To address these challenges, we propose AgentSpec, a lightweight domain-specific language for specifying and enforcing runtime constraints on LLM agents. With AgentSpec, users define structured rules that incorporate triggers, predicates, and enforcement mechanisms, ensuring agents operate within predefined safety boundaries. We implement AgentSpec across multiple domains, including code execution, embodied agents, and autonomous driving, demonstrating its adaptability and effectiveness. Our evaluation shows that AgentSpec successfully prevents unsafe executions in over 90% of code agent cases, eliminates all hazardous actions in embodied agent tasks, and enforces 100% compliance by autonomous vehicles (AVs). Despite its strong safety guarantees, AgentSpec remains computationally lightweight, with overheads in milliseconds. By combining interpretability, modularity, and efficiency, AgentSpec provides a practical and scalable solution for enforcing LLM agent safety across diverse applications. We also automate the generation of rules using LLMs and assess their effectiveness. Our evaluation shows that the rules generated by OpenAI o1 achieve a precision of 95.56% and recall of 70.96% for embodied agents, successfully identify 87.26% of the risky code, and prevent AVs from breaking laws in 5 out of 8 scenarios.</summary>
+    <category term="cs.AI" scheme="http://arxiv.org/schemas/atom"/>
+    <category term="cs.CL" scheme="http://arxiv.org/schemas/atom"/>
+    <published>2025-03-24T13:31:48Z</published>
+    <arxiv:comment>Accepted by the 48th IEEE/ACM International Conference on Software Engineering (ICSE 2026)</arxiv:comment>
+    <arxiv:primary_category term="cs.AI"/>
+    <arxiv:journal_ref>Proc. ICSE'26, pages 2938-2950. ACM, 2026</arxiv:journal_ref>
+    <author>
+      <name>Haoyu Wang</name>
+    </author>
+    <author>
+      <name>Christopher M. Poskitt</name>
+    </author>
+    <author>
+      <name>Jun Sun</name>
+    </author>
+    <arxiv:doi>10.1145/3744916.3764546</arxiv:doi>
+    <link rel="related" href="https://doi.org/10.1145/3744916.3764546" title="doi"/>
+  </entry>
+</feed>

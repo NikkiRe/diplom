@@ -1,0 +1,7 @@
+# Предварительные замеры для заметки R8 (2026-10-05), Apple M4 Pro 24 GB, macOS 27, llama.cpp build 11146 (7fe450e19, Homebrew), Metal.
+# Модель: /Users/chosenundead/Projects/rudojo/models/Qwen3-8B-Q4_K_M.gguf
+# Однократные прогоны (batched-bench не делает повторов); это оценка порядка величин, не научный эксперимент.
+llama-batched-bench -m Qwen3-8B-Q4_K_M.gguf -ngl 99 -c 8192 -b 2048 -ub 512 -npp 256 -ntg 64 -npl 1,2,4,8            > batched_bench_npp256_ntg64.log
+llama-batched-bench -m Qwen3-8B-Q4_K_M.gguf -ngl 99 -c 8192 -b 2048 -ub 512 -fa on -npp 256 -ntg 64 -npl 1,2,3,4,8,16 > batched_bench_fa_npp256_ntg64.log
+llama-batched-bench -m Qwen3-8B-Q4_K_M.gguf -ngl 99 -c 16384 -b 2048 -ub 512 -fa on -npp 128 -ntg 32 -npl 1,2,4,6,8,9,10,12,16,24,32 > batched_bench_fa_sweep_npp128_ntg32.log
+llama-bench -m Qwen3-8B-Q4_K_M.gguf -ngl 99 -p 512 -n 0 -b 512 -ub 16,32,64,128,256,512 -r 3 > llama_bench_pp512_ubatch_sweep.log

@@ -1,0 +1,43 @@
+# safety_gate (neurobot/safety) — единственный писатель /cmd_vel (PLAN §13.3): пропускает, урезает или обнуляет
+# желаемую скорость исполнителя из /neurobot/cmd_vel_req; дальше — twist_mux и diff_drive_controller базы.
+# READY — после первого явного нуля, WATCHDOG — от тика; нет тика 3 с -> SIGABRT и рестарт (движение после рестарта
+# не возобновляется). ExecStopPost шлёт явный ноль ещё раз — после любой остановки, в том числе kill -9 (S2); ему
+# нужен запуск Python и rclpy с участником DDS — секунды на Nano [оценка], под нагрузкой ВМ до 14 с [замер], отсюда
+# TimeoutStopSec. Тормозит базу раньше таймаут diff_drive_controller (cmd_vel_timeout 0,5 с), ноль — второй рубеж.
+# Перед стартом: в /cmd_vel никто больше не пишет, входы twist_mux главнее /cmd_vel никто не публикует, в вход базы
+# пишет только twist_mux, у /scan один издатель. Код ставит install.sh в @PREFIX@/src.
+# Аварийная защёлка переживает рестарт и перезагрузку: safety_gate хранит её в $STATE_DIRECTORY/estop.json
+# (/var/lib/neurobot/safety) и читает до READY; снять её может только release человеком (neurobot estop).
+[Unit]
+Description=neurobot: safety_gate — единственный писатель /cmd_vel
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+@AFTER_DRIVERS@
+StartLimitIntervalSec=0
+
+[Service]
+Type=notify
+NotifyAccess=all
+User=@USER@
+Group=@GROUP@
+SupplementaryGroups=@SUPPLEMENTARY_GROUPS@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 ROS_LOG_DIR=/run/neurobot/%N
+Environment=PYTHONPATH=@PREFIX@/src
+# журналы rcl — в tmpfs: у системного пользователя может не быть $HOME, а всё нужное и так в journald
+RuntimeDirectory=neurobot/%N
+StateDirectory=neurobot/safety
+ExecStartPre=@PREFIX@/bin/neurobot precheck safety
+ExecStart=@PREFIX@/bin/neurobot-run --ros --var NEUROBOT_SAFETY_CMD
+ExecStopPost=@PREFIX@/bin/neurobot zero
+WatchdogSec=3
+Restart=always
+RestartSec=500ms
+TimeoutStartSec=30
+TimeoutStopSec=20
+LimitCORE=0
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=2000
+
+[Install]
+WantedBy=neurobot.target
