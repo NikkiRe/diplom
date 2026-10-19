@@ -52,9 +52,14 @@ class K6Test(unittest.TestCase):
         req = [(10.0, 0.15, 0.0), (10.05, 0.15, 0.0), (10.11, 0.0, 0.0)]
         cmd = [(10.0, 0.15, 0.0), (10.12, 0.15, 0.0), (10.15, 0.12, 0.0), (10.6, 0.0, 0.0)]
         r = k6.mcp_run(10.0, 10.3, agent, req, cmd, 0.15)
-        self.assertEqual(r, {"v_ref": 0.15, "call_s": 0.3, "agent_zero_s": 0.08, "req_zero_s": 0.11,
+        self.assertEqual(r, {"v_ref": 0.15, "call_s": 0.3, "stop_s": None, "agent_zero_s": 0.08, "req_zero_s": 0.11,
                              "brake_s": 0.15, "zero_s": 0.6})
         self.assertEqual(k6.mcp_run(10.0, None, [], [], cmd[:2], 0.15)["zero_s"], None)
+        # стоп агента (решение 1а): метка его приёма; ноль в /cmd_vel — сразу, торможение и ноль совпадают
+        stop = [(9.5, {"id": "old"}), (10.004, {"id": "s1", "by": "agent"})]
+        hard = [(10.0, 0.15, 0.0), (10.005, 0.0, 0.0)]
+        r = k6.mcp_run(10.0, 10.25, agent, req, hard, 0.15, stop)
+        self.assertEqual((r["stop_s"], r["brake_s"], r["zero_s"]), (0.004, 0.005, 0.005))
 
     def test_scan_run_latency_may_be_negative(self):
         scans = [(5.0, 1.2), (5.1, 0.24), (5.2, 0.23)]

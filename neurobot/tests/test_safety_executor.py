@@ -1,6 +1,7 @@
 """Исполнитель v1 под контрактом safety_gate (neurobot/executor/guard.py, PLAN §13.3): отмена задачи и task_end,
-жест не исполняется при защёлке и блоке, слепой сектор решает safety_gate, нечисловые входы, вырожденный скан,
-удержание старта (манёвр, начатый до рестарта исполнителя, не продолжается). Без rclpy, Python ≥ 3.8. Правила v1
+жест не исполняется при защёлке и блоке, стоп агента (решение 1а: манёвр не продолжается, новые команды идут),
+слепой сектор решает safety_gate, нечисловые входы, вырожденный скан, удержание старта (манёвр, начатый до рестарта
+исполнителя, не продолжается). Без rclpy, Python ≥ 3.8. Правила v1
 без safety_gate — test_executor_guard.py.
 """
 from __future__ import annotations
@@ -112,6 +113,39 @@ class Cancel(unittest.TestCase):
         g.gesture(1.1, 0.5, 0.0)
         self.assertEqual(g.command(1.1).by, "none")
         self.assertEqual(g.events[-1]["status"], "safety_lost")
+
+    def test_agent_stop_ends_maneuver_and_new_commands_run(self):
+        # решение 1а 19.10: robot_stop агента — нули в /cmd_vel_agent (исполнитель) и /neurobot/stop_now (safety_gate
+        # ставит ноль сразу и ждёт нулевого запроса). Исполнитель манёвр не продолжает ни по нулю агента, ни — если
+        # нули потерялись — по взводу safety_gate; новые команды после стопа — как обычно
+        unarmed = Safety("blocked", 0.0, 0.0, 0.0, ("unarmed: ждём нулевой запрос",))
+        for zeros_lost in (False, True):
+            with self.subTest(zeros_lost=zeros_lost):
+                g = guard()
+                g.safety(0.0, OK)
+                g.gesture(0.0, 0.5, 0.0)
+                self.assertEqual(g.command(0.0).by, "gesture")
+                if zeros_lost:
+                    g.safety(0.05, unarmed)
+                else:
+                    g.agent(0.05, 0.0, 0.0)
+                g.gesture(0.05, 0.5, 0.0)
+                self.assertEqual(g.command(0.05)[:3], (0.0, 0.0, "agent" if not zeros_lost else "none"))
+                g.safety(0.1, OK)  # safety_gate взведён нулём исполнителя
+                for k in range(3, 20):  # демо доезжает манёвр по своим часам, агент замолчал
+                    g.scan(k / 20, [3.0] * N, *TB3)
+                    g.gesture(k / 20, 0.5, 0.0)
+                    cmd = g.command(k / 20)
+                    self.assertEqual((cmd.linear, cmd.front), (0.0, FRONT_CLEAR), k)
+                self.assertEqual(g.events[-1:] if zeros_lost else g.events,
+                                 [{"type": "task_end", "task": "gesture", "status": "blocked",
+                                   "reasons": ["unarmed: ждём нулевой запрос"]}] if zeros_lost else [])
+                g.gesture(1.0, 0.0, 0.0)  # манёвр кончился
+                g.gesture(1.05, 0.5, 0.0)  # новый жест
+                self.assertEqual(g.command(1.05)[:3], (0.5, 0.0, "gesture"))
+                g.safety(1.1, OK)
+                g.agent(1.1, 0.1, 0.0)  # новая команда агента
+                self.assertEqual(g.command(1.1)[:3], (0.1, 0.0, "agent"))
 
     def test_zero_command_is_not_a_task(self):
         g = guard()

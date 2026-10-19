@@ -237,6 +237,39 @@ class McpConfigTest(Tmp):
         (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data))
         self.assertEqual((p.fatal, "открыта запись в /neurobot/safety_state" in p.text), (True, True))
 
+    def test_agent_stop_topic(self):
+        # решение 1а: robot_stop шлёт стоп в safety_gate (ноль сразу); запись открыта только в эту тему
+        data = self.example()
+        self.assertEqual(data["topics"]["stop_now"]["name"], "/neurobot/stop_now")
+        rb = "ros2 launch x address:=127.0.0.1 topics_glob:=\"'[/cmd_vel_agent,{}]'\""
+        self.assertEqual(checks.check_mcp_config(mcp_cfg(self.tmp, data, NEUROBOT_ROSBRIDGE_CMD=rb.format(
+            "/neurobot/stop_now"))), [])
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data, NEUROBOT_ROSBRIDGE_CMD=rb.format("/x")))
+        self.assertEqual((p.fatal, p.text.split(" — ")[0]), (False, "/neurobot/stop_now нет в topics_glob rosbridge"))
+        self.assertIn("остановит плавно", p.text)
+        data["topics"]["stop_now"]["name"] = "/neurobot/estop"
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data))
+        self.assertEqual(p.fatal, True)
+        self.assertIn("а safety_gate слушает /neurobot/stop_now", p.text)
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data, NEUROBOT_STOP_TOPIC=""))  # стопа агента нет
+        self.assertIn("открыта запись в /neurobot/estop", p.text)
+        del data["topics"]["stop_now"]
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data))
+        self.assertEqual((p.code, p.fatal), ("config_invalid", False))
+        self.assertIn("нет topics.stop_now", p.text)
+        self.assertEqual(checks.check_mcp_config(mcp_cfg(self.tmp, data, NEUROBOT_STOP_TOPIC="")), [])
+
+    def test_agent_stop_topic_is_not_a_guarded_topic(self):
+        # стоп агента под именем защищённой темы открыл бы агенту запись в неё — отказ, а не «тема стопа»
+        data = self.example()
+        rb = "ros2 launch x address:=127.0.0.1 topics_glob:=\"'[/cmd_vel_agent,{}]'\""
+        for topic in ("/cmd_vel", "/neurobot/estop", "/neurobot/cmd_vel_req", "/neurobot/safety_state", "/scan"):
+            with self.subTest(topic=topic):
+                data["topics"]["stop_now"]["name"] = topic
+                problems = checks.check_mcp_config(mcp_cfg(self.tmp, data, NEUROBOT_STOP_TOPIC=topic,
+                                                            NEUROBOT_ROSBRIDGE_CMD=rb.format(topic)))
+                self.assertTrue(any(p.fatal and "NEUROBOT_STOP_TOPIC=" + topic in p.text for p in problems), problems)
+
     def test_not_json(self):
         cfg = Config({"NEUROBOT_MCP_CONFIG": put(self.p("c.json"), "{")}, self.p("n.env"))
         self.assertEqual(codes(checks.check_mcp_config(cfg)), [("config_invalid", True)])
@@ -538,6 +571,17 @@ class AgentPathTest(Tmp):
         self.assertIn("открывает агенту /camera/depth/image_rect_raw", p.text)
         (p,) = self.rosbridge(base + "topics_glob:=[/cmd_vel_agent]" + rest)  # без кавычек YAML не стартует
         self.assertIn("нужен список в кавычках YAML", p.text)
+
+    def test_topics_glob_allows_agent_stop(self):
+        # решение 1а: стоп агента — в topics_glob (тема умеет только остановить); без NEUROBOT_STOP_TOPIC — лишняя
+        cmd = self.BASE + "topics_glob:=\"'[/cmd_vel_agent,/neurobot/stop_now]'\"" + self.SERVICES + self.PARAMS
+        self.assertEqual(self.rosbridge(cmd), [])
+        (p,) = self.rosbridge(cmd, NEUROBOT_STOP_TOPIC="")
+        self.assertIn("лишнее /neurobot/stop_now", p.text)
+        (p,) = self.rosbridge(cmd.replace("stop_now", "*"))
+        self.assertIn("разрешено только тема агента /cmd_vel_agent и стоп агента /neurobot/stop_now", p.text)
+        (p,) = self.rosbridge(cmd.replace("/neurobot/stop_now", "/cmd_vel"), NEUROBOT_STOP_TOPIC="/cmd_vel")
+        self.assertIn("лишнее /cmd_vel", p.text)
 
     def test_pub_and_sub_globs_of_rosbridge_2x(self):
         # rosbridge 2.x объединяет topics_pub_glob и topics_sub_glob с topics_glob: публикация — тот же список

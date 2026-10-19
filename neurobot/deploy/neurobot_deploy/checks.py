@@ -412,6 +412,18 @@ def _motion_inputs(cfg: Config) -> List[str]:
             + cfg.get("NEUROBOT_OVERRIDE_TOPICS").split() + cfg.get("NEUROBOT_JOY_TOPICS").split() if t]
 
 
+def _guarded_topics(cfg: Config) -> Dict[str, str]:
+    """Темы, которые агенту нельзя открывать ни под каким именем, в том числе как стоп агента: тема → чем опасна."""
+    out = {t: "мимо исполнителя и safety_gate (второй писатель, S4)" for t in _motion_inputs(cfg)}
+    out.update({t: "— агент подменил бы датчик safety_gate" for t, _, _ in cfg.sensors()})
+    out.update({cfg.get("NEUROBOT_CMD_VEL_REQ"): "мимо исполнителя",
+                cfg.get("NEUROBOT_ESTOP_TOPIC"): "— агент мог бы снять аварийную защёлку",
+                cfg.get("NEUROBOT_SAFETY_STATE_TOPIC"): "— агент подменил бы состояние safety_gate",
+                cfg.get("NEUROBOT_SCAN_TOPIC"): "— агент подменил бы скан"})
+    out.pop("", None)
+    return out
+
+
 def remaps(command: str, node: str) -> Dict[str, str]:
     """Ремапы тем из «--ros-args -r откуда:=куда» команды (и «--remap»): {откуда: куда}. Как в rcl, действует первое
     подходящее правило, следующие для той же темы — нет [опыт, rclpy Jazzy: «-r /cmd_vel:=/cmd_vel -r
@@ -624,13 +636,21 @@ def check_supervised(key: str, cfg: Config) -> List[Problem]:
                         key, " ".join(argv[:4]), SUPERVISED, cfg.get("NEUROBOT_PREFIX"), SUPERVISED), fatal=False)]
 
 
+def _glob_list(text: str) -> Tuple[bool, List[str]]:
+    """Значение *_glob ros2 launch: (список в кавычках YAML, его элементы)."""
+    text = text.strip()
+    quoted = len(text) > 2 and text[0] == text[-1] and text[0] in "'\"" and text[1] == "[" and text[-2] == "]"
+    return quoted, [g for g in (g.strip().strip("'\"") for g in text[2:-2].split(",")) if g] if quoted else []
+
+
 def check_rosbridge(cfg: Config) -> List[Problem]:
     """Команда rosbridge — второй рубеж L3 для любого клиента WebSocket (MCP-сервер ограничивает себя сам,
     check_mcp_config). Аргументы ros2 launch (rosbridge 1.3.1 и 2.x), каждый ровно один раз:
     - address:=127.0.0.1 — по умолчанию адрес пуст, и rosbridge слушает все интерфейсы, то есть сеть лаборатории;
     - topics_glob:="'[/cmd_vel_agent]'" — только тема агента (и копия состояния safety_gate для агента
-      NEUROBOT_AGENT_STATE_TOPIC, если задана): тема из списка открыта клиенту и на запись (раздельных списков
-      подписки и публикации в rosbridge 1.3.1 нет), а без глоба открыты все — /cmd_vel, вход safety_gate, защёлка,
+      NEUROBOT_AGENT_STATE_TOPIC, если задана, и стоп агента NEUROBOT_STOP_TOPIC: он умеет только остановить, без
+      него robot_stop — плавная остановка): тема из списка открыта клиенту и на запись (раздельных списков подписки и
+      публикации в rosbridge 1.3.1 нет), а без глоба открыты все — /cmd_vel, вход safety_gate, защёлка,
       датчики safety_gate и состояние, которое читают исполнитель, doctor и neurobot estop. Копию читает только
       MCP-сервер: подменить её агент может лишь себе. В rosbridge 2.x (Jazzy) есть и раздельные topics_pub_glob и
       topics_sub_glob, они объединяются с topics_glob: topics_pub_glob — тот же список разрешённого, topics_sub_glob
@@ -657,11 +677,14 @@ def check_rosbridge(cfg: Config) -> List[Problem]:
                                     cfg.get("NEUROBOT_SCAN_TOPIC")] + [t for t, _, _ in cfg.sensors()]
     services = (["/{}/{}".format(n, s) for n in nodes if n for s in ("set_parameters", "set_parameters_atomically")]
                 + ["/controller_manager/switch_controller", "/controller_manager/unload_controller", estop])
-    mirror = cfg.get("NEUROBOT_AGENT_STATE_TOPIC")
-    agent_topics = {agent, mirror} - {""}
+    mirror, stop = cfg.get("NEUROBOT_AGENT_STATE_TOPIC"), cfg.get("NEUROBOT_STOP_TOPIC")
+    if stop in _guarded_topics(cfg):
+        stop = ""  # защищённая тема стопом агента не становится: элемент глоба — лишний (и отказ в _stop_topic)
+    agent_topics = {agent, mirror, stop} - {""}
     # аргумент: (разрешён ли элемент, что разрешено, что открыто без глоба, имена для текста, пример значения)
     topic_rule = (lambda g: g in agent_topics, "только тема агента " + agent + (
-                      " и копия состояния для агента " + mirror if mirror else ""),
+                      " и копия состояния для агента " + mirror if mirror else "") + (
+                      " и стоп агента " + stop if stop else ""),
                   "запись в любые темы, в том числе {}, {} и {}".format(cfg.get("NEUROBOT_CMD_VEL"), req, estop),
                   topics, agent)
     rules = {"topics_glob": topic_rule, "topics_pub_glob": topic_rule,
@@ -693,8 +716,7 @@ def check_rosbridge(cfg: Config) -> List[Problem]:
         if len(values) > 1 or (arg in ROSBRIDGE_GLOBS_2X and not values):
             continue
         text = values[0].strip() if values else ""
-        quoted = len(text) > 2 and text[0] == text[-1] and text[0] in "'\"" and text[1] == "[" and text[-2] == "]"
-        globs = [g for g in (g.strip().strip("'\"") for g in text[2:-2].split(",")) if g] if quoted else []
+        quoted, globs = _glob_list(text)
         if not globs and (quoted or text.strip("'\" ") in ("", "[]")):
             if arg not in ROSBRIDGE_GLOBS_2X:  # пустой topics_pub_glob/topics_sub_glob в 2.x — это topics_glob
                 out.append(Problem("config_invalid", "NEUROBOT_ROSBRIDGE_CMD без {} (пустой список для rosbridge "
@@ -735,9 +757,7 @@ def check_mcp_config(cfg: Config) -> List[Problem]:
             path, server.get("host", "127.0.0.1"), server.get("port", 18110),
             server.get("streamable_http_path", "/mcp"), cfg.get("NEUROBOT_MCP_URL"))))
     agent = cfg.get("NEUROBOT_AGENT_TOPIC")
-    guarded = {cfg.get("NEUROBOT_CMD_VEL"): "мимо исполнителя и safety_gate (второй писатель, S4)",
-               cfg.get("NEUROBOT_CMD_VEL_REQ"): "мимо исполнителя",
-               cfg.get("NEUROBOT_ESTOP_TOPIC"): "— агент мог бы снять аварийную защёлку"}
+    guarded = _guarded_topics(cfg)
     topics = data.get("topics") or {}
     topic = (topics.get("cmd_vel") or {}).get("name", "/cmd_vel")
     if topic in guarded:
@@ -746,11 +766,13 @@ def check_mcp_config(cfg: Config) -> List[Problem]:
     elif topic != agent:
         problems.append(Problem("config_invalid", "{}: topics.cmd_vel.name={}, а исполнитель слушает {}".format(
             path, topic, agent)))
+    stop_cfg, stop = topics.get("stop_now") or {}, cfg.get("NEUROBOT_STOP_TOPIC")
     writable = sorted(str(t.get("name")) for k, t in topics.items() if k != "cmd_vel" and isinstance(t, dict)
-                      and t.get("access", "read") in ("write", "read_write"))
+                      and t.get("access", "read") in ("write", "read_write") and not (k == "stop_now" and stop))
     if writable:
-        problems.append(Problem("config_invalid", "{}: агенту открыта запись в {} — пишет он только {}".format(
-            path, ", ".join(writable), agent)))
+        problems.append(Problem("config_invalid", "{}: агенту открыта запись в {} — пишет он только {}{}".format(
+            path, ", ".join(writable), agent, " и стоп агента " + stop if stop else "")))
+    problems += _stop_topic(cfg, path, stop_cfg.get("name"), stop)
     state = (topics.get("safety_state") or {}).get("name")
     known = [t for t in (cfg.get("NEUROBOT_SAFETY_STATE_TOPIC"), cfg.get("NEUROBOT_AGENT_STATE_TOPIC")) if t]
     if not state:
@@ -782,6 +804,29 @@ def check_mcp_config(cfg: Config) -> List[Problem]:
             problems.append(Problem("config_invalid", "{}: {} включён, но в присланной версии не работает "
                                     "(read_one_message нет, M1)".format(path, name), fatal=False))
     return problems
+
+
+def _stop_topic(cfg: Config, path: str, name: Optional[str], stop: str) -> List[Problem]:
+    """Стоп агента (решение 1а): robot_stop шлёт его safety_gate, и тот ставит ноль сразу. Нет темы в конфиге или в
+    topics_glob rosbridge — robot_stop остаётся штатной плавной остановкой (≈0,5 с, а не ≤ 100 мс K6). Пустой
+    NEUROBOT_STOP_TOPIC — стопа агента нет (запись в topics.stop_now — лишняя, её ловит проверка записи)."""
+    slow = "robot_stop агента остановит плавно (≈0,5 с), а не ноль ≤ 100 мс (K6, решение 1а)"
+    if not stop:
+        return []
+    guarded = _guarded_topics(cfg)
+    if stop in guarded:
+        return [Problem("config_invalid", "NEUROBOT_STOP_TOPIC={} — стоп агента должен быть отдельной темой: запись "
+                        "в неё агент получил бы {} (L3)".format(stop, guarded[stop]))]
+    if not name:
+        return [Problem("config_invalid", "{}: нет topics.stop_now ({}) — {}".format(path, stop, slow), fatal=False)]
+    if name != stop:
+        return [Problem("config_invalid", "{}: topics.stop_now.name={}, а safety_gate слушает {}".format(
+            path, name, stop))]
+    command = cfg.get("NEUROBOT_ROSBRIDGE_CMD")
+    globs = _glob_list((_launch_args(command).get("topics_glob") or [""])[-1])[1] if command else ["*"]
+    if not any(fnmatch.fnmatchcase(stop, g) for g in globs):
+        return [Problem("config_invalid", "{} нет в topics_glob rosbridge — {}".format(stop, slow), fatal=False)]
+    return []
 
 
 def check_picoclaw_config(cfg: Config) -> List[Problem]:

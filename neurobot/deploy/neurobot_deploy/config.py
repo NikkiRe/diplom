@@ -53,6 +53,9 @@ DEFAULTS = {
     "NEUROBOT_MOTION_STATE_TOPIC": "/neurobot/motion_state",
     "NEUROBOT_SAFETY_STATE_TOPIC": "/neurobot/safety_state",
     "NEUROBOT_ESTOP_TOPIC": "/neurobot/estop",
+    # стоп агента (robot_stop через MCP, решение 1а): safety_gate ставит ноль сразу, без защёлки; тема открыта агенту
+    # в rosbridge — она умеет только остановить; "" — нет (robot_stop — штатная плавная остановка)
+    "NEUROBOT_STOP_TOPIC": "/neurobot/stop_now",
     # снятие защёлки: release.json root в каталоге root (тот же release_dir у safety_gate); по теме — нельзя
     "NEUROBOT_ESTOP_RELEASE_DIR": "/run/neurobot-estop",
     # копия состояния safety_gate для агента (agent_state_topic): rosbridge 1.3.1 (Foxy) не умеет открыть тему только

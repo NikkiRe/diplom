@@ -20,7 +20,8 @@
    ноль (или замолчит), — движение само не продолжается. Нечисловой запрос — явный ноль.
 5. Разгон: ускорение и рывок ограничены. Торможение: по запросу (исполнитель сам сбавил или прислал ноль) — плавно,
    S-кривой с stop_decel и max_jerk; по причине безопасности (предел срезал запрос, защёлка, полный стоп, запрос
-   устарел) — сразу.
+   устарел) и по стопу агента (/neurobot/stop_now — robot_stop через MCP, решение 1а 19.10) — сразу. Стоп агента — не
+   защёлка: разовый ноль, дальше — с нулевого запроса, как после любого стопа (взвод).
 6. Упор: команда дошла до базы (выход twist_mux), а одометрия стоит дольше stall_s — защёлка.
 Наклон, удар и чужой писатель /cmd_vel ставят защёлку сразу, в колбэке входа. Снятие защёлки — только файлом
 каталога root (latch.read_release), команда release в теме — отказ. /scan публикует не драйвер (не тот, кто был
@@ -43,7 +44,7 @@ import numpy as np
 from .config import Params
 from .depth import FreeSpace, Hazards, Memory
 from .geometry import Pose, edge_distance
-from .latch import EstopCmd, Latch, ReleaseReq
+from .latch import EstopCmd, Latch, ReleaseReq, StopCmd
 from .lidar import LidarView, MaskLearner, Rays, ScanMeta, check_meta, mask_spans, self_hits, view
 from .monitors import Shock, Stall
 from .motion import Ramp, allowed_speed
@@ -90,7 +91,8 @@ class Gate:
         self.mask_deg: list = []
         self.outside_deg: list = []
         self.tilt: Optional[float] = None
-        self.counters = {"invalid": 0, "cut": 0, "estop_engaged": 0, "estop_released": 0, "release_denied": 0}
+        self.counters = {"invalid": 0, "cut": 0, "estop_engaged": 0, "estop_released": 0, "release_denied": 0,
+                         "stop_now": 0}
         self._req: Tuple[Optional[float], float, float] = (None, 0.0, 0.0)
         self._req_bad = False
         self._t: Dict[str, Optional[float]] = dict.fromkeys(("scan", "odom", "depth", "imu", "accel"))
@@ -319,6 +321,20 @@ class Gate:
         self.counters["release_denied"] += 1
         return ("не снята: по теме защёлку не снять (by={} — самозаявлено); снимает человек: sudo neurobot estop "
                 "release".format(cmd.by))
+
+    def stop_now(self, cmd: StopCmd) -> str:
+        """Стоп агента (robot_stop через MCP): ноль сразу по обеим осям, без S-кривой и без защёлки. Ненулевой запрос
+        после него не проходит, пока исполнитель не пришлёт ноль (взвод): стоп гасит движение, даже если ноль агента
+        до исполнителя ещё не дошёл. Итог для журнала."""
+        if cmd.id and cmd.id in self._ids:
+            return "повтор {}".format(cmd.id)
+        if cmd.id:
+            self._ids.append(cmd.id)
+        self._ramp_v.step(0.0, 0.0)
+        self._ramp_w.step(0.0, 0.0)
+        self._armed = False
+        self.counters["stop_now"] += 1
+        return "ноль сразу"
 
     def release(self, wall: float, req: ReleaseReq) -> str:
         """Снятие файлом каталога root (sudo neurobot estop release): защёлка та, что видел человек, запись свежая,

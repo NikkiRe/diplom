@@ -8,8 +8,9 @@
 глубины — как слепой сектор (nodata_unseen), вырожденный скан, маска — только корпус камеры, низкий ящик в памяти
 глубины, обрыв, кадр глубины без данных, наклон, удар, упор и пробуксовка, устаревшие данные, джойстик, защёлка
 (снятие — только файлом каталога root), чужой писатель, второй и чужой издатели /scan, нечисловой запрос, пределы,
-задний ход по одометрии, разгон и рывок, плавная остановка по запросу и резкая по причине безопасности, дребезг у
-порога, время движения, геозабор, касание (лидар; клетка глубины — с ошибкой depth_err_m, она же в пути вперёд).
+задний ход по одометрии, разгон и рывок, плавная остановка по запросу и резкая по причине безопасности и по стопу
+агента (без защёлки), дребезг у порога, время движения, геозабор, касание (лидар; клетка глубины — с ошибкой
+depth_err_m, она же в пути вперёд).
 Выход процесса — test_safety_node.py.
 """
 from __future__ import annotations
@@ -33,7 +34,7 @@ from neurobot.safety.config import Params  # noqa: E402
 from neurobot.safety.depth import Hazards  # noqa: E402
 from neurobot.safety.gate import BLOCKED, ESTOP, OK, SLOW, TILT_AGREE_S, Gate  # noqa: E402
 from neurobot.safety.geometry import Pose  # noqa: E402
-from neurobot.safety.latch import EstopCmd, Latch, ReleaseReq  # noqa: E402
+from neurobot.safety.latch import EstopCmd, Latch, ReleaseReq, StopCmd  # noqa: E402
 from neurobot.safety.lidar import ScanMeta  # noqa: E402
 from neurobot.safety.motion import allowed_speed, stop_distance  # noqa: E402
 
@@ -998,6 +999,34 @@ class Limits(Case):
         w = moving()
         d = w.run(0.45, (0.15, 0.3), scan=False)
         self.assertEqual((d.v, d.w), (0.0, 0.0))
+
+    def test_agent_stop_is_immediate_without_latch(self):
+        # решение 1а 19.10: robot_stop агента через MCP — стоп по безопасности, ноль сразу; защёлки нет
+        w = self.world(rs3=False)
+        w.start()
+        w.run(2.0, (0.15, 0.3))
+        g = w.gate
+        self.assertEqual(g.stop_now(StopCmd("agent", "k6", "s1", w.t)), "ноль сразу")
+        d = w.step((0.15, 0.3))  # ноль агента до исполнителя ещё не дошёл — запрос прежний
+        self.assertEqual((d.v, d.w), (0.0, 0.0))
+        self.assertEqual(d.state, BLOCKED)
+        self.assertIn("unarmed", d.codes)
+        self.assertFalse(w.latch.engaged)
+        self.assertFalse(os.path.exists(w.latch_path))  # в файл защёлки ничего не писалось
+        self.assertEqual(w.run(1.0, (0.15, 0.3)).v, 0.0)  # прежний манёвр сам не продолжается
+        w.step((0.0, 0.0))  # исполнитель погасил задачу
+        self.assertTrue(g.stop_now(StopCmd("agent", "k6", "s1", w.t)).startswith("повтор"))  # копия того же стопа
+        vs = [w.step((0.15, 0.0)).v for _ in range(20)]  # новая команда — как обычно, с разгоном
+        self.assertTrue(0.0 < vs[0] < 0.15)
+        self.assertAlmostEqual(vs[-1], 0.15)
+        self.assertEqual(g.counters["stop_now"], 1)
+        self.assertEqual(g.counters["estop_engaged"], 0)
+        # стоп, пришедший после нуля исполнителя (плавное торможение уже идёт), — тоже сразу
+        w.step((0.0, 0.0))
+        self.assertGreater(w.last.v, 0.1)
+        g.stop_now(StopCmd("agent", "", "s2", w.t))
+        self.assertEqual(w.step((0.0, 0.0)).v, 0.0)
+        self.assertGreater(w.step((0.1, 0.0)).v, 0.0)  # взведён тем же нулём
 
     def test_max_motion_time(self):
         w = self.world(max_motion_s=1.0)

@@ -400,7 +400,7 @@ def criteria() -> List[Tuple[str, Getter, bool]]:
                    lambda v: "%d из %d, «готово» без движения %d" % v), True),
         ("stop через MCP → ноль в /cmd_vel ≤ 100 мс (p95, каждая серия), K6",
          lambda c: k6_verdict(c, "mcp", "zero", K6_MCP_S), False),
-        ("…справочно: начало торможения в /cmd_vel ≤ 100 мс (p95) — штатный стоп safety_gate плавный",
+        ("…справочно: начало торможения в /cmd_vel ≤ 100 мс (p95) — до решения 1а 19.10 стоп агента был плавным",
          lambda c: k6_verdict(c, "mcp", "brake", K6_MCP_S), False),
         ("препятствие → ноль ≤ 150 мс после скана (p95, каждая серия), K6",
          lambda c: k6_verdict(c, "scan", "zero", K6_SCAN_S), False),

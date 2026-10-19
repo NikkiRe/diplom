@@ -12,6 +12,9 @@ since и причины), и время записи.
 состояние estop уйдёт в /neurobot/safety_state, и читаются до READY. Файл есть, но не читается — старт с защёлкой;
 не удалось записать — защёлка остаётся в памяти, строка в журнале. Формат файла — {"engaged", "reasons", "t"}, как у
 подставного safety_gate deploy.
+
+Стоп агента (/neurobot/stop_now, robot_stop через MCP; решение 1а 19.10) — не защёлка: разовый ноль сразу. Команда —
+std_msgs/String с JSON {"id", "by", "reason", "t"}; копии с одним id исполняются один раз.
 """
 from __future__ import annotations
 
@@ -45,6 +48,27 @@ def parse(data: str) -> EstopCmd:
     t = doc.get("t")
     return EstopCmd(cmd, str(doc.get("by") or "?"), str(doc.get("reason") or ""), str(doc.get("id") or ""),
                     float(t) if isinstance(t, (int, float)) and not isinstance(t, bool) else None)
+
+
+class StopCmd(NamedTuple):
+    """Стоп агента: разовый ноль сразу, без защёлки."""
+    by: str
+    reason: str
+    id: str
+    t: Optional[float]    # время отправки (часы робота), с
+
+
+def parse_stop(data: str) -> StopCmd:
+    """Стоп агента из JSON-объекта; ValueError — не разобран."""
+    try:
+        doc = json.loads(data)
+        if not isinstance(doc, dict):
+            raise TypeError("ожидается объект JSON")
+    except (ValueError, TypeError) as e:
+        raise ValueError("стоп агента не разобран: {}".format(e)) from e
+    t = doc.get("t")
+    return StopCmd(str(doc.get("by") or "?"), str(doc.get("reason") or ""), str(doc.get("id") or ""),
+                   float(t) if isinstance(t, (int, float)) and not isinstance(t, bool) else None)
 
 
 class ReleaseReq(NamedTuple):

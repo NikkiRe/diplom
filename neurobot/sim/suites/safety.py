@@ -13,7 +13,8 @@ kill_agent_path (kill -9 rosbridge и MCP посреди толчка агент
 /cmd_vel_joy: ноль и езда в стену), latch (защёлка: агент и узел ROS с by=human снять не могут, CLI без sudo — тоже).
 Приёмка 17.10 (мир lab): driver_faults (kill -9 и SIGSTOP узлов /urg_node2, /camera/camera и rosbridge — юнит
 поднимается сам), scan_dup (второй издатель /scan во время работы), stop_shock (всплеск /camera/imu на штатной
-остановке: плавная против резкой), k6_latency (K6: stop через MCP → ноль, препятствие → ноль после скана).
+остановке: плавная против резкой; стоп агента), k6_latency (K6: stop через MCP → ноль, препятствие → ноль после
+скана).
 Повторная приёмка 18.10 (мир lab): scan_blind (NaN-сканы под именем драйвера, ослепший лидар — S3b).
 Мир step: step_edge. Мир ramp: ramp_drive (въезд на пандус), slope_latch (поставлен на склон 12°). Мир hall:
 chair_turn (подъезд к стулу и поворот на месте у ножки, находка 2: no_err — клетка глубины без поправки на
@@ -26,6 +27,7 @@ chair_turn (подъезд к стулу и поворот на месте у н
 from __future__ import annotations
 
 import argparse
+import inspect
 import json
 import logging
 import math
@@ -758,10 +760,11 @@ class Safety:
                          and b["moved_m"] < 0.005 and back is not None and b["moves_after"] and not doc["contacts"])
         return doc
 
-    def stop_shock(self, runs: int = 4) -> dict:
+    def stop_shock(self, runs: int = 4, modes: str = "hard,soft,agent") -> dict:
         """Находка 3: штатная остановка (конец манёвра жеста, 0,15 м/с) давала всплеск /camera/imu 6,1 м/с² > shock 6 и
         ложную защёлку. Плавная остановка (S-кривая stop_decel 0,5 м/с², рывок 2 м/с³) против прежней резкой
-        (stop_decel:=0.0): наибольшее отклонение ускорения от медленного среднего — так его считает safety_gate
+        (stop_decel:=0.0) и стоп агента (robot_stop через MCP — ноль сразу, решение 1а; манёвр жеста при этом ещё
+        просит ехать): наибольшее отклонение ускорения от медленного среднего — так его считает safety_gate
         (monitors.Shock), за окно остановки; защёлки shock. Ждём: ни одной защёлки, все всплески ниже shock_mps2,
         медиана у плавной не выше, чем у резкой (всплеск двойника двухуровневый — ≈2,2 и ≈3,2 м/с²)."""
         t = self.t
@@ -770,8 +773,9 @@ class Safety:
             time.monotonic(), (msg.linear_acceleration.x, msg.linear_acceleration.y, msg.linear_acceleration.z))),
             qos_profile_sensor_data)
         out = {}
-        for mode, extra in (("hard", "-p stop_decel:=0.0"), ("soft", "")):
-            t.safety_args(extra, arm=False)
+        profiles = {"hard": "-p stop_decel:=0.0", "soft": "", "agent": ""}
+        for mode in modes.split(","):
+            t.safety_args(profiles[mode], arm=False)
             rows = []
             for _ in range(runs):
                 t.relocate(*SOUTH)
@@ -779,7 +783,12 @@ class Safety:
                 t.spin(3.0, drive={GESTURE: (DEMO_SPEED, 0.0)})
                 v0 = (t.last("truth") or {}).get("v")
                 t_zero = time.monotonic()
-                t.spin(2.5, drive={GESTURE: (0.0, 0.0)})
+                if mode == "agent":
+                    call = self.mcp_async("robot_stop", {"reason": "stop_shock"})
+                    t.spin(2.5, drive={GESTURE: (DEMO_SPEED, 0.0)})
+                    call["thread"].join(10.0)
+                else:
+                    t.spin(2.5, drive={GESTURE: (0.0, 0.0)})
                 self.gesture_pilot(False)
                 shock, peak = Shock(), 0.0
                 for ts, a in imu:
@@ -788,8 +797,11 @@ class Safety:
                         peak = max(peak, dev)
                 stop = m.braking(t.since("truth", t_zero - 0.1), t_zero)
                 latched = [r for s_ in t.since("state", t_zero) if s_["state"] == "estop" for r in s_["reasons"]]
+                cmd_zero = next((c["t"] for c in t.since("cmd", t_zero) if c["v"] == 0.0 and c["w"] == 0.0), None)
                 rows.append({"v0": None if v0 is None else round(v0, 3), "peak_mps2": round(peak, 2),
-                             "stop_s": stop["stop_s"], "coast_m": stop["coast_m"], "latch": latched[:1]})
+                             "stop_s": stop["stop_s"], "coast_m": stop["coast_m"], "latch": latched[:1],
+                             "cmd_zero_s": cmd_zero and round(cmd_zero - t_zero, 3),
+                             "moved_after_m": round(m.path_length(t.since("truth", t_zero + 1.5)), 3)})
                 if latched:
                     t.cli("estop", "release", "--reason", "проверка: штатная остановка", answer="release")
             out[mode] = {"runs": rows, "peak_mps2": m.quantiles([r["peak_mps2"] for r in rows]),
@@ -798,15 +810,19 @@ class Safety:
         t.node.destroy_subscription(sub)
         # всплеск двойника двухуровневый (≈2,2 и ≈3,2 м/с² — контакт роликов, калибровка 18.10): сравниваются медианы
         limit = Params().shock_mps2
-        out["ok"] = (out["soft"]["latches"] == 0 and out["hard"]["latches"] == 0
-                     and (out["soft"]["peak_mps2"]["p50"] or 0) <= (out["hard"]["peak_mps2"]["p50"] or 0)
-                     and max(out[k]["peak_mps2"]["max"] or 0 for k in ("hard", "soft")) < limit)
+        done = [k for k in ("hard", "soft", "agent") if k in out]
+        out["ok"] = (all(out[k]["latches"] == 0 for k in done)
+                     and max(out[k]["peak_mps2"]["max"] or 0 for k in done) < limit
+                     and ("soft" not in out or "hard" not in out
+                          or (out["soft"]["peak_mps2"]["p50"] or 0) <= (out["hard"]["peak_mps2"]["p50"] or 0))
+                     and ("agent" not in out or all(r["cmd_zero_s"] is not None and r["cmd_zero_s"] <= 0.1
+                                                    and r["moved_after_m"] < 0.005 for r in out["agent"]["runs"])))
         return out
 
     def k6_latency(self, runs: int = 10) -> dict:
         """K6 (PLAN §1): stop через MCP → ноль в /cmd_vel ≤ 100 мс (p95) — от вызова robot_stop (HTTP) до начала
-        торможения и до нуля (плавная остановка по запросу, находка 3: ждём начало торможения ≤ 100 мс, ноль — через
-        ≈0,5 с); препятствие → ноль ≤ 150 мс после скана — столб переставлен вплотную перед едущим роботом в видимой
+        торможения и до нуля (стоп агента — сразу, решение 1а 19.10; до него — плавно, ноль через ≈0,5 с);
+        препятствие → ноль ≤ 150 мс после скана — столб переставлен вплотную перед едущим роботом в видимой
         лидару части коридора (+13°), от приёма первого скана со столбом до первого нулевого /cmd_vel после постановки
         (отрицательное — safety_gate остановил раньше, чем скан дошёл до этого узла). Метки — часы этого узла (приём),
         то есть с доставкой DDS."""
@@ -863,9 +879,9 @@ class Safety:
                             "zero_s": m.quantiles([x["zero_s"] for x in mcp if x["zero_s"] is not None])},
                "scan_stop": {"runs": scan, "zero_s": m.quantiles([x["zero_s"] for x in scan
                                                                    if x["zero_s"] is not None])}}
-        # K6 с плавной остановкой по запросу: stop через MCP — начало торможения ≤ 100 мс (ноль — через ≈0,5 с, см.
-        # README safety_gate, п. 7); препятствие — ноль ≤ 150 мс после скана (отрицательное — safety_gate раньше)
-        doc["ok"] = (doc["mcp_stop"]["brake_s"]["n"] == runs and doc["mcp_stop"]["brake_s"]["p95"] <= 0.1
+        # K6: stop через MCP — ноль ≤ 100 мс (стоп агента, решение 1а); препятствие — ноль ≤ 150 мс после скана
+        # (отрицательное — safety_gate раньше)
+        doc["ok"] = (doc["mcp_stop"]["zero_s"]["n"] == runs and doc["mcp_stop"]["zero_s"]["p95"] <= 0.1
                      and doc["scan_stop"]["zero_s"]["n"] == runs and doc["scan_stop"]["zero_s"]["p95"] <= 0.15
                      and not any(x["contacts"] for x in scan))
         return doc
@@ -1071,8 +1087,11 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--out", required=True, help="каталог результатов (safety.json, logs/)")
     ap.add_argument("--label", default="", help="метка прогона в safety.json (before/after)")
+    ap.add_argument("--runs", type=int, help="замеров в сценариях с параметром runs (stop_shock, k6_latency)")
+    ap.add_argument("--modes", help="режимы stop_shock через запятую: hard, soft, agent (по умолчанию все)")
     ap.add_argument("scenarios", nargs="*", choices=LAB + ACCEPT + OTHER, metavar="сценарий")
     a = ap.parse_args()
+    given = {k: v for k, v in (("runs", a.runs), ("modes", a.modes)) if v is not None}
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
     twin = Twin("neurobot_safety_suite")
@@ -1085,7 +1104,9 @@ def main() -> int:
             wall = time.time()
             key = "{}:{}".format(a.label, name) if a.label else name
             try:
-                results[key] = dict(getattr(s, name)(), started=round(wall, 3))
+                fn = getattr(s, name)
+                kw = {k: v for k, v in given.items() if k in inspect.signature(fn).parameters}
+                results[key] = dict(fn(**kw), started=round(wall, 3), **({"args": kw} if kw else {}))
             except Exception as e:  # noqa: BLE001 — сценарий не прошёл, остальные идут дальше
                 log.exception("сценарий %s упал", name)
                 results[key] = {"ok": False, "error": repr(e), "started": round(wall, 3)}

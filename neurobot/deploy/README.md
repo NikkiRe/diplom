@@ -37,6 +37,7 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 агент: MCP-сервер -> rosbridge -> /cmd_vel_agent ─────┴> исполнитель -> /neurobot/cmd_vel_req (Twist)
   -> safety_gate — ЕДИНСТВЕННЫЙ писатель /cmd_vel -> twist_mux (cmd_vel 10, cmd_vel_tracker 20, cmd_vel_joy 100;
      таймауты 0,5 с) -> /diff_cont/cmd_vel_unstamped -> diff_drive_controller (cmd_vel_timeout 0,5 с) -> STM32
+стоп агента (robot_stop): MCP-сервер -> rosbridge -> /neurobot/stop_now -> safety_gate (ноль сразу, без защёлки)
 ```
 
 Что пакет гарантирует запуском и проверяет:
@@ -61,7 +62,8 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
   ноль нужен на случай, если база держит команду;
 - агентский путь не пишет скорости мимо исполнителя и не меняет настройки защиты: конфиг MCP-сервера (тема
   `/cmd_vel_agent`, пределы L3), rosbridge только на 127.0.0.1 и со списками разрешённого — `topics_glob` только тема
-  агента (и копия состояния safety_gate для агента на Foxy), состояние safety_gate — только на чтение
+  агента, стоп агента (`/neurobot/stop_now`: умеет только остановить, «Агентский путь») и копия состояния safety_gate
+  для агента на Foxy, состояние safety_gate — только на чтение
   (`topics_sub_glob` rosbridge 2.x), `services_glob` только `/rosapi/…`, `params_glob` без параметров; у PicoClaw
   выключен `exec` (L3, PLAN §13.3);
 - аварийная защёлка: ставит кто угодно, снимает только человек в терминале через sudo (`sudo neurobot estop
@@ -88,7 +90,7 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 | 2 | `neurobot-safety` | notify | READY после первого нуля | 3 | always / 500ms | команда; JSON-конфиг; модули интерпретатора (`numpy<2`, rclpy); **цепочка движения** (см. выше) | ExecStopPost: явный ноль (`neurobot zero`); TimeoutStopSec=20 — запуск rclpy для нуля на загруженной ВМ занимал до 14 с [замер]; StateDirectory=neurobot/safety — защёлка |
 | 3 | `neurobot-executor` | notify | READY после первого нуля, затем `wait-graph executor` | 3 | always / 500ms | команда с ремапом `/cmd_vel:=/neurobot/cmd_vel_req`; JSON-конфиг; нет метки `wait-graph` при той же команде; safety_gate слушает `/neurobot/cmd_vel_req`, других писателей нет | TimeoutStartSec=60 (три запуска rclpy); StateDirectory=neurobot/executor — метка `wait-graph` |
 | 4 | `neurobot-perception` | notify | READY после прогрева и первого кадра, затем `wait-graph perception` | 5 (живость цикла) | always / 1 | команда с ремапом `/cmd_vel` вне цепочки; нет метки `wait-graph` при той же команде; камера на USB (и USB 3); веса и sha256; нет чужих владельцев камеры (`predict_live.py`, `realsense2_camera_node` вне `neurobot-driver@` — при `--camera ros`, везде — при `--camera rs`; YOLO-воркер вне юнита); модули (`numpy<2`, torch, pyrealsense2, rclpy) | TimeoutStartSec=120, KillSignal=SIGINT, RestartPreventExitStatus=6 (`--camera rs`: камера занята); StateDirectory=neurobot/perception — метка `wait-graph` |
-| 5 | `neurobot-rosbridge` | exec | WebSocket отвечает (`wait-port`) | — (сторож: ping по WebSocket) | always / 1 | порт свободен; `address:=127.0.0.1`; `topics_glob`, `services_glob`, `params_glob` — списки разрешённого (тема агента и копия состояния для агента; `/rosapi/…`; `none`); каждый аргумент один раз; `ros2 launch` — через обёртку | слушает только 127.0.0.1 — при `address:=127.0.0.1` [опыт, Jazzy]; смерть узла `rosbridge_websocket` — выход launch |
+| 5 | `neurobot-rosbridge` | exec | WebSocket отвечает (`wait-port`) | — (сторож: ping по WebSocket) | always / 1 | порт свободен; `address:=127.0.0.1`; `topics_glob`, `services_glob`, `params_glob` — списки разрешённого (тема агента, стоп агента и копия состояния для агента; `/rosapi/…`; `none`); каждый аргумент один раз; `ros2 launch` — через обёртку | слушает только 127.0.0.1 — при `address:=127.0.0.1` [опыт, Jazzy]; смерть узла `rosbridge_websocket` — выход launch |
 | 6 | `neurobot-labworker@<имя>` | exec | GET `NEUROBOT_LABWORKER_<имя>_URL` = 200 (`wait-http`) | — | always / 2 | порт свободен (второй экземпляр не стартует, N7); модули | TimeoutStartSec=180 (загрузка модели) |
 | 7 | `neurobot-mcp` | exec | initialize + tools/list (`wait-mcp`) | — | always / 1 | порт свободен; конфиг MCP (HTTP на 127.0.0.1, `/cmd_vel_agent`, пределы L3) или env прокси; нет второго MCP-сервера или воркера вне юнитов; Python ≥ 3.10, `mcp` ≥ 1.8 | без ROS-окружения |
 | 8 | `neurobot-picoclaw` | exec | «MCP server initialization complete» в журнале запуска (`wait-agent`, `+` — root) | — | always / 2 | порт шлюза свободен; конфиг PicoClaw по схеме установленной версии | «All MCP servers failed» → отказ и рестарт (PC5) |
@@ -172,7 +174,7 @@ launch 0.10.10 ветки foxy, Python 3.8, тест `test_deploy_launch.py`; н
 | `NEUROBOT_PERCEPTION_CMD` | — | predict_live v2 `--mode legacy --camera ros`; ремап `/cmd_vel` в тему вне цепочки (`/cmd_vel_gesture`) обязателен (precheck); интерпретатор — абсолютный путь (N6). `--camera rs` (своя камера) — только без драйвера камеры |
 | `NEUROBOT_PERCEPTION_NODE` | velocity_publisher | имя узла распознавания (из кода лаборатории): его писателей смотрит `wait-graph` |
 | `NEUROBOT_PERCEPTION_MODULES` | numpy<2 torch snntorch pyrealsense2 cv2 rclpy | что должно находиться в интерпретаторе распознавания (в окружении ROS): «модуль», «модуль<версия», «модуль>=версия»; `python>=3.10` — версия самого Python. Ищется `find_spec`, без импорта |
-| `NEUROBOT_ROSBRIDGE_CMD` | — | rosbridge через обёртку (`supervised.launch.py include:=rosbridge_server/rosbridge_websocket_launch.xml`): `address:=127.0.0.1`, `topics_glob:="'[/cmd_vel_agent]'"` (на Foxy — ещё копия состояния для агента), `services_glob:="'[/rosapi/topics]'"` и `params_glob:="'[none]'"` (все четыре обязательны и по одному разу, кавычки YAML у списков — тоже; в списках — только разрешённое, «Агентский путь»); у rosbridge 2.x (Jazzy) — по желанию `topics_pub_glob` (только тема агента) и `topics_sub_glob` (только чтение: `/neurobot/safety_state` для MCP-сервера) |
+| `NEUROBOT_ROSBRIDGE_CMD` | — | rosbridge через обёртку (`supervised.launch.py include:=rosbridge_server/rosbridge_websocket_launch.xml`): `address:=127.0.0.1`, `topics_glob:="'[/cmd_vel_agent,/neurobot/stop_now]'"` (тема агента и стоп агента; на Foxy — ещё копия состояния для агента), `services_glob:="'[/rosapi/topics]'"` и `params_glob:="'[none]'"` (все четыре обязательны и по одному разу, кавычки YAML у списков — тоже; в списках — только разрешённое, «Агентский путь»); у rosbridge 2.x (Jazzy) — по желанию `topics_pub_glob` (только темы агента) и `topics_sub_glob` (только чтение: `/neurobot/safety_state` для MCP-сервера) |
 | `NEUROBOT_ROSBRIDGE_PORT` | 9090 | порт rosbridge |
 | `NEUROBOT_MCP_CMD` | — | агентский MCP-сервер (Python ≥ 3.10) |
 | `NEUROBOT_MCP_MODULES` | python>=3.10 mcp>=1.8 | то же для MCP-сервера (ros_mcp_server ещё `websocket`) |
@@ -201,6 +203,7 @@ launch 0.10.10 ветки foxy, Python 3.8, тест `test_deploy_launch.py`; н
 | `NEUROBOT_MOTION_STATE_TOPIC` | /neurobot/motion_state | состояние исполнителя |
 | `NEUROBOT_SAFETY_STATE_TOPIC` | /neurobot/safety_state | состояние safety_gate (`{state: ok\|slow\|blocked\|estop, reasons, min_clearance_m, limits}`, 5 Гц) |
 | `NEUROBOT_ESTOP_TOPIC` | /neurobot/estop | команды аварийной защёлки (engage; release по теме safety_gate не принимает) |
+| `NEUROBOT_STOP_TOPIC` | /neurobot/stop_now | стоп агента (`robot_stop` через MCP, решение 1а 19.10): safety_gate ставит ноль сразу, без S-кривой и без защёлки, дальше — с нулевого запроса. Тема — в `topics_glob` rosbridge и в `topics.stop_now` конфига MCP (иначе предупреждение precheck mcp: `robot_stop` — штатная плавная остановка, ≈0,5 с); `""` — стопа агента нет |
 | `NEUROBOT_ESTOP_RELEASE_DIR` | /run/neurobot-estop | каталог root для запроса снятия защёлки (`sudo neurobot estop release`); тот же, что `release_dir` safety_gate |
 | `NEUROBOT_AGENT_STATE_TOPIC` | — | копия `/neurobot/safety_state` для агента (`agent_state_topic` safety_gate): rosbridge 1.3.1 (Foxy) не умеет открыть тему только на чтение, а сам `/neurobot/safety_state` читают исполнитель, doctor и `neurobot estop`; копию читает только MCP-сервер — подменить её агент может лишь себе. На Jazzy не нужна (`topics_sub_glob`) |
 | `NEUROBOT_CAMERA_USB` | 8086:0b3a | id камеры на USB (D435i; через запятую) |
@@ -328,7 +331,8 @@ MCP-сервер и rosbridge работают не от root) записать 
 
 Что нужно от safety_gate (W2), чтобы юнит и doctor работали:
 - имя узла `NEUROBOT_SAFETY_NODE`; READY после первого явного нуля в `/cmd_vel` и WATCHDOG от тика (sd_notify через
-  `$NOTIFY_SOCKET`); подписка на `NEUROBOT_CMD_VEL_REQ` и `NEUROBOT_ESTOP_TOPIC` (формат выше);
+  `$NOTIFY_SOCKET`); подписка на `NEUROBOT_CMD_VEL_REQ`, `NEUROBOT_ESTOP_TOPIC` (формат выше) и `NEUROBOT_STOP_TOPIC`
+  (стоп агента: `{"id", "by", "reason", "t"}`, ноль сразу, без защёлки; копии с одним `id` — один стоп);
   `/neurobot/safety_state` 5 Гц и при изменении;
 - защёлка и её причины атомарно (временный файл, fsync, rename) пишутся в `$STATE_DIRECTORY/estop.json` до того, как
   safety_gate подтвердит engage (`state` = `estop`), и читаются до READY; файл есть, но не читается — старт с
@@ -371,9 +375,9 @@ topics_glob:="'[*]'"` rosbridge получил `[*]`, и 20 из 20 публик
   открыты сети лаборатории. Без него порт слушал `0.0.0.0` и `[::]`, с ним — только `127.0.0.1` [опыт, rosbridge
   2.7.1 Jazzy, `ss -ltn`; опыты этого абзаца — `experiments/results/neurobot_20261015_deploy_fix2/vm/
   rosbridge_address.*`];
-- `topics_glob:="'[/cmd_vel_agent]'"` — только тема агента. Раздельных списков подписки и публикации в rosbridge 1.3.1
-  (Foxy, робот) нет (тот же `topics_glob` проверяют и publish, и subscribe), поэтому тема из списка открыта клиенту и на
-  запись: добавленные в список датчики safety_gate (`/scan`, глубина, IMU) или `/neurobot/*` (состояние, которое читают
+- `topics_glob:="'[/cmd_vel_agent,/neurobot/stop_now]'"` — только тема агента и стоп агента (ниже). Раздельных
+  списков подписки и публикации в rosbridge 1.3.1 (Foxy, робот) нет (тот же `topics_glob` проверяют и publish, и
+  subscribe), поэтому тема из списка открыта клиенту и на запись: добавленные в список датчики safety_gate (`/scan`, глубина, IMU) или `/neurobot/*` (состояние, которое читают
   doctor и `neurobot estop`) можно было бы подменить. В `/cmd_vel`, `/neurobot/cmd_vel_req` и `/neurobot/estop`
   rosbridge с этим списком отвечает «No match found for topic, cancelling publish» [опыт, 15.10 — каталог
   `neurobot_20261015_deploy`]. В rosbridge 2.x (Jazzy, стенд) есть и раздельные `topics_pub_glob`, `topics_sub_glob`:
@@ -382,6 +386,11 @@ topics_glob:="'[*]'"` rosbridge получил `[*]`, и 20 из 20 публик
   `topics_sub_glob` (только подписка) пропускает любым; оба необязательны. Своего глоба для действий (actions) в
   launch-файле 2.x нет, и клиенту они открыты; в 1.3.1 действий нет вовсе, а в графе двойника action-серверов нет
   [опыт, 16.10: `ros2 action list` пуст];
+- стоп агента `/neurobot/stop_now` (`NEUROBOT_STOP_TOPIC`, решение 1а 19.10) — по нему safety_gate ставит ноль
+  сразу, без S-кривой и без защёлки, а дальше ждёт нулевого запроса. Это единственный вход safety_gate, открытый агенту,
+  и он умеет только остановить: не трогает пределы, не снимает защёлку и не взводит; подделка — это стоп, а
+  остановить робот агент может и нулями в `/cmd_vel_agent`. Без темы в списке `robot_stop` — штатная плавная остановка
+  (≈0,5 с): precheck rosbridge её пропускает, precheck mcp предупреждает, если её нет в `topics_glob`;
 - `services_glob:="'[/rosapi/topics]'"` — только `/rosapi/…`: их rosbridge при любом `services_glob` добавляет к
   списку сам (его зовёт `robot_get_status`), а прочие закрыты — `set_parameters` у safety_gate (пороги, пределы),
   diff_cont (`cmd_vel_timeout`, пределы скорости), twist_mux (приоритеты), драйверов датчиков (`/urg_node2/*`,
@@ -402,7 +411,7 @@ launch и `/rosapi/*` добавляется так же — по исходни
 не должен опираться на темы, открытые агенту (требование к W2). Состояние safety_gate MCP-серверу нужно
 (`robot_get_status`, отказ `robot_nudge`), поэтому:
 - **Jazzy (rosbridge 2.x, двойник):** `topics_sub_glob:="'[/neurobot/safety_state]'"` — только подписка, публикация
-  остаётся `[/cmd_vel_agent]` (2.x объединяет `topics_sub_glob` с `topics_glob` только для подписки);
+  остаётся `[/cmd_vel_agent,/neurobot/stop_now]` (2.x объединяет `topics_sub_glob` с `topics_glob` только для подписки);
 - **Foxy (rosbridge 1.3.1, робот):** safety_gate публикует копию в `agent_state_topic`
   (`/neurobot/agent/safety_state`, `NEUROBOT_AGENT_STATE_TOPIC`), и в `topics_glob` идёт она. Её никто, кроме
   MCP-сервера, не читает: опубликовав подделку, агент обманет только себя, а не исполнитель, doctor или `neurobot
@@ -411,7 +420,7 @@ launch и `/rosapi/*` добавляется так же — по исходни
 Длительность толчка в секундах ограничена сверху и в прокси (патч), поэтому ошибка N1 «миллисекунды как секунды»
 безопасна.
 
-### Патч к ros_mcp_server (`mcp/ros_mcp_server.patch`, 122 добавленные строки)
+### Патч к ros_mcp_server (`mcp/ros_mcp_server.patch`, 136 добавленных строк)
 
 Наложен и проверен на присланной версии (`third_party/…/ros_mcp_server.py`, 704 строки). **Лаборатория говорит,
 что версия может быть устаревшей**, поэтому патч описан и по смыслу — чтобы перенести на актуальную:
@@ -450,6 +459,12 @@ launch и `/rosapi/*` добавляется так же — по исходни
    стопов первый ноль дошёл до исполнителя через 0,15–0,36 с вместо 0,05 с, а в одном из 6 пробных стопов не дошёл
    ни один из пяти, и робот доехал манёвр жеста [замер, двойник, «Замеры на двойнике 18.10»]. Теперь у rosbridge
    один издатель `/cmd_vel_agent`, пока жив MCP-сервер: ноль доходит за 2–3 мс, 30 из 30.
+8. **Стоп агента — стоп по безопасности** (решение 1а 19.10): инструмент `robot_stop` перед каждым из пяти нулей в
+   `/cmd_vel_agent` публикует в тему `topics.stop_now` конфига (`/neurobot/stop_now`, `std_msgs/msg/String`, запись)
+   `{"id", "by": "agent", "reason", "t"}` — один `id` на вызов, safety_gate исполняет его один раз: ноль в `/cmd_vel`
+   сразу, без S-кривой и без защёлки. Автостоп в конце `robot_nudge` и ноль при выходе сервера — общая функция
+   `send_stop` без темы стопа: это штатный конец манёвра, он остаётся плавным (мачта). Тема стопа недоступна
+   (соединение отвергнуто) — строка в stderr, нули идут всё равно. Описание инструмента для агента не менялось.
 
 Камера и лидар в примере конфига выключены (M1, `read_one_message` нет). Остальные дефекты (синхронные инструменты:
 `robot_stop` ждёт конца идущего `robot_nudge`, толчки ≤ 0,044 м — M4–M8) патч не лечит: это пакет 2 (robot-mcp).
@@ -664,9 +679,8 @@ env-файла стенда. С `--picoclaw` агентом работает н�
 Вывод: команда стопа доходит до исполнителя за 2–3 мс (первый вызов после старта сервера — 53 мс: новое соединение
 ждёт 50 мс после `advertise`, как у лаборатории), safety_gate начинает тормозить в пределах 100 мс во всех 30.
 Ноль в `/cmd_vel` по букве K6 не выполнен ни в одном: штатный стоп safety_gate делает плавно (S-кривая
-`stop_decel` 0,5 м/с², рывок 2 м/с³ — находка 3 приёмки, `neurobot/safety`), с 0,15 м/с это ≈0,5 с. Критерий K6
-«ноль ≤ 100 мс» писался до плавной остановки; предлагаю читать его как «торможение началось ≤ 100 мс», а «ноль» —
-по стопу безопасности (ниже). После стопа робот не поехал ни разу (сценарий ещё 1,5 с просил ехать: исполнитель гасит
+`stop_decel` 0,5 м/с², рывок 2 м/с³ — находка 3 приёмки, `neurobot/safety`), с 0,15 м/с это ≈0,5 с. 19.10 студент
+решил (1а): stop агента — стоп по безопасности, ноль сразу; замер — «Замеры на двойнике 19.10» ниже. После стопа робот не поехал ни разу (сценарий ещё 1,5 с просил ехать: исполнитель гасит
 манёвр).
 
 **K6 «препятствие → ноль ≤ 150 мс после скана»** (`k6.py --cases scan`, n = 30 × 2 серии, 0,08 м/с, столб Ø 5 см в
@@ -693,8 +707,32 @@ safety_gate остановлен — `unconfirmed`, `safety.state` `unknown` 5 �
 `port_busy`, `rosbridge_down` — doctor назвал только свою причину, 5 из 5. «Холодный старт» — рестарт
 `neurobot.target`, а не перезагрузка ОС.
 
+## Замеры на двойнике 19.10 (решение 1а)
+
+Пакет из рабочего дерева на двойнике (`neurobot/sim/suites/setup_twin.sh`), артефакты, версии и хеши —
+`experiments/results/neurobot_20261019_decisions/` (`manifest.json`) [замер, двойник, ориентир].
+
+**K6 «stop через MCP → ноль ≤ 100 мс (p95)»** с `/neurobot/stop_now` (`k6.py --runs 30 --cases mcp,scan --heading 90`,
+мир hall — как серия 18.10 `a1v2/k6`; робот едет манёвром жеста 0,15 м/с, агент вызывает `robot_stop`):
+
+| Метка от момента перед HTTP-запросом, с | p50 / p95 / max, в пределе 0,1 с |
+|---|---|
+| стоп агента в `/neurobot/stop_now` (дошёл через rosbridge) | 0,0016 / 0,0020 / 0,052, 30 из 30 |
+| ноль в `/cmd_vel_agent` | 0,0015 / 0,0024 / 0,104, 29 из 30 |
+| ноль в `/neurobot/cmd_vel_req` (исполнитель) | 0,0017 / 0,0027 / 0,053, 30 из 30 |
+| ноль в `/cmd_vel` (safety_gate) | 0,0019 / 0,0027 / 0,053, 30 из 30 (18.10: 0,506–0,559, 0 из 30) |
+| ответ инструмента | 0,252 / 0,253 / 0,355 |
+
+Наибольшие значения — первый вызов после старта MCP-сервера: соединения тем стопа и агента открываются в нём и ждут
+по 50 мс после `advertise`; ноль исполнителя в нём пришёл раньше нуля агента — safety_gate после стопа ждал нулевого
+запроса, исполнитель по его `blocked` (`unarmed`) погасил манёвр жеста. После стопа робот не поехал ни разу (сценарий
+ещё 1,5 с просил ехать). Препятствие по скану не ухудшилось: ноль через 0,3 / 0,7 / 0,8 мс после скана со столбом,
+30 из 30, касаний 0. Проверки агентского пути (`check_rosbridge`, `check_mcp_config` на установленном env-файле) —
+без замечаний.
+
 ## Ограничения
 
+- Первый `robot_stop` после старта MCP-сервера открывает тему стопа агента лениво (advertise и пауза 50 мс): на двойнике ноль через 52–55 мс против 2–3 мс у следующих. На Jetson это может подойти к пределу K6 (100 мс), особенно сразу после перезапуска сервера сторожем. Предложение: делать advertise `/neurobot/stop_now` при старте сервера (правка в локальном патче к ros_mcp_server) — не сделано.
 - Стенд подставных компонентов (`fakes/`) проверяет только запуск: юнит, порядок, ноль при остановке, цепочку
   движения и защёлку как протокол; решения безопасности (тормозной путь, глубина, IMU, слепой сектор) — настоящий
   safety_gate на двойнике (`neurobot/sim/suites`).

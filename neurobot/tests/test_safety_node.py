@@ -1,8 +1,9 @@
 """safety_gate и исполнитель как процессы ROS 2: явный ноль на старте и на выходе (сигнал, исключение), READY и
 WATCHDOG, блокировка старта, датчики и пределы, защёлка (тема, файл, рестарт; снятие — только файлом каталога
-release_dir), копия состояния для агента, чужой писатель /cmd_vel, второй издатель /scan (в том числе с пустыми
-сканами под именем драйвера), ослепший лидар (lidar_fault), параметры, цепочка исполнитель → safety_gate (task_end при
-защёлке; новый процесс исполнителя не продолжает манёвр жеста, идущий с его старта).
+release_dir), стоп агента (ноль сразу, без защёлки), копия состояния для агента, чужой писатель /cmd_vel, второй
+издатель /scan (в том числе с пустыми сканами под именем драйвера), ослепший лидар (lidar_fault), параметры, цепочка
+исполнитель → safety_gate (task_end при защёлке; новый процесс исполнителя не продолжает манёвр жеста, идущий с его
+старта).
 
 Нужен rclpy (ВМ sim, Jazzy; на роботе — Foxy): без него тесты пропускаются. Тестовый узел подаёт датчики, как у
 двойника: скан URG с блоком NaN RS3, одометрию (повторяет /cmd_vel), IMU, глубину 424×240 (ровный пол,
@@ -134,6 +135,7 @@ class Harness:
         self.gesture_pub = n.create_publisher(Twist, "/cmd_vel_gesture", 10)
         self.estop_pub = n.create_publisher(String, "/neurobot/estop", latched)  # как CLI neurobot estop
         self.estop_plain = n.create_publisher(String, "/neurobot/estop", 10)    # как любой узел (QoS по умолчанию)
+        self.stop_pub = n.create_publisher(String, "/neurobot/stop_now", 10)   # стоп агента (MCP через rosbridge)
         self.mux_pub = n.create_publisher(Twist, "/diff_cont/cmd_vel_unstamped", 10)
         sd = qos_profile_sensor_data
         self.pubs = {name: n.create_publisher(cls, name, sd) for name, cls in (
@@ -204,6 +206,11 @@ class Harness:
         doc = {"cmd": cmd, "by": by, "reason": "проверка", "id": "%s-%f" % (cmd, time.time()),
                "t": time.time() if t is None else t}
         (self.estop_pub if by == "human" else self.estop_plain).publish(String(data=json.dumps(doc)))
+
+    def stop_now(self, id_: str) -> None:
+        """Стоп агента, как robot_stop патча ros_mcp_server."""
+        doc = {"id": id_, "by": "agent", "reason": "проверка", "t": time.time()}
+        self.stop_pub.publish(String(data=json.dumps(doc)))
 
     def release_file(self, state: dict) -> None:
         """Снятие, как sudo neurobot estop release: release.json с защёлкой, которую видел человек."""
@@ -347,6 +354,34 @@ class SafetyProcess(unittest.TestCase):
         time.sleep(0.3)
         h2.req = (0.1, 0.0)
         self.assertIsNotNone(h2.wait(h2.cmd, lambda c: c[0] > 0.05, 3.0))
+
+    def test_agent_stop_zero_at_once_without_latch(self):
+        # решение 1а 19.10: стоп агента — ноль сразу, без S-кривой и без защёлки; дальше — с нулевого запроса
+        h = self.start(req=(0.0, 0.0))
+        self.armed(h)
+        h.req = (0.15, 0.3)
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.14, 3.0))
+        t = time.monotonic()
+        h.stop_now("s1")
+        zero = h.wait(h.cmd, lambda c: c == (0.0, 0.0), 1.0, t)
+        self.assertIsNotNone(zero)
+        self.assertLess(zero[0] - t, 0.1)  # плавный стоп с 0,15 м/с — ≈0,5 с
+        time.sleep(1.0)  # запрос всё ещё 0,15: прежний манёвр сам не продолжается
+        with h.lock:
+            self.assertTrue(all(c == (0.0, 0.0) for ts, c in h.cmd if ts >= zero[0]))
+            last = h.state[-1][1]
+        self.assertNotEqual(last["state"], "estop")
+        self.assertFalse(last["estop"]["engaged"])
+        self.assertTrue(any(r.startswith("unarmed") for r in last["reasons"]))
+        self.assertEqual(last["counters"]["stop_now"], 1)
+        self.assertFalse(os.path.exists(os.path.join(h.state_dir, "estop.json")))
+        h.req = (0.0, 0.0)
+        time.sleep(0.3)
+        t = time.monotonic()
+        h.stop_now("s1")  # копия того же стопа не исполняется
+        h.req = (0.1, 0.0)
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.05, 3.0, t))
+        self.assertIn("стоп агента s1 от agent", h.stderr())
 
     def test_sigterm_while_moving_ends_with_zero(self):
         h = self.start(req=(0.0, 0.0))

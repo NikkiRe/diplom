@@ -1,9 +1,11 @@
 """Патчи neurobot к MCP-серверам лаборатории (накладываются на присланные версии).
 
 ros_mcp_server: пропатченный сервер отвечает по streamable HTTP, пишет в /cmd_vel_agent, ничего не печатает в stdout,
-автостоп срабатывает и при исключении в цикле толчка (finally), и при SIGTERM (atexit); robot_get_status отдаёт
-состояние safety_gate (state, reasons, estop), robot_nudge — отказ blocked/estop с причиной вместо ok, если safety_gate
-не пускает или не пропустил толчок; против подставного rosbridge с подставным safety_state.
+автостоп срабатывает и при исключении в цикле толчка (finally), и при SIGTERM (atexit); robot_stop агента шлёт ещё и
+стоп в /neurobot/stop_now (решение 1а: safety_gate ставит ноль сразу), а автостоп и выход — только нули;
+robot_get_status отдаёт состояние safety_gate (state, reasons, estop), robot_nudge — отказ blocked/estop с причиной
+вместо ok, если safety_gate не пускает или не пропустил толчок; против подставного rosbridge с подставным
+safety_state.
 robot_vision_mcp_proxy: без патча — дубли инструментов движения (FastMCP оставляет первую регистрацию, мс уходят
 воркеру как секунды, N1), doctor видит это по tools/list; с патчем — дублей нет, длительность и скорость ограничены,
 HTTP на 127.0.0.1, стоп воркеру при SIGTERM; против подставного воркера 8766.
@@ -57,6 +59,7 @@ def free_port() -> int:
 
 
 SAFETY = "/neurobot/safety_state"
+STOP = "/neurobot/stop_now"
 
 
 class FakeRosbridge:
@@ -76,7 +79,8 @@ class FakeRosbridge:
 
         async def state(ws):
             while True:
-                last = ([m["msg"] for _, m in self.messages if m.get("op") == "publish"] or [None])[-1]
+                last = ([m["msg"] for _, m in self.messages if m.get("op") == "publish"
+                         and m.get("topic") == "/cmd_vel_agent"] or [None])[-1]
                 req = [last["linear"]["x"], last["angular"]["z"]] if last and self.delivered else [0.0, 0.0]
                 out = req if self.passes else [0.0, 0.0]
                 if not self.silent:
@@ -137,6 +141,10 @@ class FakeRosbridge:
         return [(n, m["msg"]) for n, m in self.messages
                 if m.get("op") == "publish" and m.get("topic") == "/cmd_vel_agent" and n > after_conn]
 
+    def publishes(self, since: int = 0) -> list:
+        """(тема, сообщение) публикаций после since-го сообщения сервера."""
+        return [(m["topic"], m["msg"]) for _, m in self.messages[since:] if m.get("op") == "publish"]
+
 
 def is_zero(t: dict) -> bool:
     return not any(t["linear"].values()) and not any(t["angular"].values())
@@ -156,7 +164,8 @@ class PatchTest(unittest.TestCase):
         cfg = {"server": {"host": "127.0.0.1", "port": self.port},
                "rosbridge": {"url": "ws://127.0.0.1:{}".format(self.bridge.port), "timeout_s": 3.0},
                "topics": {"cmd_vel": {"name": "/cmd_vel_agent", "type": "geometry_msgs/msg/Twist", "access": "write"},
-                          "safety_state": {"name": SAFETY, "type": "std_msgs/msg/String", "access": "read"}}}
+                          "safety_state": {"name": SAFETY, "type": "std_msgs/msg/String", "access": "read"},
+                          "stop_now": {"name": STOP, "type": "std_msgs/msg/String", "access": "write"}}}
         with open(os.path.join(self.tmp, "cfg.json"), "w", encoding="utf-8") as f:
             json.dump(cfg, f)
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
@@ -190,10 +199,11 @@ class PatchTest(unittest.TestCase):
             c.close()
 
     def test_patch_is_small(self):
-        # 17 строк транспорта и автостопа, чтение safety_state для статуса и итога толчка, постоянный издатель
+        # 17 строк транспорта и автостопа, чтение safety_state для статуса и итога толчка, постоянный издатель, стоп
+        # агента в safety_gate
         lines = PATCH.read_text(encoding="utf-8").splitlines()
         added = [ln for ln in lines if ln.startswith("+") and not ln.startswith("+++")]
-        self.assertLessEqual(len(added), 125)
+        self.assertLessEqual(len(added), 140)
         self.assertEqual(self.tools, ["robot_get_status", "robot_stop", "robot_nudge"])
 
     def result(self, name: str, args: dict) -> dict:
@@ -290,6 +300,39 @@ class PatchTest(unittest.TestCase):
         self.assertEqual(self.proc.returncode, 0, err.decode(errors="replace")[-1500:])
         self.assertEqual(out, b"")
         self.assertEqual([is_zero(t) for _, t in self.bridge.twists(after_conn=before)], [True] * 5)
+        self.assertNotIn(STOP, [t for t, _ in self.bridge.publishes()])  # выход сервера — не стоп агента
+
+    def test_agent_stop_goes_to_gate_first_auto_stop_does_not(self):
+        # решение 1а: robot_stop агента — стоп по безопасности: перед каждым нулём — стоп в safety_gate (один id на
+        # вызов, safety_gate исполняет его раз); автостоп в конце толчка — штатный, только нули (плавный стоп)
+        res = self.result("robot_stop", {"reason": "k6"})
+        self.assertEqual((res["ok"], res["stopped"]), (True, True))
+        pubs = self.bridge.publishes()
+        self.assertEqual([t for t, _ in pubs], [STOP, "/cmd_vel_agent"] * 5)
+        docs = [json.loads(m["data"]) for t, m in pubs if t == STOP]
+        self.assertEqual({d["id"] for d in docs}, {docs[0]["id"]})
+        self.assertEqual((docs[0]["by"], docs[0]["reason"]), ("agent", "k6"))
+        self.assertLess(abs(docs[0]["t"] - time.time()), 30.0)
+        self.assertTrue(all(is_zero(m) for t, m in pubs if t != STOP))
+        mark = len(self.bridge.messages)
+        self.result("robot_stop", {})
+        later = {json.loads(m["data"])["id"] for t, m in self.bridge.publishes(mark) if t == STOP}
+        self.assertEqual(len(later), 1)
+        self.assertNotIn(docs[0]["id"], later)  # новый вызов — новый стоп
+        mark = len(self.bridge.messages)
+        res = self.result("robot_nudge", {"direction": "forward", "duration_ms": 300, "speed": 0.1})
+        self.assertTrue(res["ok"], res)
+        self.assertNotIn(STOP, [t for t, _ in self.bridge.publishes(mark)])
+
+    def test_agent_stop_without_gate_topic_still_sends_zeros(self):
+        # тема стопа недоступна (оба соединения отвергнуты) — нули идут всё равно: остановка штатная, плавная
+        self.bridge.reject = {self.bridge.conns + 1, self.bridge.conns + 2}
+        mark = len(self.bridge.messages)
+        res = self.result("robot_stop", {})
+        self.assertTrue(res["ok"], res)
+        pubs = self.bridge.publishes(mark)
+        self.assertEqual([t for t, _ in pubs], ["/cmd_vel_agent"] * 5)
+        self.assertIn("стоп агента не отправлен", self._kill()[1].decode(errors="replace"))
 
 
 # Запуск прокси лаборатории из копии: адрес воркера подменяется до старта; «main» — как в юните (после патча),

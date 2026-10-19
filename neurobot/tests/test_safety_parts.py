@@ -1,7 +1,7 @@
 """Части safety_gate без rclpy (Python ≥ 3.8): параметры, геометрия и TF, тормозной путь и разгон, лидар (маска
 корпуса, коридор, участок неизвестного луча в коридоре, направления без лучей, участок вне поля глубины), глубина
 (кодировки, уменьшенная карта, покрытие коридора, препятствие, пол, обрыв, память, «точка свободна» для лидара — и
-без глубины в пикселе), защёлка (файл и каталог снятия root), IMU.
+без глубины в пикселе), защёлка (файл и каталог снятия root), команда стопа агента, IMU.
 
 Кадры глубины рендерит маленький трассировщик лучей: камера двойника (424×240, 87°, оптический центр на
 (0,058; −0,042; 0,665) базы, ось — вперёд), пол, низкий ящик мира lab и край ступеньки мира step.
@@ -27,7 +27,7 @@ from neurobot.safety.config import ConfigError, Params, make  # noqa: E402
 from neurobot.safety.depth import (DROP, OBSTACLE, Camera, Coverage, FreeSpace, Hazards, Memory,  # noqa: E402
                                    Sampler, classify, image_array)
 from neurobot.safety.geometry import Pose, StaticTf, edge_distance, quat_matrix, yaw_of  # noqa: E402
-from neurobot.safety.latch import Latch, parse, read_release  # noqa: E402
+from neurobot.safety.latch import Latch, parse, parse_stop, read_release  # noqa: E402
 from neurobot.safety.lidar import MaskLearner, Rays, ScanMeta, mask_spans, view  # noqa: E402
 from neurobot.safety.monitors import Shock, Stall, tilt_deg, tilt_from_accel  # noqa: E402
 from neurobot.safety.motion import Ramp, allowed_speed, stop_distance  # noqa: E402
@@ -412,6 +412,15 @@ class Estop(unittest.TestCase):
         for bad in ("{", '{"cmd": "off"}', "[]", '{"by": "human"}'):
             with self.assertRaises(ValueError):
                 parse(bad)
+
+    def test_parse_agent_stop(self):
+        cmd = parse_stop(json.dumps({"id": "s1", "by": "agent", "reason": "k6", "t": 5}))
+        self.assertEqual(cmd, ("agent", "k6", "s1", 5.0))
+        self.assertEqual(parse_stop("{}"), ("?", "", "", None))  # без id — каждый стоп исполняется
+        self.assertIsNone(parse_stop('{"t": true}').t)
+        for bad in ("{", "[]", '"stop"', "null"):
+            with self.assertRaises(ValueError):
+                parse_stop(bad)
 
     def test_file_format_matches_deploy_fake(self):
         with tempfile.TemporaryDirectory() as d:

@@ -5,10 +5,11 @@
 
 mcp — «stop через MCP → ноль в /cmd_vel ≤ 100 мс (p95)». Робот едет манёвром жеста: сценарий пишет во вход жестов
 исполнителя (--drive-topic), распознавание на это время остановлено (--pause-unit), как в наборах двойника. Агент —
-tools/call robot_stop по MCP (HTTP, сессия открыта заранее, как у PicoClaw). Метки от момента перед запросом: ноль в
-/cmd_vel_agent (дошёл через rosbridge), ноль в /neurobot/cmd_vel_req (исполнитель), начало торможения (первая /cmd_vel
-медленнее скорости перед вызовом) и ноль в /cmd_vel (safety_gate; штатный стоп он делает плавно — S-кривой), ответ
-инструмента. После вызова сценарий ещё 1,5 с просит ехать: исполнитель обязан погасить манёвр, робот стоит.
+tools/call robot_stop по MCP (HTTP, сессия открыта заранее, как у PicoClaw). Метки от момента перед запросом: стоп
+агента в NEUROBOT_STOP_TOPIC (дошёл через rosbridge), ноль в /cmd_vel_agent, ноль в /neurobot/cmd_vel_req
+(исполнитель), начало торможения (первая /cmd_vel медленнее скорости перед вызовом) и ноль в /cmd_vel (safety_gate:
+стоп агента — сразу, решение 1а; без темы стопа — штатный, плавный, S-кривой), ответ инструмента. После вызова
+сценарий ещё 1,5 с просит ехать: исполнитель обязан погасить манёвр, робот стоит.
 scan — «препятствие → ноль ≤ 150 мс после скана»: робот едет вперёд (--scan-speed), перед ним появляется препятствие:
 twin — столб (Ø 5 см) сервисом мира Gazebo в 2 см от корпуса на пеленге +13° (вне слепого сектора лидара, R7 RS3),
 по позе из истины двойника; wait — его ставит человек (робот на HIL). От приёма первого скана с отражением ближе --near
@@ -44,11 +45,11 @@ EPS = 0.001                     # м/с: «медленнее скорости �
 
 
 def mcp_run(t_call: float, t_resp: Optional[float], agent: List[tuple], req: List[tuple], cmd: List[tuple],
-            v_ref: float) -> Dict[str, Optional[float]]:
+            v_ref: float, stop: List[tuple] = ()) -> Dict[str, Optional[float]]:
     """Задержки одного стопа через MCP от t_call, с (None — не было за окно записи)."""
     def rel(t: Optional[float]) -> Optional[float]:
         return None if t is None else round(t - t_call, 4)
-    return {"v_ref": round(v_ref, 3), "call_s": rel(t_resp),
+    return {"v_ref": round(v_ref, 3), "call_s": rel(t_resp), "stop_s": rel(stand.first(stop, t_call, lambda r: True)),
             "agent_zero_s": rel(stand.first(agent, t_call, stand.zero)),
             "req_zero_s": rel(stand.first(req, t_call, stand.zero)),
             "brake_s": rel(stand.first(cmd, t_call, lambda r: r[1] < v_ref - EPS)),
@@ -85,6 +86,8 @@ class K6:
         for topic in (cfg.get("NEUROBOT_CMD_VEL"), cfg.get("NEUROBOT_CMD_VEL_REQ"), cfg.get("NEUROBOT_AGENT_TOPIC")):
             self.rec.twist(topic)
         self.rec.json(cfg.get("NEUROBOT_SAFETY_STATE_TOPIC"))
+        if cfg.get("NEUROBOT_STOP_TOPIC"):
+            self.rec.json(cfg.get("NEUROBOT_STOP_TOPIC"))
         self.rec.odom()
         lo, hi = args.sector
         self.rec.scan(cfg.get("NEUROBOT_SCAN_TOPIC"), lo, hi)
@@ -164,8 +167,10 @@ class K6:
                 t_call, t_resp, res = box.get("r", (time.monotonic(), None, "нет ответа"))
                 rows = {key: self.rec.since(self.cfg.get(key), t_call - 0.5) for key in
                         ("NEUROBOT_AGENT_TOPIC", "NEUROBOT_CMD_VEL_REQ", "NEUROBOT_CMD_VEL")}
+                stop = self.rec.since(self.cfg.get("NEUROBOT_STOP_TOPIC"), t_call - 0.5) \
+                    if self.cfg.get("NEUROBOT_STOP_TOPIC") else []
                 row.update(mcp_run(t_call, t_resp, rows["NEUROBOT_AGENT_TOPIC"], rows["NEUROBOT_CMD_VEL_REQ"],
-                                   rows["NEUROBOT_CMD_VEL"], v_ref))
+                                   rows["NEUROBOT_CMD_VEL"], v_ref, stop))
                 row["moved_after_stop"] = any(r[1] > EPS for r in rows["NEUROBOT_CMD_VEL"]
                                               if r[0] > t_call + 1.0)
                 row["rec_gap_s"] = max_gap([r[0] for r in self.rec.since("odom", t_call - 0.5)], t_call - 0.5,
@@ -303,6 +308,7 @@ def main(argv=None) -> int:
                                "zero_s": summary(rows, "zero_s", MCP_LIMIT),
                                "req_zero_s": summary(rows, "req_zero_s", MCP_LIMIT),
                                "agent_zero_s": summary(rows, "agent_zero_s", MCP_LIMIT),
+                               "stop_s": summary(rows, "stop_s", MCP_LIMIT),
                                "call_s": summary(rows, "call_s", 1.0),
                                "moved_after_stop": sum(1 for r in rows if r.get("moved_after_stop"))}
         if "scan" in cases:

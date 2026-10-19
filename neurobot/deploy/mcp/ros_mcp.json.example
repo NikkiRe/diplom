@@ -11,7 +11,8 @@
   },
   "topics": {
     "cmd_vel": {"name": "/cmd_vel_agent", "type": "geometry_msgs/msg/Twist", "access": "write"},
-    "safety_state": {"name": "/neurobot/agent/safety_state", "type": "std_msgs/msg/String", "access": "read"}
+    "safety_state": {"name": "/neurobot/agent/safety_state", "type": "std_msgs/msg/String", "access": "read"},
+    "stop_now": {"name": "/neurobot/stop_now", "type": "std_msgs/msg/String", "access": "write"}
   },
   "services": {
     "rosapi_topics": {"name": "/rosapi/topics", "timeout_s": 3.0}
