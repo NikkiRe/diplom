@@ -31,6 +31,7 @@ from neurobot.sim.budget import model as budget_model
 from neurobot.sim.budget import stack as budget_stack
 from neurobot.sim.budget.collect import parse_flat, unique_snapshot
 from neurobot.sim.runs import stacks
+from neurobot.sim.runs.metrics import NOT_ROBOT
 from neurobot.sim.runs.pico import MockLLM
 from neurobot.sim.runs.runner import Runner, journal_dump
 
@@ -61,8 +62,9 @@ class A1Budget(stacks.A1):
                                     model=self.model)
 
     def jetson_units(self):
-        """Юниты пакета, которые на роботе работают на Jetson (все, кроме драйвера двойника)."""
-        return [u for k, u in stacks.A1.units(self).items() if k != "twin_driver"]
+        """Юниты пакета, которые на роботе работают на Jetson: все, кроме драйверов двойника (Gazebo и база, узлы
+        лидара и камеры на Python — на роботе их место занимают заместители PROXIES)."""
+        return [u for k, u in stacks.A1.units(self).items() if k not in NOT_ROBOT]
 
     def prepare(self) -> None:
         super().prepare()
@@ -102,7 +104,7 @@ class A1Budget(stacks.A1):
     def write_units_json(self) -> str:
         doc = {"slice": SLICE_CG, "units": {}}
         for k, u in self.units().items():
-            if k == "twin_driver":
+            if k in NOT_ROBOT:
                 continue
             cg = stacks.unit_prop(u, "ControlGroup")
             doc["units"][k] = {"unit": u, "role": "ballast" if k == "camera_streams" else
@@ -151,7 +153,8 @@ def report(st: A1Budget, uniq: dict, events_before: dict, events_after: dict) ->
     oom = (events_after.get("memory.events", {}).get("oom_kill", 0) -
            events_before.get("memory.events", {}).get("oom_kill", 0))
     return {"mem_max_mib": st.mem, "quota_pct": st.quota, "ratio_a57": st.ratio, "cpus": st.cpus,
-            "unique_mib": {k: None if v is None else round(v / 1024.0, 1) for k, v in uniq.get("units_kib", {}).items()},
+            "unique_mib": {k: None if v is None else round(v / 1024.0, 1)
+                           for k, v in uniq.get("units_kib", {}).items()},
             "slice_unique_mib": round(total, 1), "slice_pss_mib": round(uniq.get("slice_pss_kib", 0) / 1024.0, 1),
             "slice_rss_mib": round(uniq.get("slice_rss_kib", 0) / 1024.0, 1),
             "margin_mib": {b: {c: round(v - total, 1) for c, v in cases.items()} for b, cases in budgets.items()},
@@ -163,7 +166,7 @@ def main(argv=None) -> int:
     p.add_argument("--out", required=True, help="новый каталог прогона в ВМ")
     p.add_argument("--mem", type=int, required=True, help="MemoryMax jetson.slice, МиБ (бюджет ветки ОС)")
     p.add_argument("--sched", required=True, help="каталог расписания")
-    p.add_argument("--mockllm", required=True, help="bench/mockllm на Mac")
+    p.add_argument("--mockllm", required=True, help="bench/mockllm в ВМ, напр. http://127.0.0.1:18150")
     p.add_argument("--quota", type=int, default=106, help="CPUQuota slice, %% ядра ВМ (cpucal бюджета 16.10)")
     p.add_argument("--ratio", type=float, default=0.265, help="ядро A57 / ядро ВМ (cpucal бюджета 16.10)")
     p.add_argument("--cpus", type=int, default=4, help="AllowedCPUs=0-(N-1)")

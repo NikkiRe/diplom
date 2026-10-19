@@ -240,7 +240,8 @@ class FrontScan(unittest.TestCase):
         inc = 2 * math.pi / N
         got = front_scan(tb3_scan(deg0=math.nan, deg1=math.inf, deg2=0.05, deg3=9.0), 0.0, inc, HALF, 0.12, 3.5)
         self.assertEqual(got.nearest, 3.0)                     # NaN, +inf, ниже минимума, дальше максимума
-        self.assertAlmostEqual(got.gap_deg, 1.0)               # провалы — NaN и 0,05 по одному лучу: +inf между ними их разделяет
+        # провалы — NaN и 0,05 по одному лучу: +inf между ними их разделяет
+        self.assertAlmostEqual(got.gap_deg, 1.0)
         self.assertEqual(front_scan(tb3_scan(deg0=-math.inf), 0.0, inc, HALF, 0.12, 3.5), (0.0, 0.0))
         self.assertEqual(front_scan([math.inf] * N, 0.0, inc, HALF, 0.12, 3.5), (math.inf, 0.0))
 

@@ -157,6 +157,131 @@ class BlindAndInputs(unittest.TestCase):
             self.assertEqual(g.command(0.0).front, "stale")  # скан не принят — вперёд нельзя
 
 
+FRONT = "obstacle: глубина — путь 0.00 м от края корпуса, вперёд нельзя"
+TOUCH = "touch: препятствие у корпуса (глубина, с ошибкой клетки 0.04 м) — поворот на месте заденет"
+DEAD_END = Safety("blocked", 0.0, 0.05, 0.0, (FRONT, TOUCH))  # S5 повторной приёмки: стена под углом
+TURN_OK = Safety("blocked", 0.0, 0.05, 0.8, (FRONT,))           # отъехал на 0,046 м — поворот снова можно
+# lab_v4 (1139 с): поворот заденет, вперёд — только подползти к препятствию 0,06 м — жесты с поворотом отменяются
+NEAR = "approach: глубина — путь 0.06 м, ≤ 0.03 м/с"
+CREEP = Safety("slow", 0.03, 0.05, 0.0, (NEAR, TOUCH))
+
+
+class Escape(unittest.TestCase):
+    """Выход из тупика (повторная приёмка 18.10): вперёд нельзя, поворот заденет, назад можно — без заявок исполнитель
+    через escape_after_s сам отъезжает назад по своему следу (/odom), не дальше escape_dist."""
+
+    @staticmethod
+    def trail(g: Guard, dist: float, yaw: float = 0.0) -> Guard:
+        """Робот проехал вперёд dist по курсу yaw (одометрия по 1 см)."""
+        for k in range(int(round(dist / 0.01)) + 1):
+            g.odom(0.01 * k * math.cos(yaw), 0.01 * k * math.sin(yaw), yaw)
+        return g
+
+    @staticmethod
+    def steps(g: Guard, k0: int, k1: int, s: Safety, agent=None) -> list:
+        """Шаги по 0,05 с (k0…k1 − 1): состояние safety_gate s, агент — как вход 20 Гц; [(t, Command)]."""
+        out = []
+        for k in range(k0, k1):
+            t = k / 20
+            g.safety(t, s)
+            if agent is not None:
+                g.agent(t, *agent)
+            out.append((t, g.command(t)))
+        return out
+
+    def test_dead_end_backs_out_along_own_trail(self):
+        g = self.trail(guard(), 0.5)  # подъехал к стене
+        idle = self.steps(g, 0, 60, DEAD_END)
+        self.assertEqual({(c.linear, c.angular, c.by) for _, c in idle}, {(0.0, 0.0, "none")})
+        back = self.steps(g, 60, 100, DEAD_END)  # 3 с тупика — 2 с назад со скоростью 0,05: 0,1 м
+        self.assertEqual({(c.linear, c.angular, c.by) for _, c in back}, {(-0.05, 0.0, "escape")})
+        self.assertEqual(g.events, [{"type": "escape", "status": "start", "dist_m": 0.1, "reasons": [FRONT, TOUCH]}])
+        self.assertFalse(back[0][1].cut)
+        end = self.steps(g, 100, 110, TURN_OK)
+        self.assertEqual({(c.linear, c.by) for _, c in end}, {(0.0, "none")})
+        self.assertEqual(g.events[-1], {"type": "task_end", "task": "escape", "status": "done", "reasons": []})
+        self.assertEqual(g.counters["escape"], 1)
+        self.steps(g, 110, 300, TURN_OK)  # поворот можно — не тупик, второго отъезда нет
+        self.assertEqual(g.counters["escape"], 1)
+
+    def test_turn_ban_with_obstacle_just_ahead_is_a_dead_end(self):
+        # вперёд можно только подползти к препятствию (approach), поворот заденет — тоже тупик; поворот нельзя, а
+        # впереди свободно (только слепой сектор лидара) — не тупик: «вперёд» жеста уводит робота
+        g = self.trail(guard(), 0.5)
+        self.steps(g, 0, 100, CREEP)
+        self.assertEqual(g.events[0]["type"], "escape")
+        open_ahead = Safety("slow", 0.15, 0.05, 0.0, ("lidar_blind: перед в слепом секторе лидара", TOUCH))
+        g = self.trail(guard(), 0.5)
+        self.assertEqual({c.by for _, c in self.steps(g, 0, 200, open_ahead)}, {"none"})
+        self.assertEqual(g.counters["escape"], 0)
+
+    def test_escape_only_as_far_as_the_trail(self):
+        # след 0,04 м — отъезд 0,8 с; следа нет (поставлен руками), он короче 3 см, после поворота на месте его нет,
+        # скачок одометрии (рестарт базы), защёлка и потеря одометрии след обнуляют — отъезда нет
+        g = self.trail(guard(), 0.04)
+        back = [c for _, c in self.steps(g, 0, 120, DEAD_END) if c.by == "escape"]
+        self.assertEqual(len(back), 16)
+        self.assertEqual(g.events[0]["dist_m"], 0.04)
+        no_odom = Safety("blocked", 0.0, 0.0, 0.0, ("stale_odom: /odom — 0.60 с без данных",))
+        for name, prepare in (("руками", lambda g: g), ("2 см", lambda g: self.trail(g, 0.02)),
+                              ("поворот", lambda g: g.odom(0.5, 0.0, 0.3)),
+                              ("скачок", lambda g: g.odom(2.0, 0.0, 0.0)),
+                              ("защёлка", lambda g: g.safety(0.0, ESTOP)),
+                              ("нет одометрии", lambda g: g.safety(0.0, no_odom))):
+            g = guard()
+            if name not in ("руками", "2 см"):
+                self.trail(g, 0.5)
+            prepare(g)
+            cmds = self.steps(g, 0, 200, DEAD_END)
+            self.assertEqual({c.by for _, c in cmds}, {"none"}, name)
+            self.assertEqual(g.counters["escape"], 0, name)
+        g = self.trail(guard(), 0.5)  # полный стоп по лидару (отказ драйвера) робота не двигает — след остаётся
+        g.safety(0.0, Safety("blocked", 0.0, 0.0, 0.0, ("stale_scan: /scan — 0.50 с без данных",)))
+        self.steps(g, 0, 70, DEAD_END)
+        self.assertEqual(g.events[0]["dist_m"], 0.1)
+        g = self.trail(guard(), 0.5)
+        g.odom(0.5, 0.0, 0.3)  # развернулся у стены — след считается заново
+        for k in range(1, 7):  # и подъехал 6 см
+            g.odom(0.5 + 0.01 * k * math.cos(0.3), 0.01 * k * math.sin(0.3), 0.3)
+        self.steps(g, 0, 70, DEAD_END)
+        self.assertEqual(g.events[0]["dist_m"], 0.06)
+
+    def test_no_escape_without_touch_reverse_or_safety(self):
+        # поворот можно (не тупик), задний ход исчерпан или запрещён (reverse_limit), защёлка, safety_gate потерян,
+        # отъезд выключен — исполнитель стоит
+        no_rev = Safety("blocked", 0.0, 0.0, 0.0, (FRONT, TOUCH, "reverse_limit: назад уже 0.20 м"))
+        for s, params in ((TURN_OK, {}), (no_rev, {}), (ESTOP, {}), (DEAD_END, {"escape_after_s": 0.0})):
+            g = self.trail(guard(**params), 0.5)
+            cmds = self.steps(g, 0, 200, s)
+            self.assertEqual({c.by for _, c in cmds}, {"none"}, (s.state, params))
+            self.assertEqual(g.counters["escape"], 0)
+        g = self.trail(guard(), 0.5)
+        g.safety(0.0, DEAD_END)
+        for k in range(200):
+            g.command(k / 20)  # состояние safety_gate не обновляется — потерян через safety_timeout
+        self.assertEqual(g.counters["escape"], 0)
+
+    def test_agent_preempts_escape_and_safety_cuts_it(self):
+        g = self.trail(guard(), 0.5)
+        self.steps(g, 0, 70, DEAD_END)
+        self.assertEqual(g.counters["escape"], 1)
+        cmd = self.steps(g, 70, 71, DEAD_END, agent=(0.0, 0.0))[0][1]  # явный стоп агента главнее отъезда
+        self.assertEqual((cmd.linear, cmd.by), (0.0, "agent"))
+        self.assertEqual(g.events[-1]["status"], "preempted")
+        self.steps(g, 71, 80, DEAD_END)  # агент замолчал — тупик отсчитывается заново
+        self.assertEqual(g.counters["escape"], 1)
+        self.steps(g, 80, 140, DEAD_END)
+        self.assertEqual(g.counters["escape"], 2)
+        no_rev = Safety("blocked", 0.0, 0.0, 0.0, (FRONT, TOUCH, "reverse_limit: назад уже 0.20 м"))
+        cmd = self.steps(g, 140, 141, no_rev)[0][1]  # safety_gate не пускает назад — отъезд отменён
+        self.assertEqual((cmd.linear, cmd.by), (0.0, "none"))
+        self.assertEqual(g.events[-1], {"type": "task_end", "task": "escape", "status": "blocked",
+                                        "reasons": list(no_rev.reasons)})
+        g.gesture(7.1, 0.5, 0.0)  # жест после отменённого отъезда не погашен: отмена отъезда его не касается
+        g.safety(7.1, Safety("slow", 0.15, 0.05, 0.8, ()))
+        self.assertEqual(g.command(7.1).by, "gesture")
+
+
 class StartHold(unittest.TestCase):
     """Рестарт исполнителя посреди манёвра (ревью W2): новый процесс не продолжает вход, ненулевой с самого старта."""
 

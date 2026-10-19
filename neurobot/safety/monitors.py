@@ -19,6 +19,18 @@ def tilt_deg(quat, base_in_imu: np.ndarray) -> float:
     return math.degrees(math.acos(min(1.0, abs(float(up[2])) / float(np.linalg.norm(up)))))
 
 
+def tilt_from_accel(accel, base_in_imu: np.ndarray) -> float:
+    """Наклон базы от вертикали по ускорению IMU (в покое — сила реакции, против тяжести): угол между вектором
+    ускорения и осью z базы, градусы. Верен только на стоящем роботе; пока фильтр ориентации после перерыва не сошёлся,
+    робот стоит (gate)."""
+    a = np.asarray(accel, dtype=float)
+    up = base_in_imu @ np.array([0.0, 0.0, 1.0])
+    norm = float(np.linalg.norm(a)) * float(np.linalg.norm(up))
+    if not norm > 0.0:
+        return math.nan
+    return math.degrees(math.acos(min(1.0, abs(float(a @ up)) / norm)))
+
+
 class Shock:
     """Всплеск ускорения: отклонение вектора от его медленного среднего (τ 0,5 с). Наклон и плавный разгон
     среднее догоняет, удар — нет."""

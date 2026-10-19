@@ -75,6 +75,7 @@ STAND = "none"
 NOT_DEAF_STATES = ("paused", "moving")
 MSG_SKEW_S = 0.1   # сообщение жеста и первая команда могут прийти к наблюдателю в обратном порядке
 K6_CAUSES = ("silent", "ignored_zero", "braking_after_zero")
+TAIL_RUN_N = 2     # хвост торможения — команды, каждая своя (S-кривая safety_gate меняет скорость на каждом такте)
 
 
 def _opt(default, help_: str):
@@ -181,13 +182,42 @@ def episodes(runs: list, gap_s: float) -> list:
     return out
 
 
+def _size(r: dict, L: str) -> float:
+    return abs(r["x"] if L in "FB" else r["z"])
+
+
+def letters(runs: list) -> list:
+    """Буквы серий эпизода по порядку — с поправкой на плавную остановку safety_gate (S-кривая, приёмка 17.10),
+    которая тянет команду дольше запроса. На смене фазы старая составляющая тормозит, пока новая разгоняется: серия
+    с обеими ненулевыми относится к той, что не убывает (запрос уже сменился). Хвост в конце эпизода, где
+    составляющая фазы убывает к нулю от команды к команде (серии не длиннее TAIL_RUN_N), — торможение, а не фаза:
+    без буквы; постоянная пониженная скорость (slow safety_gate) — фаза. Резкий стоп (A0, A1 до 17.10) таких серий
+    не даёт, и буквы — как у letter()."""
+    out = []
+    for i, r in enumerate(runs):
+        L = letter(r["x"], r["z"])
+        if r["x"] and r["z"] and i:
+            p = runs[i - 1]
+            if abs(r["x"]) < abs(p["x"]):
+                L = letter(0.0, r["z"])
+            elif abs(r["z"]) < abs(p["z"]):
+                L = letter(r["x"], 0.0)
+        out.append(L)
+    i = len(runs) - 1
+    while (i > 0 and runs[i]["n"] <= TAIL_RUN_N and out[i] == out[i - 1]
+           and _size(runs[i], out[i]) < _size(runs[i - 1], out[i])):
+        i -= 1
+    return out[:i + 1] + [""] * (len(runs) - i - 1)
+
+
 def phases(ep: dict, min_phase_s: float) -> list:
     """[(буква, длительность)]: длительность — от начала фазы до начала следующей; короткая фаза
     (переходный тик демо, где x и th меняются не одновременно) отдаёт своё время предыдущей, соседние
-    одинаковые фазы сливаются."""
+    одинаковые фазы сливаются; буквы — letters()."""
     raw = []
-    for r in ep["runs"]:
-        L = letter(r["x"], r["z"])
+    for r, L in zip(ep["runs"], letters(ep["runs"])):
+        if not L:
+            continue
         if raw and raw[-1][0] == L:
             raw[-1][2] = r["m1"]
             raw[-1][3] += r["n"]

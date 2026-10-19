@@ -4,11 +4,13 @@
 (R7b §2.3, RS15): URG-04LX 683 луча ±2,0923497677 рад, 0,02–5,6 м, ось лидара в (−0,015; 0) базы; блок NaN
 −60,8…+4,2° — корпус D435i (RS3). Сценарии: блокировка старта и взвод, стена на разных скоростях и разгон в стену,
 коридор корпуса вблизи, неизвестные лучи (REP 117: NaN, −inf, коды ошибок, пропуски) — запрет только по участку в
-коридоре за корпусом, позы мира lab двойника без ложного стопа, неизвестное, видимое глубиной, вырожденный скан,
-маска — только корпус камеры, низкий ящик в памяти глубины, обрыв, кадр глубины без данных, наклон, удар, упор и
-пробуксовка, устаревшие данные, джойстик, защёлка, чужой писатель, нечисловой запрос, пределы, задний ход по
-одометрии, разгон и рывок, дребезг у порога, время движения, геозабор, касание. Выход процесса —
-test_safety_node.py.
+коридоре за корпусом, позы мира lab двойника без ложного стопа, неизвестное, видимое глубиной, участок вне поля
+глубины — как слепой сектор (nodata_unseen), вырожденный скан, маска — только корпус камеры, низкий ящик в памяти
+глубины, обрыв, кадр глубины без данных, наклон, удар, упор и пробуксовка, устаревшие данные, джойстик, защёлка
+(снятие — только файлом каталога root), чужой писатель, второй и чужой издатели /scan, нечисловой запрос, пределы,
+задний ход по одометрии, разгон и рывок, плавная остановка по запросу и резкая по причине безопасности, дребезг у
+порога, время движения, геозабор, касание (лидар; клетка глубины — с ошибкой depth_err_m, она же в пути вперёд).
+Выход процесса — test_safety_node.py.
 """
 from __future__ import annotations
 
@@ -29,9 +31,9 @@ if str(ROOT) not in sys.path:
 
 from neurobot.safety.config import Params  # noqa: E402
 from neurobot.safety.depth import Hazards  # noqa: E402
-from neurobot.safety.gate import BLOCKED, ESTOP, OK, SLOW, Gate  # noqa: E402
+from neurobot.safety.gate import BLOCKED, ESTOP, OK, SLOW, TILT_AGREE_S, Gate  # noqa: E402
 from neurobot.safety.geometry import Pose  # noqa: E402
-from neurobot.safety.latch import EstopCmd, Latch  # noqa: E402
+from neurobot.safety.latch import EstopCmd, Latch, ReleaseReq  # noqa: E402
 from neurobot.safety.lidar import ScanMeta  # noqa: E402
 from neurobot.safety.motion import allowed_speed, stop_distance  # noqa: E402
 
@@ -90,6 +92,7 @@ class World:
         self.pose = (0.0, 0.0, 0.0)
         self.vw = (0.0, 0.0)
         self.tilt = 0.3
+        self.tilt_acc = 0.3    # наклон по ускорению /camera/imu (в покое — верный)
         self.accel = (0.0, 0.0, 9.81)
         self.hazards = seen()
         self.free = None       # FreeSpace кадра глубины для неизвестных лучей лидара (None — кадр её не даёт)
@@ -106,8 +109,8 @@ class World:
         if odom:
             g.odom(t, *self.pose, *self.vw)
         if imu:
+            g.imu_accel(t, self.accel, self.tilt_acc)
             g.imu_tilt(t, self.tilt)
-            g.imu_accel(t, self.accel)
         if depth:
             g.depth(t, self.hazards, self.free)
         if self.mux and self.last is not None:
@@ -135,8 +138,24 @@ class World:
         self.dir.cleanup()
 
 
-def human(cmd: str, t: float, id_: str = "") -> EstopCmd:
-    return EstopCmd(cmd, "human", "проверка", id_ or "{}-{}".format(cmd, t), t)
+class Frame:
+    """Ответ кадра глубины неизвестным лучам лидара, как у FreeSpace: в поле ли точки камеры (visible: bool или
+    функция точек базы → bool) и свободны ли (free — только точки в поле); asked — точки, о которых спрашивали."""
+
+    def __init__(self, free: bool, visible=True):
+        self.free, self.vis, self.asked = free, visible, []
+
+    def __call__(self, points):
+        self.asked.append(points)
+        return np.full(len(points), self.free) & self.visible(points)
+
+    def visible(self, points):
+        return np.asarray(self.vis(points), bool) if callable(self.vis) else np.full(len(points), self.vis)
+
+
+def human(latch: Latch, t: float, id_: str = "") -> ReleaseReq:
+    """Снятие человеком (файл root от sudo neurobot estop release): защёлка, которую он видел."""
+    return ReleaseReq(id_ or "release-{}".format(t), t, latch.since, tuple(latch.reasons), "проверка")
 
 
 def face(x: float, y0: float = -0.15, y1: float = 0.15) -> np.ndarray:
@@ -314,13 +333,16 @@ class LidarData(Case):
                 self.assertEqual(any(x.startswith("lidar_unknown") for x in d.warnings), not blocked)
 
     def test_rep117_plus_inf_free_minus_inf_unknown(self):
-        # REP 117: +inf и дальше range_max — «до range_max свободно»; −inf — неизвестно (не попадание: касания нет)
+        # REP 117: +inf и дальше range_max — «до range_max свободно»; −inf — неизвестно (не попадание: касания нет).
+        # Впереди ±60° свободно, по бокам стены в 3 м (скан без попаданий вовсе — lidar_fault, LidarFault)
+        front = range(ray(-60), ray(60) + 1)
         w = self.world(rs3=False)
         w.start()
-        w.ranges = [math.inf] * N
-        self.assertEqual(w.step((0.25, 0.0)).state, OK)
-        w.ranges = [9.0] * N
-        self.assertEqual(w.step((0.25, 0.0)).state, OK)
+        for value in (math.inf, 9.0):
+            w.ranges = room(False)
+            for i in front:
+                w.ranges[i] = value
+            self.assertEqual(w.run(0.5, (0.25, 0.0)).state, OK, value)
         w.ranges[ray(0)] = -math.inf
         d = w.step((0.25, 0.0))
         self.assertEqual(d.state, OK)
@@ -353,26 +375,62 @@ class LidarData(Case):
 
     def test_unknown_seen_free_by_depth_does_not_block(self):
         # неизвестный участок, который свежий кадр глубины видит свободным, не запрещает; кадр устарел — снова запрет
-        asked = []
-
-        def free(answer: bool):
-            def check(points):
-                asked.append(points)
-                return np.full(len(points), answer)
-            return check
         w = self.world()
         w.start()
         w.ranges = room(True, nan=range(ray(10), ray(20)))
         self.assertIn("lidar_nodata", w.step((0.1, 0.0)).codes)
-        w.free = free(False)
+        w.free = Frame(False)
         self.assertIn("lidar_nodata", w.run(0.2, (0.1, 0.0)).codes)
-        w.free = free(True)
+        w.free = Frame(True)
         d = w.run(0.2, (0.1, 0.0))
         self.assertNotIn("lidar_nodata", d.codes)
         self.assertIn("lidar_unknown", [x.split(":")[0] for x in d.warnings])
-        np.testing.assert_allclose(asked[-1][:, 2], LASER.pos[2])  # проверяются точки плоскости скана
+        np.testing.assert_allclose(w.free.asked[-1][:, 2], LASER.pos[2])  # проверяются точки плоскости скана
         d = w.run(0.4 + w.p.depth_timeout, (0.1, 0.0), depth=False)
         self.assertIn("lidar_nodata", d.codes)
+
+    def test_unknown_out_of_depth_view_is_like_blind_sector(self):
+        # приёмка 17.10 (зал прогонов A1: lidar_nodata 47–75 % времени): «нет отражения» слева-спереди на 35–60°,
+        # участок у корпуса — вне поля камеры глубины. nodata_unseen=slow — как слепой сектор корпуса камеры справа:
+        # не быстрее blind_speed по глубине и её памяти; block — прежний запрет
+        nan = range(ray(35), ray(60))
+        w = self.world(rs3=False)
+        w.ranges = room(False, nan=nan)
+        w.start()
+        self.assertIn("lidar_nodata", w.step((0.2, 0.0)).codes)  # кадра глубины нет — запрет
+        w.free = Frame(False, visible=False)
+        d = w.run(1.5, (0.2, 0.0))
+        self.assertEqual(d.codes, ("lidar_unseen",))
+        self.assertEqual((d.state, d.v_max), (SLOW, w.p.blind_speed))
+        self.assertAlmostEqual(d.v, w.p.blind_speed)
+        w.free = Frame(False, visible=lambda pts: pts[:, 0] > 0.2)  # дальний конец участка в поле и не свободен
+        d = w.run(0.1, (0.2, 0.0))  # кадр глубины — после скана: новый ответ — со следующего скана
+        self.assertIn("lidar_nodata", d.codes)
+        self.assertEqual(d.v_max, 0.0)
+        w.free = Frame(True, visible=lambda pts: pts[:, 0] > 0.2)  # в поле — свободен, остальное вне поля
+        self.assertEqual(w.run(0.5, (0.2, 0.0)).codes, ("lidar_unseen",))
+        d = w.run(0.4 + w.p.depth_timeout, (0.2, 0.0), depth=False)  # глубина устарела — вперёд нельзя
+        self.assertEqual(d.v_max, 0.0)
+        self.assertIn("stale_depth", d.codes)
+
+        w = self.world(rs3=False, nodata_unseen="block")
+        w.ranges = room(False, nan=nan)
+        w.free = Frame(False, visible=False)
+        w.start()
+        d = w.step((0.2, 0.0))
+        self.assertIn("lidar_nodata", d.codes)
+        self.assertEqual(d.v_max, 0.0)
+
+        w = self.world()  # с корпусом камеры справа: обе причины, предел тот же
+        w.ranges = room(True, nan=nan)
+        w.free = Frame(False, visible=False)
+        w.start()
+        self.assertEqual(w.step((0.2, 0.0)).codes, ("lidar_blind", "lidar_unseen"))
+        w.ranges = room(True, wall_x=0.28, nan=nan)  # стена ограничила сильнее — участок в предупреждениях
+        d = w.run(0.1, (0.2, 0.0))
+        self.assertIn("approach", d.codes)
+        self.assertNotIn("lidar_unseen", d.codes)
+        self.assertIn("lidar_unseen", [x.split(":")[0] for x in d.warnings])
 
     def test_degenerate_scan_is_rejected_and_goes_stale(self):
         cases = (META._replace(angle_increment=math.nan), META._replace(angle_increment=0.0),
@@ -440,28 +498,85 @@ class LidarData(Case):
         self.assertIn("lidar_unknown", [x.split(":")[0] for x in d.warnings])
 
 
-class Depth(Case):
-    def approach(self, w: World, near_x: float, visible_from: float, kind: str):
-        """Робот едет на предмет с ближней гранью near_x (база в начале); глубина видит его, только пока камера
-        (x = 0,058) не ближе visible_from. Итог — зазор от края корпуса и последнее решение."""
-        p = w.p
-        w.follow = False
-        base = Base(0.1)
-        d = None
-        for _ in range(400):
-            ahead = near_x - base.x
-            pts = face(ahead) if ahead - 0.058 >= visible_from else NONE
-            w.hazards = seen(pts if kind == "obstacle" else NONE, pts if kind == "drop" else NONE)
-            w.pose, w.vw = (base.x, 0.0, 0.0), (base.v, 0.0)
+class LidarFault(Case):
+    def test_scan_seeing_nothing_stops_like_no_scan(self):
+        # повторная приёмка 18.10 (S3b): скан целиком NaN шёл как «нет отражения вне поля глубины» — slow, и робот ехал
+        # на одной глубине. Скан без попаданий дальше корпуса (NaN, коды ошибок URG, +inf, попаданий меньше
+        # fault_min_hits) вид лидара не меняет; fault_scans таких подряд — lidar_fault: полный стоп, сканы при этом
+        # идут, поэтому не stale_scan. Лидар снова видит — движение только с нулевого запроса
+        few = [math.nan] * N
+        for i in range(ray(-30), ray(-30) + 9):
+            few[i] = 1.0
+        for ranges in ([math.nan] * N, [0.007] * N, [math.inf] * N, few):
+            w = self.world()
+            w.free = Frame(True, visible=False)
+            w.start()
+            w.run(0.5, (0.1, 0.0))
+            w.ranges = ranges
+            d = w.run(0.05 * (w.p.fault_scans - 1), (0.1, 0.0))
+            self.assertGreater(d.v, 0.0, ranges[0])  # пустых меньше fault_scans — вид лидара прежний
+            d = w.step((0.1, 0.0))
+            self.assertEqual((d.v, d.w, d.state), (0.0, 0.0, BLOCKED), ranges[0])
+            self.assertEqual(d.codes, ("lidar_fault",))
+            self.assertEqual(w.run(2.0, (0.1, 0.3)).codes, ("lidar_fault",))
+            w.ranges = room(True)
+            self.assertIn("unarmed", w.step((0.1, 0.0)).codes)
+            w.step((0.0, 0.0))
+            self.assertGreater(w.run(0.5, (0.1, 0.0)).v, 0.0)
+
+    def test_interleaved_empty_scans_keep_the_real_view(self):
+        # подменный издатель шлёт по два пустых скана на каждый настоящий (S3b): подряд их меньше fault_scans — стопа
+        # нет, а вид лидара — по настоящим: стена в 0,3 м держит предел и на пустых сканах
+        w = self.world(rs3=False)
+        w.start()
+        real = room(False, wall_x=0.3)
+        limits = set()
+        for k in range(30):
+            w.ranges = real if k % 3 == 0 else [math.nan] * N
             d = w.step((0.25, 0.0))
-            base.step(d.v)
-        return near_x - base.x - p.robot_radius, d
+            self.assertNotIn("lidar_fault", d.codes)
+            self.assertIn("approach", d.codes)
+            limits.add(round(d.v_max, 6))
+        self.assertEqual(len(limits), 1)
+
+    def test_start_with_blind_lidar_is_lidar_fault_not_mask(self):
+        # пустой скан маску не учит: на старте с ослепшим лидаром причина — lidar_fault, а не «учим маску»
+        w = self.world()
+        w.ranges = [math.nan] * N
+        d = w.run(0.05 * (w.p.mask_scans + 2), (0.0, 0.0))
+        self.assertEqual(d.codes, ("lidar_fault",))
+        self.assertIsNone(w.gate.lidar)
+        w.ranges = room(True)
+        w.start()
+        self.assertGreater(w.run(0.5, (0.1, 0.0)).v, 0.0)
+        ref = self.world()
+        ref.start()
+        self.assertEqual(w.gate.mask_deg, ref.gate.mask_deg)  # маска — по настоящим сканам, как без пустых
+
+
+def approach(w: World, near_x: float, visible_from: float, kind: str):
+    """Робот едет на предмет с ближней гранью near_x (база в начале); глубина видит его, только пока камера
+    (x = 0,058) не ближе visible_from. Итог — зазор от края корпуса и последнее решение."""
+    w.follow = False
+    base = Base(0.1)
+    d = None
+    for _ in range(400):
+        ahead = near_x - base.x
+        pts = face(ahead) if ahead - 0.058 >= visible_from else NONE
+        w.hazards = seen(pts if kind == "obstacle" else NONE, pts if kind == "drop" else NONE)
+        w.pose, w.vw = (base.x, 0.0, 0.0), (base.v, 0.0)
+        d = w.step((0.25, 0.0))
+        base.step(d.v)
+    return near_x - base.x - w.p.robot_radius, d
+
+
+class Depth(Case):
 
     def test_low_box_seen_from_afar_is_remembered(self):
         w = self.world()
         w.hazards = seen(face(1.35))  # мир lab двойника: ящик 0,15 м, грань в 1,35 м
         w.start()
-        gap, d = self.approach(w, 1.35, 0.93, "obstacle")  # верх ящика 0,15 м уходит из поля с ≈0,93 м
+        gap, d = approach(w, 1.35, 0.93, "obstacle")  # верх ящика 0,15 м уходит из поля с ≈0,93 м
         self.assertGreater(gap, 0.03)
         self.assertLess(gap, 0.15)
         self.assertEqual(d.state, BLOCKED)
@@ -471,7 +586,7 @@ class Depth(Case):
     def test_cliff_edge_stops_before_edge(self):
         w = self.world()
         w.start()
-        gap, d = self.approach(w, 1.5, 1.2, "drop")  # мир step: край в 1,5 м, пол виден с ≈1,2 м
+        gap, d = approach(w, 1.5, 1.2, "drop")  # мир step: край в 1,5 м, пол виден с ≈1,2 м
         self.assertGreater(gap, 0.03)
         self.assertIn("cliff", d.codes)
 
@@ -526,12 +641,50 @@ class Latches(Case):
         d = w.step((0.1, 0.0))
         self.assertEqual((d.state, d.v, d.w), (ESTOP, 0.0, 0.0))
         self.assertIn("tilt", d.codes)
-        self.assertIn("наклон", w.gate.estop(100.0, human("release", 100.0)))
+        self.assertIn("наклон", w.gate.release(100.0, human(w.latch, 100.0)))
         w.tilt = 0.3
         w.step((0.0, 0.0))
-        self.assertEqual(w.gate.estop(100.0, human("release", 100.0, "r2")), "снята")
+        self.assertEqual(w.gate.release(100.0, human(w.latch, 100.0, "r2")), "снята")
         d = w.step((0.1, 0.0))
         self.assertNotEqual(d.state, ESTOP)
+
+    def test_filter_settles_after_imu_gap(self):
+        # прогоны af 17.10: после перезапуска узла камеры madgwick выдал 48° и сходился ≈0,1 рад/с — ложная защёлка
+        # tilt; теперь робот стоит, пока фильтр не сойдётся с наклоном по ускорению, а судит наклон ускорение
+        w = self.world()
+        w.start()
+        w.run(1.0, (0.0, 0.0), imu=False)          # поток IMU молчит 1 с (перезапуск драйвера камеры)
+        w.tilt, w.accel = 48.3, (3.0, 0.0, 9.81)   # после перерыва: ложный наклон фильтра, иное ускорение
+        d = w.step((0.1, 0.0))
+        self.assertNotEqual(d.state, ESTOP)
+        self.assertEqual((d.v, d.w), (0.0, 0.0))
+        self.assertIn("фильтр ориентации сходится: 48.3° против 0.3° по ускорению", " ".join(d.reasons))
+        for k in range(180):                       # сходится ≈6° в секунду, как madgwick с beta 0,1
+            w.tilt = max(0.3, 48.3 - 6.0 * 0.05 * k)
+            d = w.step((0.0, 0.0))
+            if w.tilt > 3.5:
+                self.assertIn("сходится", " ".join(d.reasons))
+        self.assertNotEqual(d.state, ESTOP)
+        self.assertNotIn("сходится", " ".join(d.reasons))
+        self.assertGreater(w.run(0.5, (0.1, 0.0)).v, 0.0)
+
+    def test_real_slope_after_imu_gap_latches_by_accel(self):
+        w = self.world()
+        w.start()
+        w.run(1.0, (0.0, 0.0), imu=False)
+        w.tilt, w.tilt_acc = 40.0, 12.0            # фильтр ещё врёт, а ускорение показывает склон 12°
+        d = w.step((0.0, 0.0))
+        self.assertEqual(d.state, ESTOP)
+        self.assertIn("по ускорению 12.0°", " ".join(d.reasons))
+
+    def test_settle_without_accel_tilt_waits_the_limit(self):
+        p = Params()
+        w = self.world()
+        w.tilt_acc = None                          # нет TF кадра IMU: наклона по ускорению нет
+        w.start()
+        w.run(1.0, (0.0, 0.0), imu=False)
+        self.assertIn("сходится", " ".join(w.run(p.tilt_settle_s - 1.0, (0.0, 0.0)).reasons))
+        self.assertNotIn("сходится", " ".join(w.run(1.5, (0.0, 0.0)).reasons))
 
     def test_shock_latches(self):
         w = self.world()
@@ -585,13 +738,17 @@ class Latches(Case):
         self.assertEqual(w.step((0.1, 0.0)).state, ESTOP)
         with open(w.latch_path, encoding="utf-8") as f:  # записано до публикации состояния estop
             self.assertEqual(json.load(f)["engaged"], True)
-        self.assertIn("человек", g.estop(10.0, EstopCmd("release", "agent", "", "a2", 10.0)))
-        self.assertIn("старше", g.estop(100.0, human("release", 10.0)))
-        self.assertIn("без времени", g.estop(10.0, EstopCmd("release", "human", "", "a3", None)))
-        self.assertEqual(g.counters["release_denied"], 3)
+        # по теме не снимает никто: by самозаявлено — узел ROS подписался бы «human» (ревью: находка о защёлке)
+        self.assertIn("по теме", g.estop(10.0, EstopCmd("release", "agent", "", "a2", 10.0)))
+        self.assertIn("по теме", g.estop(10.0, EstopCmd("release", "human", "", "a3", 10.0)))
+        self.assertIn("старше", g.release(100.0, human(w.latch, 10.0)))
+        other = ReleaseReq("r0", 10.0, w.latch.since, ("estop: другая причина",), "")
+        self.assertIn("другую защёлку", g.release(10.0, other))
+        self.assertEqual(g.counters["release_denied"], 4)
         self.assertEqual(w.step((0.1, 0.0)).state, ESTOP)
-        self.assertEqual(g.estop(10.0, human("release", 10.0, "r1")), "снята")
-        self.assertTrue(g.estop(10.0, human("release", 10.0, "r1")).startswith("повтор"))
+        self.assertEqual(g.release(10.0, human(w.latch, 10.0, "r1")), "снята")
+        self.assertTrue(g.release(10.0, human(w.latch, 10.0, "r1")).startswith("повтор"))
+        self.assertEqual(g.release(10.0, human(w.latch, 10.0, "r9")), "защёлки нет")
         self.assertTrue(g.estop(10.0, EstopCmd("engage", "agent", "LLM", "a1", 10.0)).startswith("повтор"))
         d = w.step((0.1, 0.0))
         self.assertIn("unarmed", d.codes)  # после снятия — только с нулевого запроса
@@ -626,9 +783,78 @@ class Latches(Case):
         d = w.step((0.1, 0.0))
         self.assertEqual(d.state, ESTOP)
         self.assertIn("foreign_writer", d.codes)
-        self.assertIn("/rogue_teleop", w.gate.estop(10.0, human("release", 10.0)))
+        self.assertIn("/rogue_teleop", w.gate.release(10.0, human(w.latch, 10.0)))
         w.gate.graph([], [])
-        self.assertEqual(w.gate.estop(10.0, human("release", 10.0, "r2")), "снята")
+        self.assertEqual(w.gate.release(10.0, human(w.latch, 10.0, "r2")), "снята")
+
+    def test_second_scan_publisher_warns_then_blocks(self):
+        for policy in ("warn", "block"):
+            w = self.world(rs3=False, scan_dup_policy=policy, scan_dup_s=2.0)
+            w.start()
+            w.gate.scan_publishers(w.t, ["/urg_node2", "/urg_node2"])
+            d = w.run(1.0, (0.1, 0.0))
+            self.assertGreater(d.v, 0.0, policy)  # убитый драйвер ещё в графе — сразу не стоим
+            self.assertIn("scan_publishers", [x.split(":")[0] for x in d.warnings])
+            d = w.run(1.5, (0.1, 0.0))
+            if policy == "warn":
+                self.assertGreater(d.v, 0.0)
+                continue
+            self.assertEqual((d.v, d.w, d.state), (0.0, 0.0, BLOCKED))
+            self.assertIn("scan_publishers", d.codes)
+            w.gate.scan_publishers(w.t, ["/urg_node2"])
+            self.assertIn("unarmed", w.step((0.1, 0.0)).codes)  # снова только с нулевого запроса
+            w.step((0.0, 0.0))
+            self.assertNotIn("scan_publishers", [x.split(":")[0] for x in w.run(0.5, (0.1, 0.0)).warnings])
+
+    def test_second_scan_publisher_with_empty_scans_stops_at_once(self):
+        # повторная приёмка 18.10 (S3b): узел с именем драйвера шлёт NaN-сканы между настоящими — это не след убитого
+        # драйвера (след молчит): стоп сразу, а не через scan_dup_s; пустой скан до второго издателя не в счёт
+        for policy in ("warn", "block"):
+            w = self.world(rs3=False, scan_dup_policy=policy)
+            w.start()
+            w.ranges = [math.nan] * N
+            w.step((0.0, 0.0))
+            w.ranges = room(False)
+            w.gate.scan_publishers(w.t, ["/urg_node2", "/urg_node2"])
+            d = w.run(1.0, (0.1, 0.0))
+            self.assertGreater(d.v, 0.0, policy)
+            w.ranges = [math.nan] * N
+            w.step((0.1, 0.0))
+            w.ranges = room(False)
+            d = w.step((0.1, 0.0))
+            self.assertIn("scan_publishers", [x.split(":")[0] for x in d.warnings])
+            if policy == "warn":
+                self.assertGreater(d.v, 0.0)
+                continue
+            self.assertEqual((d.v, d.w, d.state), (0.0, 0.0, BLOCKED))
+            self.assertIn("scan_publishers", d.codes)
+            self.assertIn("пустые сканы", " ".join(d.reasons))
+            w.gate.scan_publishers(w.t, ["/urg_node2"])
+            self.assertIn("unarmed", w.step((0.1, 0.0)).codes)
+            w.step((0.0, 0.0))
+            self.assertGreater(w.run(0.5, (0.1, 0.0)).v, 0.0)
+
+    def test_foreign_scan_publisher_stops_at_once(self):
+        # приёмка 17.10 (P3): подмена /scan чужим узлом. Драйвер — первый одиночный издатель; издатель с другим именем
+        # (подставной «всё свободно», запись) — сразу стоп при block, и когда настоящий драйвер умер, тоже
+        for policy in ("warn", "block"):
+            w = self.world(rs3=False, scan_dup_policy=policy)
+            w.gate.scan_publishers(w.t, [])
+            w.gate.scan_publishers(w.t, ["/urg_node2"])
+            w.start()
+            for names in (["/urg_node2", "/scan_ghost"], ["/scan_ghost"]):
+                w.gate.scan_publishers(w.t, names)
+                d = w.step((0.1, 0.0))
+                self.assertIn("scan_foreign", [x.split(":")[0] for x in d.warnings], (policy, names))
+                if policy == "warn":
+                    self.assertGreater(d.v, 0.0, names)
+                else:
+                    self.assertEqual((d.v, d.w, d.state), (0.0, 0.0, BLOCKED), names)
+                    self.assertIn("scan_foreign", d.codes)
+            w.gate.scan_publishers(w.t, ["/urg_node2", "/urg_node2"])  # рестарт драйвера: след убитого — не чужой
+            d = w.step((0.0, 0.0))
+            self.assertNotIn("scan_foreign", d.codes + tuple(x.split(":")[0] for x in d.warnings))
+            self.assertGreater(w.run(0.5, (0.1, 0.0)).v, 0.0)
 
     def test_override_publishers_by_policy(self):
         for policy, state in (("warn", SLOW), ("block", BLOCKED), ("estop", ESTOP)):
@@ -651,7 +877,8 @@ class Inputs(Case):
             d = w.run(seconds, (0.1, 0.3), **{sensor: False})
             self.assertEqual((d.v, d.w, d.state), (0.0, 0.0, BLOCKED), sensor)
             self.assertIn("stale_" + sensor, d.codes)
-            d = w.run(0.5, (0.1, 0.3))  # датчик вернулся — без нулевого запроса не поедем
+            # датчик вернулся — без нулевого запроса не поедем (ориентация после перерыва ещё и сходится)
+            d = w.run(0.5 + (TILT_AGREE_S if sensor == "imu" else 0.0), (0.1, 0.3))
             self.assertEqual((d.v, d.w), (0.0, 0.0), sensor)
             self.assertIn("unarmed", d.codes)
 
@@ -720,7 +947,7 @@ class Limits(Case):
         d = w.run(0.5, (-0.05, 0.0))
         self.assertEqual((d.v, d.v_rev), (0.0, 0.0))
 
-    def test_accel_and_jerk_on_start_braking_immediate(self):
+    def test_accel_and_jerk_on_start(self):
         p = Params()
         w = self.world(rs3=False)
         w.start()
@@ -729,7 +956,48 @@ class Limits(Case):
         self.assertTrue(all(a <= p.max_accel + 1e-9 for a in acc))
         self.assertTrue(all(b - a <= p.max_jerk * 0.05 + 1e-9 for a, b in zip([0.0] + acc, acc)))
         self.assertAlmostEqual(vs[-1], 0.25)
-        self.assertEqual(w.step((0.0, 0.0)).v, 0.0)  # тормозит база (L1), страж — сразу ноль
+
+    def test_requested_stop_is_smooth(self):
+        # находка 3: свой стоп на 0,15 м/с дал всплеск /camera/imu 6,1 м/с² и защёлку shock — по запросу тормозим
+        # S-кривой: замедление ≤ stop_decel, его рост и спад ≤ max_jerk·dt, в конце — ноль
+        p = Params()
+        w = self.world(rs3=False)
+        w.start()
+        w.run(2.0, (0.15, 0.0))
+        vs = [w.step((0.0, 0.0)).v for _ in range(30)]
+        dec = [(a - b) / 0.05 for a, b in zip([0.15] + vs, vs)]
+        self.assertGreater(vs[0], 0.14)
+        self.assertTrue(all(d <= p.stop_decel + 1e-9 for d in dec))
+        self.assertTrue(all(abs(b - a) <= p.max_jerk * 0.05 + 1e-9 for a, b in zip([0.0] + dec, dec + [0.0])))
+        self.assertEqual(vs[-1], 0.0)
+        self.assertLess(vs.index(0.0) * 0.05, 0.7)
+        hard = self.world(rs3=False, stop_decel=0.0)
+        hard.start()
+        hard.run(2.0, (0.15, 0.0))
+        self.assertEqual(hard.step((0.0, 0.0)).v, 0.0)  # stop_decel 0 — как раньше: тормозит L1
+
+    def test_safety_stop_is_immediate(self):
+        def moving(**kw):
+            w = self.world(rs3=False, **kw)
+            w.start()
+            w.run(2.0, (0.15, 0.3))
+            return w
+        w = moving()
+        w.ranges = room(False, wall_x=0.24)  # стена в 4,5 см от края корпуса — предел срезал запрос
+        d = w.step((0.15, 0.3))
+        self.assertEqual(d.v, 0.0)
+        self.assertGreater(d.w, 0.0)  # поворот по-прежнему разрешён и тормозит плавно только по запросу
+        w = moving()
+        w.ranges = room(False, wall_x=0.24)  # стена — в тот же тик, когда исполнитель прислал ноль: тоже сразу
+        self.assertEqual(w.step((0.0, 0.3)).v, 0.0)
+        w = moving()
+        w.gate.estop(w.t, EstopCmd("engage", "agent", "", "e1", w.t))
+        self.assertEqual((w.step((0.15, 0.3)).v, w.last.w), (0.0, 0.0))
+        w = moving()
+        self.assertEqual((w.run(0.55).v, w.last.w), (0.0, 0.0))  # запрос устарел (исполнитель умер) — сразу
+        w = moving()
+        d = w.run(0.45, (0.15, 0.3), scan=False)
+        self.assertEqual((d.v, d.w), (0.0, 0.0))
 
     def test_max_motion_time(self):
         w = self.world(max_motion_s=1.0)
@@ -754,6 +1022,32 @@ class Limits(Case):
         d = w.step((0.1, 0.0))
         self.assertGreater(d.v_max, 0.0)
         self.assertEqual(d.v_rev, 0.0)
+
+    def test_depth_cell_error_near_thin_leg(self):
+        # находка 2 (main_a1, 1609–1629 с): у ножки стула зазор по клетке глубины 0,044 м, по истине — 0,009; поворот
+        # на месте с turn_margin 0,03 задел ножку. Клетка глубины считается ближе на depth_err_m — для поворота и пути
+        # вперёд
+        p = Params()
+        leg = np.array([[0.0, p.robot_radius + 0.079]] * 3)  # центр клетки, как в инциденте: угол — в 0,044 м от круга
+        for err, turns in ((0.0, True), (p.depth_err_m, False)):
+            w = self.world(rs3=False, depth_err_m=err)
+            w.hazards = seen(obstacle=leg)
+            w.start()
+            d = w.run(0.5, (0.0, 0.5))
+            self.assertEqual(d.w > 0.0, turns, err)
+            self.assertEqual("touch" in d.codes, not turns, err)
+        self.assertIn("глубина", " ".join(d.reasons))
+        w = self.world(rs3=False)
+        w.ranges = room(False, points=[(0.0, p.robot_radius + 0.05)])
+        w.start()
+        self.assertGreater(w.run(0.5, (0.0, 0.5)).w, 0.0)  # лидар меряет точно: 5 см от круга — поворот можно
+        gaps = []
+        for err in (0.0, p.depth_err_m):  # и вперёд глубина останавливает раньше на ту же ошибку
+            w = self.world(depth_err_m=err)
+            w.hazards = seen(face(1.35))
+            w.start()
+            gaps.append(approach(w, 1.35, 0.93, "obstacle")[0])
+        self.assertAlmostEqual(gaps[1] - gaps[0], p.depth_err_m, delta=0.012)
 
     def test_touch_forbids_turning_in_place(self):
         for point, forward in (((-0.05, 0.21), True), ((0.01, 0.21), False)):  # стойка у борта, 1,5 см от круга

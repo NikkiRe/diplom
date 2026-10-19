@@ -1,7 +1,8 @@
 """Граф ROS 2 через rclpy (Foxy и Jazzy): издатели и подписчики тем, наблюдение для doctor, явный ноль, защёлка.
 
 rclpy импортируется только здесь и только при вызове (cli заранее подгружает окружение ROS); свой Context на
-каждый вызов, чтобы не задевать глобальное состояние. Используются только API, которые есть в Foxy:
+каждый вызов, чтобы не задевать глобальное состояние (у сторожа — один постоянный, TopicWatch). Используются только
+API, которые есть в Foxy:
 get_publishers_info_by_topic, get_subscriptions_info_by_topic, get_topic_names_and_types, get_node_names,
 count_subscribers, create_subscription(raw=True), SingleThreadedExecutor(context=).
 """
@@ -218,11 +219,17 @@ def estop_message(cmd: str, reason: str) -> dict:
 
 def safety_state(cfg: Config, timeout: float = STATE_WAIT_S) -> Optional[dict]:
     """Последнее /neurobot/safety_state за timeout с или None."""
+    return wait_safety_state(cfg, lambda _s: True, timeout)
+
+
+def wait_safety_state(cfg: Config, done: Callable[[dict], bool], timeout: float) -> Optional[dict]:
+    """Слушать /neurobot/safety_state до состояния, для которого done(state) истинно, или до timeout с; последнее
+    состояние или None."""
     got: List[dict] = []
     with session(cfg, "estop") as node:
         node.create_subscription(msg_class("std_msgs/msg/String"), cfg.get("NEUROBOT_SAFETY_STATE_TOPIC"),
                                  lambda m: got.append(_json(m)), _rclpy().qos.qos_profile_sensor_data)
-        _spin(node, timeout, until=lambda: bool(got))
+        _spin(node, timeout, until=lambda: bool(got) and done(got[-1]))
     return got[-1] if got else None
 
 
@@ -249,6 +256,53 @@ def send_estop(cfg: Config, message: dict, done: Callable[[dict], bool], timeout
             _spin(node, 0.05)
         _spin(node, timeout, until=lambda: bool(states) and done(states[-1]))
     return subs, (states[-1] if states else None)
+
+
+class TopicWatch:
+    """Постоянный узел сторожа: возраст последнего сообщения тем. Подписка raw (кадры камеры не разбираются), QoS
+    сенсоров; тип — из графа: тема, которой в графе ещё нет, подписывается на следующем spin. Пока сообщений не было,
+    возраст считается от подписки (а до неё — от запуска сторожа)."""
+
+    def __init__(self, cfg: Config, topics: List[str]):
+        os.environ.update(cfg.ros_environ())
+        self.rclpy = _rclpy()
+        self.ctx = self.rclpy.Context()
+        self.rclpy.init(args=["--ros-args", "--disable-external-lib-logs"], context=self.ctx)
+        self.node = self.rclpy.create_node("neurobot_watchdog_{}".format(os.getpid()), context=self.ctx)
+        self.ex = self.rclpy.executors.SingleThreadedExecutor(context=self.ctx)
+        self.ex.add_node(self.node)
+        self.born = time.monotonic()
+        self.last: Dict[str, Optional[float]] = dict.fromkeys(topics)
+        self.since: Dict[str, float] = {}
+        self.subs: Dict[str, object] = {}
+
+    def _subscribe(self) -> None:
+        missing = [t for t in self.last if t not in self.subs]
+        if not missing:
+            return
+        types = dict(self.node.get_topic_names_and_types())
+        for t in missing:
+            if types.get(t):
+                self.subs[t] = self.node.create_subscription(
+                    msg_class(types[t][0]), t, lambda _m, t=t: self.last.__setitem__(t, time.monotonic()),
+                    self.rclpy.qos.qos_profile_sensor_data, raw=True)
+                self.since[t] = time.monotonic()
+
+    def spin(self, seconds: float) -> None:
+        self._subscribe()
+        end = time.monotonic() + seconds
+        while time.monotonic() < end:
+            self.ex.spin_once(timeout_sec=min(0.1, max(0.0, end - time.monotonic())))
+
+    def ages(self) -> Dict[str, float]:
+        """{тема: с без сообщений}: от последнего, а пока их не было — от подписки или запуска сторожа."""
+        now = time.monotonic()
+        return {t: now - (last if last is not None else self.since.get(t, self.born)) for t, last in self.last.items()}
+
+    def close(self) -> None:
+        self.ex.remove_node(self.node)
+        self.node.destroy_node()
+        self.rclpy.shutdown(context=self.ctx)
 
 
 def wait_topic(cfg: Config, topic: str, timeout: float) -> Optional[float]:

@@ -1,6 +1,7 @@
 # Спецификация реализации (v2): ИИ-агент одноплатного компьютера EdgeCtx
 
-Версия 2, 2026-10-06; обновлено 15.10.2026 по итогам этапа «минимальная плата» (§1, §3, §4, §6, §8–§10).
+Версия 2, 2026-10-06; обновлено 15.10.2026 по итогам этапа «минимальная плата» (§1, §3, §4, §6, §8–§10); строка
+`neurobot/` в §1 — 19.10.2026.
 Основание: `docs/plan/vkr_plan.html` (план ВКР) и `research/new_topic/THESIS_CONCEPT.md` (§7–§13 — подробности).
 Этот файл — контракт между компонентами. Отступления записывать в `docs/DECISIONS.md`.
 
@@ -44,8 +45,10 @@ experiments/      results/<run_id>/ (сырые JSONL, сценарии, README 
 data/casas/       подмножество трасс CASAS (Zenodo 10.5281/zenodo.15708568, CC BY 4.0) + PROVENANCE
 data/massive/     ru/en шаблоны команд iot (из research/new_topic/GAP4_artifacts/data)
 docs/neurobot/    робот лаборатории NeuroChip: анализ (ANALYSIS.md), план (PLAN.md), разбор материалов (research/R1–R7) — готовы
-neurobot/         В РАБОТЕ (параллельный процесс): пакет 1 плана docs/neurobot/PLAN.md. Стенд, генератор жестов и материалы
-                  для лаборатории построены; пакет 1 ещё не принят — как готовый компонент не описывается
+neurobot/         робот NeuroChip: пакет 1 плана docs/neurobot/PLAN.md (perception v2, исполнитель, safety_gate,
+                  развёртывание), двойник, наборы и прогоны — README в каталогах; архитектура и темы — PLAN §2. На 19.10
+                  шаг W3 сделан только на двойнике: приёмка 17.10 — принято частично, 18.10 — пять новых замечаний,
+                  исправлены 19.10, доводка независимо не перепринята; на роботе не проверялся; статус — PLAN §13.5
 ```
 Python: `/Users/chosenundead/Projects/diploma-edge-ai/.venv/bin/python` (3.12; mcp 1.30, numpy, scipy, pandas, matplotlib,
 psutil, httpx, pyyaml). Go 1.27.1 (brew). Тесты Python — unittest/pytest допустимо поставить в .venv через uv.

@@ -123,6 +123,12 @@ YOLO-воркер (`run_yolo_mcp_stack.sh`, `yolo_hand_worker.py`) или вто
   дважды (`ros2 launch` берёт последний); глоб без кавычек YAML — rosbridge не стартует (образец —
   `neurobot.env.example`).
 
+`unsupervised_launch` (предупреждение): драйвер или rosbridge запущен `ros2 launch …` без обёртки
+`supervised.launch.py`. Если узел внутри такого launch умрёт, юнит останется active без узла, и systemd его не
+поднимет (так rosbridge после смерти узла не поднимался до конца прогона на двойнике). Переписать команду в env-файле:
+`ros2 launch /opt/neurobot/share/launchfiles/supervised.launch.py include:=пакет/файл.launch.py` и прежние аргументы
+(образец — `neurobot.env.example`).
+
 ### 4.6. Драйверы и датчики
 
 `device_missing`: нет `/dev/ttyACM0` (или что задано) — кабель, права (группа dialout). `topic_timeout`: драйвер
@@ -134,12 +140,18 @@ safety_gate не пустит робота вперёд (повороты мож
 перед лидаром почти в плоскости скана, либо там пусто дальше 5,6 м. Проверка — лист картона в 0,5 м прямо перед
 роботом и `ros2 topic echo /scan`; если закрыт — поднять лидар на проставке или опустить камеру.
 `sensor_missing`, `sensor_stale`: датчик из `NEUROBOT_SENSORS` (`/odom`, `/tf`, `/joint_states`, …) не публикуется,
-молчит или медленнее порога — `journalctl -u neurobot-driver@<имя> -n 50`.
+молчит или медленнее порога — `journalctl -u neurobot-driver@<имя> -n 50`. Пока какой-нибудь юнит ещё поднимается,
+doctor пишет о молчащем датчике «ещё поднимается» — подождать. Зависший драйвер (процесс жив, тема молчит) сторож
+перезапускает сам: тема старше предела две пробы подряд — строка `sensor_stale` в `journalctl -u neurobot-watchdog`.
+Если молчат все датчики сразу, сторож никого не трогает (так выглядит беда DDS) — `sudo systemctl restart
+neurobot.target`. Робот не реагирует на жесты, а doctor «ОК» и в `journalctl -u neurobot-safety` идут команды — мог
+зависнуть `twist_mux` в launch базы (сторож его не видит): `sudo systemctl restart neurobot-driver@base`.
 
 ### 4.7. rosbridge
 
 `port_timeout`: rosbridge не открыл порт за 30 с — `journalctl -u neurobot-rosbridge -n 50`. `rosbridge_down`:
-процесс жив, но WebSocket не отвечает — `sudo systemctl restart neurobot-rosbridge`. Жесты от rosbridge не зависят.
+процесс жив, но WebSocket не отвечает — сторож перезапустит его сам после двух неудачных проб (ping раз в секунду);
+вручную — `sudo systemctl restart neurobot-rosbridge`. Жесты от rosbridge не зависят.
 
 ### 4.8. MCP-сервер
 
@@ -148,6 +160,13 @@ safety_gate не пустит робота вперёд (повороты мож
 сервер жив, но его воркер не отвечает — см. §4.13. `mcp_schema`: у инструментов движения разные единицы
 длительности — это прокси лаборатории без патча: дубли `robot_nudge_forward` и др., где миллисекунды уходят воркеру
 как секунды (2000 «мс» = 2000 с); наложить `mcp/robot_vision_mcp_proxy.patch`.
+
+Что агент отвечает о движении (ros_mcp_server с патчем): `robot_get_status` — поле `safety` (`state`, `reasons`,
+`estop`) и `motion_allowed` только при `ok`/`slow`; `robot_nudge` — `ok: true`, только если safety_gate толчок
+пропустил, иначе `status: estop` (защёлка, §4.14), `blocked` (с причинами safety_gate: препятствие, нет данных
+лидара, наклон…) или `unconfirmed` (safety_gate толчка не видел: он не запущен или запрос не дошёл — `sudo neurobot
+doctor`). Ответ «готово» при стоящем роботе — повод проверить, наложен ли патч и есть ли в конфиге MCP-сервера
+`topics.safety_state` (предупреждение precheck mcp).
 
 ### 4.9. PicoClaw
 
@@ -160,14 +179,22 @@ MCP-сервер, через 90 с — PicoClaw. `agent_timeout`: PicoClaw не 
 
 ### 4.10. safety_gate и исполнитель
 
-`safety_silent`: safety_gate жив, но не публикует `/neurobot/safety_state` (5 Гц) — `journalctl -u neurobot-safety
--n 50`; при «тип в графе …» поправить `NEUROBOT_CMD_VEL_TYPE`. `safety_blocked` (предупреждение): safety_gate
-запрещает движение — причины в тексте (препятствие, нет свежих датчиков, наклон и т. п.); устранить причину, это не
-отказ. `gate_missing`: исполнитель не стартует, потому что safety_gate не слушает `/neurobot/cmd_vel_req` — смотреть
-строку `safety` выше. `executor_silent`: исполнитель жив, но не публикует `/neurobot/motion_state` —
-`journalctl -u neurobot-executor -n 50`. `zero_undelivered` (в журнале safety_gate после остановки): явный ноль
-некому было принять — twist_mux не слушал `/cmd_vel`; базу тогда остановил только её `cmd_vel_timeout`, проверить
-launch базы.
+`safety_silent`: safety_gate жив, но не публикует `/neurobot/safety_state` (5 Гц) —
+`journalctl -u neurobot-safety -n 50`; при «тип в графе …» поправить `NEUROBOT_CMD_VEL_TYPE`. `safety_blocked`
+(предупреждение): safety_gate запрещает движение — причины в тексте (препятствие, нет свежих датчиков, наклон и т. п.);
+устранить причину, это не отказ. **Робот стоит `blocked` с причинами `obstacle` и `touch`** (или `slow` с `touch` и
+одной из `approach`, `obstacle`, `cliff`: вперёд нельзя или только к препятствию или краю, поворот на месте заденет —
+подъехал к стене под углом или к ножке стула) — тупик: ни один жест не ведёт назад, поэтому исполнитель через 3 с сам
+отъезжает назад по своему следу, до 0,1 м (в журнале исполнителя — `escape: start` и `task_end escape: done`). Не вышло
+— робот поставлен руками или развернулся вплотную (следа нет), в причинах `reverse_limit` (назад за самую дальнюю точку
+пути уже 0,2 м) или касание сбоку — скажите агенту «отъедь назад» (`robot_nudge backward`), посмотрев, что сзади
+свободно, или отведите робота рукой. `lidar_fault`: лидар не видит ничего дальше корпуса (весь скан «нет данных» или
+«свободно») — отказ лидара или подменный `/scan`: `neurobot doctor`, `journalctl -u neurobot-driver@lidar -n 50`; в
+помещении шире 11 м — ложный стоп (README safety, «Что НЕ защищено»). `gate_missing`: исполнитель не стартует, потому
+что safety_gate не слушает `/neurobot/cmd_vel_req` — смотреть строку `safety` выше. `executor_silent`: исполнитель жив,
+но не публикует `/neurobot/motion_state` — `journalctl -u neurobot-executor -n 50`. `zero_undelivered` (в журнале
+safety_gate после остановки): явный ноль некому было принять — twist_mux не слушал `/cmd_vel`; базу тогда остановил
+только её `cmd_vel_timeout`, проверить launch базы.
 
 ### 4.11. Распознавание
 
@@ -191,14 +218,16 @@ MCP-серверу нужен Python ≥ 3.10 и `mcp` ≥ 1.8. Предупре
 
 ```bash
 sudo neurobot estop engage --reason "что случилось"   # поставить: может кто угодно
-sudo neurobot estop release                            # снять: только человек, в терминале, слово release
+sudo neurobot estop release                            # снять: только человек, в терминале, через sudo, слово release
 ```
 
 `estop_engaged`: защёлка стоит — робот не поедет, пока человек её не снимет. Она переживает рестарт safety_gate и
 перезагрузку (хранится в `/var/lib/neurobot/safety`). Устранить причину (doctor покажет её), убедиться, что вокруг
-свободно, затем `release`. `estop_denied`: снимать пытались не из терминала (скрипт,
-агент) — так нельзя. `estop_failed`: safety_gate не ответил — `sudo neurobot doctor`; остановить робот физически —
-кнопкой или `sudo systemctl stop neurobot-safety` (при остановке он шлёт ноль).
+свободно, затем `release`. Снятие — файл root в `/run/neurobot-estop`: без sudo его не записать, а команде «release» в
+теме `/neurobot/estop` safety_gate не верит (кто её прислал, ROS не знает). Если за время между «посмотрел» и
+«release» встала новая причина, safety_gate не снимет — посмотреть ещё раз. `estop_denied`: снимать пытались не из
+терминала (скрипт, агент) или без sudo — так нельзя. `estop_failed`: safety_gate не ответил — `sudo neurobot doctor`;
+остановить робот физически — кнопкой или `sudo systemctl stop neurobot-safety` (при остановке он шлёт ноль).
 
 ## 5. Перезапуски, зависания, журналы
 
@@ -226,6 +255,7 @@ journalctl -u neurobot-watchdog                   # что перезапуск�
 | Агент молчит во всех чатах | `journalctl -u neurobot-picoclaw \| grep -E 'Tool execution (started\|completed)\|All MCP servers failed\|Long poll failed'` | зависший вызов, «зомби», оглохший VK |
 | Агент «бегает по кругу» десятками вызовов | журнал PicoClaw: `Tool not found`, отклонённые аргументы | разные схемы инструментов, старые имена в сессиях (§7) |
 | На жесты не реагирует, процесс жив | `neurobot doctor` (кадры/с, `perception_stalled`, `safety_blocked`, `estop_engaged`); `journalctl -u neurobot-perception \| grep -E "Frame didn't arrive\|Exception"` | камера отвалилась; safety_gate запрещает движение |
+| Стоит у стены или стула, жесты отменяются | `neurobot doctor`: `safety_blocked` с `obstacle` и `touch` (или в `safety_state` — `slow` с `touch` и `approach`, `obstacle` или `cliff`); `journalctl -u neurobot-executor \| grep escape` | тупик: исполнитель отъедет назад сам; если в причинах `reverse_limit` — скажите агенту отъехать назад (§4.10) |
 | После перезапуска камера не находится или старт висит | `dmesg \| tail`, doctor `camera_missing`, `foreign_process` (realsense2_camera), `start_timeout` | камера занята или не сброшена |
 | Робот сам выключается или перезагружается после жестов | `journalctl --list-boots`, `uptime`, `dmesg \| grep -iE 'over-current\|usb .*disconnect'`; напряжение батареи под нагрузкой | просадка питания при пуске моторов (отсечка 11,1 В, общая шина 5 В) |
 | Разворот вместо команды | журнал распознавания: «не распознано» / класс 0 | ошибка распознавания |

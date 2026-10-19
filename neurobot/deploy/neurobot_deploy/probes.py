@@ -1,4 +1,5 @@
-"""Сетевые пробы без зависимостей: WebSocket-рукопожатие rosbridge, MCP по streamable HTTP, HTTP GET воркера.
+"""Сетевые пробы без зависимостей: WebSocket rosbridge (рукопожатие; постоянное соединение с ping для сторожа), MCP
+по streamable HTTP, HTTP GET воркера.
 
 Проба MCP — initialize → notifications/initialized → tools/list (по желанию ещё один tools/call) → DELETE
 сессии. tools/list не трогает rosbridge (в rosbridge 1.3.1 вызовы сервисов в цикле текут, #774), но висит,
@@ -24,25 +25,109 @@ class ProbeError(Exception):
     pass
 
 
-def ws_handshake(host: str, port: int, timeout: float, path: str = "/") -> None:
-    """Открыть WebSocket и закрыть: rosbridge жив, если ответил 101."""
+def _ws_open(host: str, port: int, timeout: float, path: str = "/") -> socket.socket:
+    """Соединение WebSocket после ответа 101 на рукопожатие."""
     key = base64.b64encode(os.urandom(16)).decode()
     req = ("GET {} HTTP/1.1\r\nHost: {}:{}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
            "Sec-WebSocket-Key: {}\r\nSec-WebSocket-Version: 13\r\n\r\n").format(path, host, port, key)
     try:
-        with socket.create_connection((host, port), timeout=timeout) as s:
-            s.sendall(req.encode())
-            head = b""
-            while b"\r\n" not in head:
-                chunk = s.recv(256)
-                if not chunk:
-                    break
-                head += chunk
+        s = socket.create_connection((host, port), timeout=timeout)
     except OSError as e:
+        raise ProbeError("{}:{}: {}".format(host, port, e.strerror or e))
+    try:
+        s.sendall(req.encode())
+        head = b""
+        while b"\r\n\r\n" not in head:
+            chunk = s.recv(256)
+            if not chunk:
+                break
+            head += chunk
+    except OSError as e:
+        s.close()
         raise ProbeError("{}:{}: {}".format(host, port, e.strerror or e))
     status = head.split(b"\r\n", 1)[0].decode("latin-1")
     if " 101 " not in status + " ":
+        s.close()
         raise ProbeError("{}:{}: ответ не WebSocket: {!r}".format(host, port, status[:80]))
+    return s
+
+
+def ws_handshake(host: str, port: int, timeout: float, path: str = "/") -> None:
+    """Открыть WebSocket и закрыть: rosbridge жив, если ответил 101."""
+    _ws_open(host, port, timeout, path).close()
+
+
+class WsPing:
+    """Постоянное соединение WebSocket и ping → pong: проба живости rosbridge для сторожа. Одно соединение на всё
+    время, а не рукопожатие на каждую пробу: rosbridge пишет в журнал каждое подключение и отключение клиента.
+    Зависший сервер (SIGSTOP, занятый цикл событий) не отвечает pong; умерший — рвёт соединение."""
+
+    def __init__(self, host: str, port: int, path: str = "/"):
+        self.host, self.port, self.path = host, port, path
+        self.sock: Optional[socket.socket] = None
+
+    def ping(self, timeout: float) -> None:
+        end = time.monotonic() + timeout
+        try:
+            if self.sock is None:
+                self.sock = _ws_open(self.host, self.port, timeout, self.path)
+            payload = os.urandom(4)
+            self.sock.settimeout(timeout)
+            self._send(0x9, payload)
+            while True:
+                op, data = self._frame(end)
+                if op == 0x8:
+                    raise ProbeError("{}:{}: сервер закрыл соединение".format(self.host, self.port))
+                if op == 0x9:  # ping сервера (websocket_ping_interval rosbridge): без pong он закроет соединение
+                    self._send(0xA, data)
+                if op == 0xA and data == payload:
+                    return
+        except (OSError, ProbeError) as e:
+            self.close()
+            if isinstance(e, ProbeError):
+                raise
+            raise ProbeError("{}:{}: {}".format(self.host, self.port, "нет pong за {:g} с".format(timeout)
+                                                if isinstance(e, socket.timeout) else e.strerror or e))
+
+    def _send(self, op: int, data: bytes) -> None:
+        """Кадр клиента (маска обязательна, RFC 6455 §5.3); управляющие кадры — до 125 байт."""
+        mask = os.urandom(4)
+        self.sock.sendall(bytes([0x80 | op, 0x80 | len(data)]) + mask +
+                          bytes(b ^ mask[i % 4] for i, b in enumerate(data)))
+
+    def _recv(self, n: int, end: float) -> bytes:
+        out = b""
+        while len(out) < n:
+            left = end - time.monotonic()
+            if left <= 0:
+                raise socket.timeout()
+            self.sock.settimeout(left)
+            chunk = self.sock.recv(n - len(out))
+            if not chunk:
+                raise ProbeError("{}:{}: соединение оборвано".format(self.host, self.port))
+            out += chunk
+        return out
+
+    def _frame(self, end: float) -> Tuple[int, bytes]:
+        b0, b1 = self._recv(2, end)
+        size = b1 & 0x7F
+        if size == 126:
+            size = int.from_bytes(self._recv(2, end), "big")
+        elif size == 127:
+            size = int.from_bytes(self._recv(8, end), "big")
+        mask = self._recv(4, end) if b1 & 0x80 else b""
+        data = self._recv(size, end) if size else b""
+        if mask:
+            data = bytes(b ^ mask[i % 4] for i, b in enumerate(data))
+        return b0 & 0x0F, data
+
+    def close(self) -> None:
+        if self.sock is not None:
+            try:
+                self.sock.close()
+            except OSError:
+                pass
+            self.sock = None
 
 
 def _sse_messages(body: str) -> List[Dict[str, Any]]:

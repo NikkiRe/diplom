@@ -295,6 +295,25 @@ class DoctorTest(unittest.TestCase):
         rep = self.diagnose(healthy(), observation=obs(health={"last": dict(HEALTH, state="starting")}))
         self.assertEqual((rep.exit_code, rep.root.component), (3, "perception"))
 
+    def test_silent_sensor_while_starting_is_not_the_root(self):
+        # приёмка: на старте молчит глубина (у двойника — нет подписчика), а doctor называл первой sensor_stale вместо
+        # настоящей причины; пока юнит поднимается, датчик — «ещё поднимается»
+        props = healthy()
+        props[SAFETY] = failed("s", result="success", sub="start")
+        late = obs(**{"sensor:/odom": {"count": 0, "rate_hz": 0.0}}, scan={"age_s": None, "count": 0})
+        rep = self.diagnose(props, observation=late)
+        self.assertEqual((rep.exit_code, rep.root.component), (3, "driver@urg"))
+        self.assertIn("ждём датчик, система ещё поднимается", rep.root.text)
+        odom = next(f for f in rep.findings if f.component == "sensor:/odom")
+        self.assertEqual((odom.level, odom.code), (doctor.STARTING, "starting"))
+        props[SAFETY] = failed("s", result="timeout", sub="auto-restart")  # safety_gate не стал готов — он и причина
+        journal = {"s": [Entry(WALL - 3, 3, "neurobot-wait: safety: start_timeout: нет READY за 30 с", "s")]}
+        props[ROSBRIDGE] = failed("r", result="success", sub="start")
+        rep = self.diagnose(props, journal=journal, observation=late)
+        self.assertEqual((rep.exit_code, rep.root.component), (1, "safety"))
+        rep = self.diagnose(healthy(), observation=late)  # всё поднято — молчащий датчик и есть ошибка
+        self.assertEqual((rep.root.component, rep.root.code), ("driver@urg", "scan_stale"))
+
     def test_sensor_is_root_cause_before_safety_block(self):
         blocked = dict(SAFE, state="blocked", reasons=["scan_stale"])
         rep = self.diagnose(healthy(), observation=obs(scan={"age_s": None, "count": 0}, safety={"last": blocked}))
@@ -516,6 +535,99 @@ class WatchdogTest(unittest.TestCase):
             raise ProbeError("refused")
         zombie = [Entry(WALL - 25, 3, "All MCP servers failed to connect", "a")]
         self.assertEqual(self.decide(props, {"a": zombie}, probe=dead), [])
+
+    def test_driver_watch_from_env(self):
+        c = Config({"NEUROBOT_DRIVERS": "lidar camera base imu", "NEUROBOT_DRIVER_lidar_TOPIC": "/scan",
+                    "NEUROBOT_DRIVER_camera_FRESH": "/camera/color/image_raw:2.5 /camera/imu:1",
+                    "NEUROBOT_DRIVER_base_TOPIC": "/odom", "NEUROBOT_DRIVER_base_FRESH": "none"}, "/e/n.env")
+        self.assertEqual(watchdog.driver_watch(c), {
+            "neurobot-driver@lidar.service": [("/scan", 2.0)],
+            "neurobot-driver@camera.service": [("/camera/color/image_raw", 2.5), ("/camera/imu", 1.0)]})
+        for bad in ("scan:1", "/scan", "/scan:0", "/scan:x"):
+            with self.subTest(bad=bad), self.assertRaises(Exception):
+                watchdog.driver_watch(Config({"NEUROBOT_DRIVERS": "lidar", "NEUROBOT_DRIVER_lidar_FRESH": bad}, "e"))
+
+    def test_stale_driver_restarted_after_two_probes(self):
+        watch = {"neurobot-driver@lidar.service": [("/scan", 1.5)],
+                 "neurobot-driver@camera.service": [("/camera/color/image_raw", 2.0)]}
+        props = {u: running(u) for u in watch}
+        fails: Dict[str, int] = {}
+        ages = {"/scan": 0.1, "/camera/color/image_raw": 5.0}
+        self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+        got = watchdog.sensor_actions(watch, ages, props, NOW, fails)
+        self.assertEqual([(a.unit, a.code) for a in got], [("neurobot-driver@camera.service", "sensor_stale")])
+        self.assertIn("/camera/color/image_raw (5.0 с)", got[0].text)
+        self.assertEqual(fails, {})
+        ages["/camera/color/image_raw"] = 0.2  # одна неудача между свежими — не рестарт
+        for a in (5.0, 0.2, 5.0):
+            ages["/camera/color/image_raw"] = a
+            self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+        props["neurobot-driver@camera.service"] = running("c", since=3)  # только что поднялся — ждём
+        self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+        self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+
+    def test_everything_silent_restarts_nobody(self):
+        # молчат темы всех драйверов сразу — беда DDS, сторожа или пауза ВМ, а не отказ драйвера
+        watch = {"neurobot-driver@lidar.service": [("/scan", 1.5)], "neurobot-driver@base.service": [("/odom", 1.5)]}
+        props = {u: running(u) for u in watch}
+        fails: Dict[str, int] = {}
+        for _ in range(3):
+            self.assertEqual(watchdog.sensor_actions(watch, {"/scan": 9.0, "/odom": 9.0}, props, NOW, fails), [])
+        # пределы разные: /odom ещё в своём (3 с), /scan — уже нет, но молчат оба дольше наименьшего — тоже общая беда
+        # (двойник: рестарт Gazebo глушит и лидар) [замер 18.10: без этого — лишний рестарт драйвера лидара]
+        watch["neurobot-driver@base.service"] = [("/odom", 3.0)]
+        for _ in range(3):
+            self.assertEqual(watchdog.sensor_actions(watch, {"/scan": 2.5, "/odom": 2.5}, props, NOW, fails), [])
+        ages = {"/scan": 2.5, "/odom": 0.1}  # молчит только лидар — его и перезапускаем
+        self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+        self.assertEqual([a.unit for a in watchdog.sensor_actions(watch, ages, props, NOW, fails)],
+                         ["neurobot-driver@lidar.service"])
+
+    def test_rosbridge_ping_needs_two_failures(self):
+        props = running("r")
+        fails: Dict[str, int] = {}
+        results = iter([ProbeError("нет pong за 1 с"), None, ProbeError("x"), ProbeError("соединение оборвано")])
+
+        def ping():
+            e = next(results)
+            if e:
+                raise e
+        got = [watchdog.rosbridge_action(ping, props, NOW, fails) for _ in range(4)]
+        self.assertEqual([len(g) for g in got], [0, 0, 0, 1])
+        self.assertEqual((got[3][0].unit, got[3][0].code), ("neurobot-rosbridge.service", "rosbridge_down"))
+        self.assertEqual(watchdog.rosbridge_action(ping, running("r", since=2), NOW, fails), [])  # грейс после старта
+
+    def test_fast_step_restarts_without_blocking(self):
+        c = Config({"NEUROBOT_DRIVERS": "lidar urg", "NEUROBOT_DRIVER_lidar_TOPIC": "/scan",
+                    "NEUROBOT_DRIVER_urg_TOPIC": "/scan2"}, "/e/n.env")
+        units = ["neurobot-driver@lidar.service", "neurobot-driver@urg.service", watchdog.ROSBRIDGE_UNIT]
+        sd = FakeSd({u: running(u) for u in units})
+        topics = types.SimpleNamespace(ages=lambda: {"/scan": 9.0, "/scan2": 0.1}, spin=lambda s: None)
+
+        class Dead:
+            def ping(self, timeout):
+                raise ProbeError("refused")
+        f = watchdog.Fast(c, sd, topics, Dead())
+        f.step(NOW)
+        self.assertEqual(sd.calls, [])
+        f.step(NOW)
+        self.assertEqual(sorted(sd.calls), [("restart", "--no-block", "neurobot-driver@lidar.service"),
+                                            ("restart", "--no-block", "neurobot-rosbridge.service")])
+
+    def test_loop_slow_pass_does_not_block(self):
+        # в цикле рестарт агентского контура — --no-block: частые пробы драйверов не стоят, пока юнит поднимается
+        sd = FakeSd(healthy(), {"a": [Entry(WALL - 30, 3, "All MCP servers failed to connect", "a")]})
+        run_once = watchdog.run_once
+
+        class Stop(Exception):
+            pass
+        with mock.patch.object(watchdog, "time", types.SimpleNamespace(time=lambda: WALL, monotonic=lambda: NOW)), \
+                mock.patch.object(watchdog, "run_once", lambda c, s, block=True: run_once(c, s, mcp_ok, block)), \
+                mock.patch.object(watchdog, "WsPing", lambda *a: types.SimpleNamespace(ping=lambda t: None)), \
+                mock.patch.object(watchdog.Fast, "wait", side_effect=Stop), contextlib.redirect_stderr(io.StringIO()):
+            with self.assertRaises(Stop):
+                watchdog.loop(cfg(), sd, 10.0, 1.0)
+        self.assertEqual(sd.calls, [("restart", "--no-block", "neurobot-picoclaw.service")])
 
     def test_once_restarts_and_reports_to_stderr(self):
         # neurobot watchdog --once: действие — строка причины в stderr; stdout у CLI — только doctor, render, env-get

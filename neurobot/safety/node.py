@@ -9,7 +9,10 @@ state_hz и при изменении). Имена тем меняются ре�
 Публикация /cmd_vel: на тике — каждая ненулевая команда, нули в покое — через тик (10 Гц при 20); при смене
 команды — сразу из колбэка запроса, скана, глубины или защёлки. Явный ноль — при старте (до READY), на
 SIGTERM/SIGINT и при исключении (finally в main). Защёлка читается из файла до READY. WATCHDOG — от тика.
-Раз в секунду — граф: чужой писатель /cmd_vel — защёлка; издатели входов twist_mux главнее — по override_policy.
+Раз в секунду — граф: чужой писатель /cmd_vel — защёлка; издатели входов twist_mux главнее — по override_policy;
+второй издатель /scan — по scan_dup_policy. Дважды в секунду — каталог снятия защёлки release_dir (latch.read_release):
+снимает её только файл root. Копия состояния для агента — в agent_state_topic, если задан (rosbridge 1.3.1 не умеет
+открыть тему только на чтение, а /neurobot/safety_state читают исполнитель и doctor).
 """
 from __future__ import annotations
 
@@ -39,9 +42,9 @@ from .config import ConfigError, Params, make
 from .depth import Camera, Coverage, FreeSpace, Sampler, classify, image_array
 from .gate import Decision, Gate
 from .geometry import Pose, StaticTf, yaw_of
-from .latch import Latch, parse
+from .latch import Latch, parse, read_release
 from .lidar import ScanMeta
-from .monitors import tilt_deg
+from .monitors import tilt_deg, tilt_from_accel
 
 log = logging.getLogger("safety_gate")
 
@@ -87,10 +90,12 @@ class SafetyGate(Node):
         self._state_key = None
         self._state_t = -math.inf
         self._stamped = p.cmd_vel_type == "TwistStamped"
+        self._release_error = ""
         self.notifier = Notifier()
 
         self._pub = self.create_publisher(TwistStamped if self._stamped else Twist, CMD_VEL, 10)
         self._state_pub = self.create_publisher(String, "/neurobot/safety_state", 10)
+        self._agent_pub = self.create_publisher(String, p.agent_state_topic, 10) if p.agent_state_topic else None
         sensors = qos_profile_sensor_data
         latched = QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                              reliability=ReliabilityPolicy.RELIABLE)
@@ -98,7 +103,7 @@ class SafetyGate(Node):
         self.create_subscription(Twist, "/neurobot/cmd_vel_req", self._on_request, 10)
         # volatile: совместима с любым издателем — и с transient_local CLI, и с обычным (engage от кого угодно)
         self.create_subscription(String, "/neurobot/estop", self._on_estop, 10)
-        self.create_subscription(LaserScan, "/scan", self._on_scan, sensors)
+        self._scan_sub = self.create_subscription(LaserScan, "/scan", self._on_scan, sensors)
         self.create_subscription(Odometry, "/odom", self._on_odom, sensors)
         self.create_subscription(CameraInfo, "/camera/depth/camera_info", self._on_camera_info, sensors)
         self.create_subscription(Image, "/camera/depth/image_rect_raw", self._on_depth, sensors)
@@ -111,6 +116,7 @@ class SafetyGate(Node):
         self.notifier.ready()
         self.create_timer(1.0 / p.rate_hz, self._tick)
         self.create_timer(1.0, self._on_graph)
+        self.create_timer(0.5, self._on_release_dir)
         log.info("safety_gate запущен: %s", json.dumps(p._asdict(), ensure_ascii=False))
 
     # ---- входы
@@ -237,7 +243,11 @@ class SafetyGate(Node):
         def take():
             if not all(math.isfinite(v) for v in (a.x, a.y, a.z)):
                 raise ValueError("ускорение — не числа")
-            self.gate.imu_accel(now, (a.x, a.y, a.z))
+            try:
+                tilt = tilt_from_accel((a.x, a.y, a.z), self._pose(msg.header.frame_id).rot.T)
+            except ValueError:
+                tilt = None  # нет TF кадра IMU: удар судится, наклон по ускорению — нет
+            self.gate.imu_accel(now, (a.x, a.y, a.z), tilt)
         self._sensor("accel", take)
         self._after_latch(now)
 
@@ -250,7 +260,27 @@ class SafetyGate(Node):
         foreign = ["{}/{}".format(i.node_namespace.rstrip("/"), i.node_name)
                    for i in self.get_publishers_info_by_topic(topic) if (i.node_name, i.node_namespace) != me]
         self.gate.graph(foreign, [t for t in self.p.override_topics if self.count_publishers(t)])
+        scan = getattr(self._scan_sub, "topic_name", "/scan")
+        self.gate.scan_publishers(time.monotonic(), ["{}/{}".format(i.node_namespace.rstrip("/"), i.node_name)
+                                                     for i in self.get_publishers_info_by_topic(scan)])
         self._after_latch(time.monotonic())
+
+    def _on_release_dir(self) -> None:
+        """Запрос снятия защёлки от sudo neurobot estop release (файл root в release_dir)."""
+        try:
+            req = read_release(self.p.release_dir, self.p.release_uid)
+            self._release_error = ""
+        except ValueError as e:
+            if str(e) != self._release_error:
+                log.warning("снятие защёлки: %s", e)
+                self._release_error = str(e)
+            return
+        if req is None:
+            return
+        outcome = self.gate.release(time.time(), req)
+        if not outcome.startswith("повтор"):
+            log.warning("снятие защёлки человеком (%s, %s): %s", req.id, req.reason or "без причины", outcome)
+        self._step(time.monotonic())
 
     def _after_latch(self, now: float) -> None:
         """Защёлка встала в колбэке датчика — ноль сразу, не дожидаясь тика."""
@@ -304,10 +334,13 @@ class SafetyGate(Node):
             "limits": {"v_max": _r(d.v_max), "v_rev": _r(d.v_rev), "w_max": _r(d.w_max)},
             "req": [_r(d.req[0]), _r(d.req[1])], "out": [_r(d.v), _r(d.w)], "cut": d.cut,
             "tilt_deg": None if g.tilt is None else round(g.tilt, 1), "lidar_mask_deg": g.mask_deg,
-            "estop": {"engaged": self.latch.engaged, "since": self.latch.since},
+            "estop": {"engaged": self.latch.engaged, "since": self.latch.since, "reasons": list(self.latch.reasons)},
             "counters": dict(g.counters, ticks=self._ticks, published=self._published),
         }
-        self._state_pub.publish(String(data=json.dumps(doc, ensure_ascii=False)))
+        msg = String(data=json.dumps(doc, ensure_ascii=False))
+        self._state_pub.publish(msg)
+        if self._agent_pub is not None:
+            self._agent_pub.publish(msg)
 
     def halt(self) -> None:
         """Явный ноль на выходе и STOPPING для systemd."""

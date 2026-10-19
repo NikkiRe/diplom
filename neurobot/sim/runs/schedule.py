@@ -7,7 +7,9 @@
 Пишет в DIR: timeline.jsonl и truth.jsonl (gesturegen), faults.json — отказы камеры в формате подставного
 pyrealsense2 (A0 читает его сам, A1 — узел relay.py), plan.json — все события по порядку. Отказ ставится через 1 с
 после последнего бокса сегмента, запрос агенту — через 2 с: успеет ли компонент подняться до следующего жеста, и
-есть видимость перезапуска (PLAN §1). Ошибки — код 2, сообщение в stderr.
+есть видимость перезапуска (PLAN §1). Отказы драйверов (DRIVER_CYCLE: kill -9 узлов urg_node2, realsense2_camera и
+базы, SIGSTOP узлов лидара и камеры; приёмка 17.10) — на своих сегментах, между отказами и репликами: жесты и прежние
+отказы профиля от них не меняются (тот же таймлайн, что у прогонов 16.10). Ошибки — код 2, сообщение в stderr.
 """
 from __future__ import annotations
 
@@ -36,19 +38,35 @@ FAULT_CYCLE: Tuple[dict, ...] = (
     {"kind": "kill", "target": "executor"},
     {"kind": "kill", "target": "safety"},
 )
+# отказы драйверов: kill -9 узла лидара (urg_node2), камеры (realsense2_camera) и базы (на двойнике — сервер Gazebo с
+# gz_ros2_control: controller_manager и diff_drive_controller; на роботе — ros2_control с мостом STM32), затем
+# зависание узлов лидара и камеры; SIGSTOP 30 с — дольше любой паузы между жестами: восстановить вовремя может только
+# сторож (свежесть темы), а не SIGCONT в конце
+DRIVER_CYCLE: Tuple[dict, ...] = (
+    {"kind": "kill", "target": "lidar"},
+    {"kind": "kill", "target": "camera"},
+    {"kind": "kill", "target": "base"},
+    {"kind": "stop", "target": "lidar", "duration_s": 30.0},
+    {"kind": "stop", "target": "camera", "duration_s": 30.0},
+)
 PROFILES: Dict[str, dict] = {
     # ≈33 мин: 80 жестов и 20 отрицательных, паузы 12–18 с (дольше манёвра демо 11 с)
     "main": {"gen": {"gestures": 80, "negatives": 20, "lead_in_s": 20.0},
-             "fault_first": 4, "fault_every": 8, "agent_first": 7, "agent_every": 8, "moves": (1, 5, 9)},
+             "fault_first": 4, "fault_every": 8, "agent_first": 7, "agent_every": 8, "moves": (1, 5, 9),
+             "driver_first": 8, "driver_every": 8},
     # ≈60 мин: жесты 1–4 в минуту (паузы 10–55 с)
     "long": {"gen": {"gestures": 75, "negatives": 20, "lead_in_s": 20.0, "pause_s": (10.0, 55.0)},
-             "fault_first": 3, "fault_every": 6, "agent_first": 5, "agent_every": 6, "moves": (2, 7, 12)},
+             "fault_first": 3, "fault_every": 6, "agent_first": 5, "agent_every": 6, "moves": (2, 7, 12),
+             "driver_first": 6, "driver_every": 6},
     # ≈30 мин, те же темп и цикл отказов: длительный прогон, когда ноутбук от батареи (README §8)
     "long30": {"gen": {"gestures": 37, "negatives": 10, "lead_in_s": 20.0, "pause_s": (10.0, 55.0)},
-               "fault_first": 3, "fault_every": 4, "agent_first": 5, "agent_every": 4, "moves": (2, 5, 8)},
-    # дымовой (≈4 мин): проверка обвязки — все виды событий на коротком таймлайне
+               "fault_first": 3, "fault_every": 4, "agent_first": 5, "agent_every": 4, "moves": (2, 5, 8),
+               "driver_first": 4, "driver_every": 4},
+    # дымовой (≈4 мин): проверка обвязки — все виды событий (отказы камеры и процесса, весь цикл драйверов, обе
+    # реплики) на коротком таймлайне
     "smoke": {"gen": {"gestures": 10, "negatives": 2, "lead_in_s": 15.0},
-              "fault_first": 1, "fault_every": 1, "agent_first": 2, "agent_every": 3, "moves": (1,)},
+              "fault_first": 1, "fault_every": 4, "agent_first": 3, "agent_every": 4, "moves": (1,),
+              "driver_first": 2, "driver_every": 2},
     # start_test: каждые 7–10 с от якоря «крючок» слайда 12 — сеть лаборатории на полилинии отвечает классом 0
     # (shapeclass расписания main: 1,0), то есть «полный оборот» — поворот на месте: за 100 стартов робот не уезжает
     "start": {"gen": {"gestures": 24, "negatives": 0, "classes": (1,), "shapes": ("hook", "hook_m"),
@@ -66,11 +84,14 @@ def place(truth: Sequence[dict], first: int, every: int, offset: float) -> List[
 
 
 def build_events(truth: Sequence[dict], prof: dict) -> List[dict]:
-    """События плана по порядку времени: отказы по циклу FAULT_CYCLE и запросы агенту (status, на номерах moves —
-    move)."""
+    """События плана по порядку времени: отказы по циклу FAULT_CYCLE, отказы драйверов по DRIVER_CYCLE (cycle
+    driver) и запросы агенту (status, на номерах moves — move)."""
     events = []
     for n, (seg, at) in enumerate(place(truth, prof["fault_first"], prof["fault_every"], FAULT_OFFSET_S)):
         events.append(dict(FAULT_CYCLE[n % len(FAULT_CYCLE)], at_s=at, seg=seg, n=n))
+    for n, (seg, at) in enumerate(place(truth, prof.get("driver_first", 0), prof.get("driver_every", 0),
+                                        FAULT_OFFSET_S)):
+        events.append(dict(DRIVER_CYCLE[n % len(DRIVER_CYCLE)], at_s=at, seg=seg, n=n, cycle="driver"))
     for n, (seg, at) in enumerate(place(truth, prof["agent_first"], prof["agent_every"], AGENT_OFFSET_S)):
         events.append({"kind": "agent", "request": "move" if n in prof["moves"] else "status", "at_s": at,
                        "seg": seg, "n": n})
@@ -117,7 +138,8 @@ def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m neurobot.sim.runs.schedule", description=__doc__.split("\n\n")[0])
     sub = p.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("make", help="новое расписание в каталог")
-    m.add_argument("--profile", required=True, help="main (≈33 мин) | long (≈60 мин) | long30 (≈30 мин) | smoke (≈4 мин) | start (для start_test)")
+    m.add_argument("--profile", required=True,
+                   help="main (≈33 мин) | long (≈60 мин) | long30 (≈30 мин) | smoke (≈4 мин) | start (для start_test)")
     m.add_argument("--out", required=True, help="каталог расписания (plan.json в нём не перезаписывается)")
     m.add_argument("--seed", type=int, default=20261016, help="зерно gesturegen")
     i = sub.add_parser("info", help="сводка расписания")

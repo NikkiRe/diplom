@@ -1,10 +1,11 @@
 """motion_executor v1 — rclpy-узел вокруг guard.Guard (PLAN §2.4 v1, §13.3).
 
 Пишет желаемую скорость в /neurobot/cmd_vel_req; единственный писатель /cmd_vel — safety_gate (neurobot/safety).
-Входы: /cmd_vel_gesture и /cmd_vel_agent (Twist), /scan (LaserScan, QoS сенсоров — совместим и с reliable, и с
-best-effort издателем), /neurobot/safety_state (String JSON safety_gate). Выходы: /neurobot/cmd_vel_req (Twist
-или TwistStamped — параметр cmd_vel_type), /neurobot/motion_state и /neurobot/events (String JSON, task_end при
-отмене задачи по safety_gate). Имена тем меняются ремапом (--ros-args -r).
+Входы: /cmd_vel_gesture и /cmd_vel_agent (Twist), /scan (LaserScan) и /odom (Odometry, след для отъезда из тупика) с
+QoS сенсоров (совместим и с reliable, и с best-effort издателем), /neurobot/safety_state (String JSON safety_gate).
+Выходы: /neurobot/cmd_vel_req (Twist или TwistStamped — параметр cmd_vel_type), /neurobot/motion_state и
+/neurobot/events (String JSON: task_end при отмене задачи по safety_gate, начало и конец отъезда из тупика). Имена тем
+меняются ремапом (--ros-args -r).
 
 Публикация: при смене команды — сразу из колбэка входа (без ожидания тика, L2); на тике 20 Гц — каждую
 ненулевую команду, нули в покое — каждый второй тик (10 Гц). Явный ноль — при старте (до READY), на
@@ -23,6 +24,7 @@ import uuid
 
 import rclpy
 from geometry_msgs.msg import Twist, TwistStamped
+from nav_msgs.msg import Odometry
 from rclpy.exceptions import ParameterException
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
@@ -49,8 +51,8 @@ DEFAULTS = (
 ) + tuple(GUARD_DEFAULTS._asdict().items())
 
 POSITIVE = ("rate_hz", "state_hz", "input_timeout", "scan_timeout", "d_stop", "decel", "sector_deg",
-            "safety_timeout", "start_quiet_s")
-NON_NEGATIVE = ("react_s", "max_gap_deg")
+            "safety_timeout", "start_quiet_s", "escape_speed", "escape_dist")
+NON_NEGATIVE = ("react_s", "max_gap_deg", "escape_after_s")
 
 
 class ConfigError(Exception):
@@ -114,6 +116,7 @@ class MotionExecutor(Node):
         self.create_subscription(Twist, "/cmd_vel_gesture", self._on_gesture, 10)
         self.create_subscription(Twist, "/cmd_vel_agent", self._on_agent, 10)
         self.create_subscription(LaserScan, "/scan", self._on_scan, qos_profile_sensor_data)
+        self.create_subscription(Odometry, "/odom", self._on_odom, qos_profile_sensor_data)
         self.create_subscription(String, "/neurobot/safety_state", self._on_safety, qos_profile_sensor_data)
 
         self._publish(0.0, 0.0)
@@ -144,6 +147,11 @@ class MotionExecutor(Node):
         self._scan_error = False
         self._react(now)
 
+    def _on_odom(self, msg: Odometry) -> None:
+        p, q = msg.pose.pose.position, msg.pose.pose.orientation
+        if all(math.isfinite(v) for v in (p.x, p.y, q.x, q.y, q.z, q.w)):
+            self.guard.odom(p.x, p.y, math.atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z)))
+
     def _on_safety(self, msg: String) -> None:
         now = time.monotonic()
         try:
@@ -158,11 +166,12 @@ class MotionExecutor(Node):
         self._react(now)
 
     def _command(self, now: float) -> Command:
-        """Команда стража и события task_end, накопленные им, — в /neurobot/events."""
+        """Команда стража и события, накопленные им, — в /neurobot/events."""
         cmd = self.guard.command(now)
         for event in self.guard.events:
             self._events += 1
-            log.warning("задача %s отменена: %s %s", event["task"], event["status"], "; ".join(event["reasons"]))
+            log.warning("%s: %s %s", " ".join(filter(None, (event["type"], event.get("task")))), event["status"],
+                        "; ".join(event["reasons"]))
             self._events_pub.publish(String(data=json.dumps(dict(event, boot=self._boot, seq=self._events),
                                                             ensure_ascii=False)))
         self.guard.events.clear()

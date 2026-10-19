@@ -671,6 +671,34 @@ class JudgeTest(unittest.TestCase):
         ep = {"runs": [run(0.0, 2.9, 0.0, -1.0), run(3.0, 3.0, 0.0, 1.0), run(3.1, 4.9, 0.5, 0.0)]}
         self.assertEqual(an.phases(ep, 0.25), [("R", 3.1), ("F", 1.9)])
 
+    @staticmethod
+    def soft(m: float, xs: list, zs: list) -> list:
+        """Отдельные команды через 0,05 с — как S-кривая safety_gate (каждая своя)."""
+        return [dict(run(m + 0.05 * i, m + 0.05 * i, x, z), n=1) for i, (x, z) in enumerate(zip(xs, zs))]
+
+    def test_soft_stop_tail_and_transition_keep_maneuver(self):
+        # go_right через safety_gate с плавной остановкой (приёмка 17.10): R 3 с; на смене R → F угловая тормозит,
+        # линейная разгоняется; на смене F → L линейная тормозит 0,5 с, пока разгоняется угловая; в конце — хвост
+        # угловой. По знаку x («F, пока x ≠ 0») F вышла бы 2,5 с — «unknown:RFL»
+        decay = [0.15 - 0.015 * (i + 1) for i in range(9)]
+        rise = [0.08 * (i + 1) for i in range(9)]
+        runs = ([run(0.0, 2.95, 0.0, -0.8)] + self.soft(3.0, [0.05, 0.1], [-0.4, -0.1])
+                + [run(3.1, 4.95, 0.15, 0.0)] + self.soft(5.0, decay, rise)
+                + [run(5.45, 7.95, 0.0, 0.8)] + self.soft(8.0, [0.0] * 7, [0.8 - 0.1 * (i + 1) for i in range(7)]))
+        ph = an.phases({"runs": runs}, 0.25)
+        self.assertEqual([L for L, _ in ph], ["R", "F", "L"])
+        self.assertEqual(an.judge(ph, "go_right", an.AnalyzeConfig()), ("correct", "go_right"))
+        self.assertEqual(an.letters(runs)[-8:], ["L"] + [""] * 7)               # хвост — торможение, не фаза
+        self.assertAlmostEqual(dict(ph)["F"], 2.0, delta=0.06)
+
+    def test_constant_slow_end_is_a_phase(self):
+        # постоянная пониженная скорость (slow safety_gate) в конце — фаза, не хвост; резкий стоп — как раньше
+        runs = [run(0.0, 0.9, 0.5, 0.0), run(1.0, 2.9, 0.15, 0.0)]
+        self.assertEqual(an.letters(runs), ["F", "F"])
+        self.assertEqual(an.phases({"runs": runs}, 0.25), [("F", 3.0)])
+        mixed = [run(0.0, 0.9, 0.5, 0.0), dict(run(1.0, 1.0, 0.5, 0.3), n=1)]   # z растёт при той же x — x
+        self.assertEqual(an.letters(mixed), ["F", "F"])
+
 
 class StatsAndIntervalsTest(unittest.TestCase):
     def test_union_subtract(self):

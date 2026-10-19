@@ -1,5 +1,6 @@
-"""neurobot/deploy: разбор журнала PicoClaw (строки 0.2.8 и 0.3.1 одинаковы), WebSocket-проба rosbridge, MCP-проба
-против подставного сервера (JSON, SSE, зависание), HTTP-проба воркера. Только stdlib, Python 3.8+."""
+"""neurobot/deploy: разбор журнала PicoClaw (строки 0.2.8 и 0.3.1 одинаковы), WebSocket-проба rosbridge (рукопожатие и
+постоянное соединение с ping сторожа), MCP-проба против подставного сервера (JSON, SSE, зависание), HTTP-проба
+воркера. Только stdlib, Python 3.8+."""
 from __future__ import annotations
 
 import contextlib
@@ -23,7 +24,7 @@ sys.path.insert(0, str(DEPLOY / "fakes"))
 import fake_component  # noqa: E402
 from neurobot_deploy import __main__ as cli  # noqa: E402
 from neurobot_deploy import picolog  # noqa: E402
-from neurobot_deploy.probes import ProbeError, http_get, probe_mcp, ws_handshake  # noqa: E402
+from neurobot_deploy.probes import ProbeError, WsPing, http_get, probe_mcp, ws_handshake  # noqa: E402
 from neurobot_deploy.sd import Entry  # noqa: E402
 
 CALLER = "../../../runner/work/picoclaw/picoclaw/pkg"
@@ -288,6 +289,82 @@ class WsTest(unittest.TestCase):
             port = s.getsockname()[1]
         with self.assertRaises(ProbeError):
             ws_handshake("127.0.0.1", port, timeout=1.0)
+
+
+class WsPingTest(unittest.TestCase):
+    """Подставной rosbridge: рукопожатие, затем pong на каждый ping (mode: pong — отвечает, silent — молчит как
+    SIGSTOP, server_ping — сначала сам шлёт ping и отвечает, только получив на него pong); счёт подключений — сторож
+    не переподключается на каждую пробу."""
+
+    def setUp(self):
+        self.srv = socket.socket()
+        self.srv.bind(("127.0.0.1", 0))
+        self.srv.listen(4)
+        self.addCleanup(self.srv.close)
+        self.mode, self.accepted, self.conns = "pong", 0, []
+        threading.Thread(target=self._serve, daemon=True).start()
+
+    def _serve(self):
+        while True:
+            try:
+                conn, _ = self.srv.accept()
+            except OSError:
+                return
+            self.accepted += 1
+            self.conns.append(conn)
+            threading.Thread(target=self._client, args=(conn,), daemon=True).start()
+
+    @staticmethod
+    def _exact(conn, n):
+        out = b""
+        while len(out) < n:
+            chunk = conn.recv(n - len(out))
+            if not chunk:
+                raise OSError("closed")
+            out += chunk
+        return out
+
+    def _client(self, conn):
+        try:
+            head = b""
+            while b"\r\n\r\n" not in head:
+                head += conn.recv(1024)
+            conn.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+            while True:
+                b0, b1 = self._exact(conn, 2)
+                mask = self._exact(conn, 4)
+                data = bytes(b ^ mask[i % 4] for i, b in enumerate(self._exact(conn, b1 & 0x7F)))
+                op = b0 & 0x0F
+                if op == 0x9 and self.mode == "server_ping":
+                    pending = data
+                    conn.sendall(bytes([0x89, 3]) + b"srv")
+                elif op == 0xA and self.mode == "server_ping" and data == b"srv":
+                    conn.sendall(bytes([0x8A, len(pending)]) + pending)
+                elif op == 0x9 and self.mode == "pong":
+                    conn.sendall(bytes([0x8A, len(data)]) + data)
+        except OSError:
+            pass
+
+    def test_pong_on_one_connection_timeout_and_reconnect(self):
+        ws = WsPing("127.0.0.1", self.srv.getsockname()[1])
+        self.addCleanup(ws.close)
+        for _ in range(3):
+            ws.ping(1.0)
+        self.assertEqual(self.accepted, 1)
+        self.mode = "silent"
+        t0 = time.monotonic()
+        with self.assertRaisesRegex(ProbeError, "нет pong"):
+            ws.ping(0.5)
+        self.assertLess(time.monotonic() - t0, 1.5)
+        self.mode = "pong"
+        ws.ping(1.0)  # после неудачи — новое соединение
+        self.assertEqual(self.accepted, 2)
+        self.mode = "server_ping"
+        ws.ping(1.0)  # на ping сервера — pong, иначе сервер не ответил бы на наш
+        self.assertEqual(self.accepted, 2)
+        self.conns[-1].close()
+        with self.assertRaises(ProbeError):
+            ws.ping(1.0)  # сервер оборвал соединение (умер)
 
 
 if __name__ == "__main__":

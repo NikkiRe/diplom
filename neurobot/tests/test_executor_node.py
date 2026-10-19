@@ -99,8 +99,8 @@ class Harness:
         self.executor.add_node(self.node)
         self.thread = threading.Thread(target=self.executor.spin, daemon=True)
         self.thread.start()
-        env = dict(os.environ, PYTHONPATH=os.pathsep.join([str(ROOT)] + os.environ.get("PYTHONPATH", "").split(os.pathsep)),
-                   PYTHONDONTWRITEBYTECODE="1",
+        path = [str(ROOT)] + os.environ.get("PYTHONPATH", "").split(os.pathsep)
+        env = dict(os.environ, PYTHONPATH=os.pathsep.join(path), PYTHONDONTWRITEBYTECODE="1",
                    NOTIFY_SOCKET=self.notify_path, WATCHDOG_USEC="1000000")
         self.log_path = os.path.join(self.dir.name, "stderr.log")
         entry = ["-m", "neurobot.executor"] if code is None else ["-c", code]

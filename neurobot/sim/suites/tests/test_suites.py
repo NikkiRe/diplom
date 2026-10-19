@@ -5,9 +5,13 @@ twin.env и конфиги агентского пути против прове
 """
 from __future__ import annotations
 
+import io
+import json
 import math
 import sys
+import tempfile
 import unittest
+from contextlib import redirect_stderr
 from pathlib import Path
 
 SUITES = Path(__file__).resolve().parents[1]
@@ -15,6 +19,7 @@ ROOT = SUITES.parents[2]
 sys.path[:0] = [str(SUITES), str(ROOT / "neurobot" / "deploy")]
 
 import metrics as m  # noqa: E402
+import reasons  # noqa: E402
 from neurobot_deploy import checks, render  # noqa: E402
 from neurobot_deploy.config import Config, parse_env  # noqa: E402
 
@@ -100,12 +105,102 @@ class Truth(unittest.TestCase):
         self.assertAlmostEqual(m.odom_error(odom, gt)["end_pos_m"], 0.03, places=4)
         self.assertEqual(m.odom_error([], gt), {})
 
+    def test_latency_quantiles_and_start_of_braking(self):
+        # K6: от вызова stop до начала торможения и до нуля (плавная остановка по запросу, находка 3)
+        q = m.quantiles([0.05, 0.06, 0.07, 0.30])
+        self.assertEqual((q["n"], q["p50"], q["max"]), (4, 0.065, 0.3))
+        self.assertAlmostEqual(q["p95"], 0.2655)
+        self.assertEqual(m.quantiles([])["n"], 0)
+        cmds = [{"t": 1.0, "v": 0.15}, {"t": 1.05, "v": 0.15}, {"t": 1.1, "v": 0.145}, {"t": 1.6, "v": 0.0}]
+        self.assertEqual(m.first_below(cmds, 1.0, 0.15), 1.1)
+        self.assertIsNone(m.first_below(cmds, 1.0, 0.0))
+
     def test_tilt_by_rest_acceleration(self):
         self.assertAlmostEqual(m.tilt_deg(0.0, 9.81, 0.0), 0.0)   # оптический кадр IMU: g вдоль y
         g = 9.81
         a = math.radians(12.0)
         self.assertAlmostEqual(m.tilt_deg(0.0, g * math.cos(a), g * math.sin(a)), 12.0, places=6)
         self.assertTrue(math.isnan(m.tilt_deg(0.0, 0.0, 0.0)))
+
+
+class Reasons(unittest.TestCase):
+    """reasons.py: доли состояний, время причин, потерянные жесты и окно — на синтетическом каталоге прогона."""
+
+    def run_dir(self) -> str:
+        d = tempfile.TemporaryDirectory()
+        self.addCleanup(d.cleanup)
+        p = Path(d.name)
+        (p / "anchor.json").write_text(json.dumps({"t_wall": 1000.0, "t_mono": 100.0}))
+        # строка — раз в секунду (как пишет runner.py): 0–1 slow, 1–4 blocked нет данных, 4–6 blocked препятствие,
+        # 6–15 slow, 15–16 защёлка, 16–17 slow без причин
+        plan = [("slow", ["lidar_blind: …"])] + [("blocked", ["lidar_nodata: …", "lidar_blind: …"])] * 3 + \
+            [("blocked", ["obstacle: …"])] * 2 + [("slow", ["lidar_blind: …"])] * 9 + [("estop", ["shock: …"])] + \
+            [("slow", [])]
+        (p / "safety.jsonl").write_text("".join(json.dumps({"m": 100.0 + i, "state": st, "reasons": r}) + "\n"
+                                                for i, (st, r) in enumerate(plan)))
+        truth = [{"m": 100.0 + i * 0.5, "x": i * 0.05, "y": 0.0, "v": 0.1 if i < 10 else 0.0, "w": 0.0,
+                  "clearance_m": 1.0, "contacts": ["chair"] if i == 12 else []} for i in range(34)]
+        (p / "truth.jsonl").write_text("".join(json.dumps(r) + "\n" for r in truth))
+        gestures = [{"kind": "gesture", "seg": 0, "t0": 1000.5, "reaction": "interrupted"},
+                    {"kind": "gesture", "seg": 1, "t0": 1009.0, "reaction": "correct"},
+                    {"kind": "negative", "seg": 2, "t0": 1012.0},
+                    {"kind": "gesture", "seg": 3, "t0": 1014.0, "reaction": "none"}]
+        (p / "gestures.jsonl").write_text("".join(json.dumps(g) + "\n" for g in gestures))
+        return d.name
+
+    def test_states_reasons_and_lost_gestures(self):
+        doc = reasons.summarize(self.run_dir())
+        sh, r = doc["safety"]["share"], doc["safety"]["reasons"]
+        self.assertEqual(doc["safety"]["total_s"], 17.0)       # последняя строка — ещё 1 с
+        self.assertAlmostEqual(sh["blocked"], 5 / 17, places=4)
+        self.assertAlmostEqual(sh["estop"], 1 / 17, places=4)
+        self.assertEqual(r["lidar_blind"], {"blocked": 3.0, "slow": 10.0, "sole": 0.0, "lost_gestures": 1})
+        self.assertEqual((r["obstacle"]["blocked"], r["obstacle"]["sole"]), (2.0, 2.0))
+        self.assertEqual(r["shock"]["sole"], 1.0)              # estop считается вместе с blocked
+        self.assertEqual(r["lidar_nodata"]["lost_gestures"], 1)  # жест 0 оборван в blocked с ней (и lidar_blind)
+        self.assertEqual(r["shock"]["lost_gestures"], 1)       # жест 3 не начат при защёлке
+        self.assertEqual((doc["gestures"], doc["reactions"]["correct"]), (3, 1))
+        self.assertEqual(doc["reactions_source"], "gestures.jsonl прогона")
+        self.assertEqual(doc["touches"]["episodes"], 1)
+        self.assertAlmostEqual(doc["travel"]["distance_m"], 1.65)
+
+    def test_window_and_pauses(self):
+        d = self.run_dir()
+        doc = reasons.summarize(d, 5.0)
+        self.assertEqual(doc["safety"]["total_s"], 5.0)
+        self.assertEqual(doc["gestures"], 1)                   # жест 1 (t0 = 9 с) — за окном
+        with open(Path(d) / "safety.jsonl", "a") as f:
+            f.write(json.dumps({"m": 200.0, "state": "blocked", "reasons": ["x: …"]}) + "\n")
+        self.assertEqual(reasons.summarize(d)["safety"]["total_s"], 17.0)  # 84 с без записей — пауза ВМ, не в счёт
+
+    def test_markdown_and_cli(self):
+        d = self.run_dir()
+        out = Path(d) / "r.md"
+        self.assertEqual(reasons.main(["--md", str(out), "a=" + d, "b=" + d]), 0)
+        text = out.read_text()
+        self.assertIn("| ok / slow / blocked / estop | 0 % / 65 % / 29 % / 6 % |", text)
+        self.assertIn("| `lidar_nodata` | 3 / 0 (1) | 3 / 0 (1) |", text)
+        self.assertIn("| верные реакции / жестов | 1 / 3 | 1 / 3 |", text)
+        with redirect_stderr(io.StringIO()):
+            for argv in (["x"], ["--window", "0", "a=" + d], ["a=/нет/такого"]):
+                with self.assertRaises(SystemExit):
+                    reasons.main(argv)
+            self.assertEqual(reasons.main(["a=" + str(Path(d) / "..")]), 1)  # нет якоря
+
+    def test_run_without_safety_gate(self):
+        # A0: safety_gate нет, safety.jsonl пустой — пробег, касания и реакции те же, доли состояний — нет
+        d = self.run_dir()
+        (Path(d) / "safety.jsonl").write_text("")
+        doc = reasons.summarize(d, 5.0)
+        self.assertIsNone(doc["safety"])
+        self.assertAlmostEqual(doc["travel"]["distance_m"], 0.5)
+        self.assertEqual((doc["gestures"], doc["reactions"]["interrupted"]), (1, 1))
+        out = Path(d) / "r.md"
+        self.assertEqual(reasons.main(["--md", str(out), "a0=" + d, "a1=" + self.run_dir()]), 0)
+        self.assertIn("| ok / slow / blocked / estop | нет safety_gate | 0 % / 65 % / 29 % / 6 % |", out.read_text())
+        (Path(d) / "truth.jsonl").write_text("")
+        with self.assertRaisesRegex(ValueError, "нет строк"):
+            reasons.summarize(d)
 
 
 class Profile(unittest.TestCase):
@@ -116,11 +211,14 @@ class Profile(unittest.TestCase):
         values.update(extra)
         return Config(values, str(SUITES / "twin.env"))
 
-    def test_units_render_with_twin_driver(self):
+    def test_units_render_with_twin_drivers(self):
         cfg = self.cfg()
-        self.assertEqual(cfg.instances("DRIVER"), ["twin"])
+        self.assertEqual(cfg.instances("DRIVER"), ["twin", "lidar", "camera"])  # как юниты драйверов робота
         units = render.enable_list(cfg)
-        self.assertIn("neurobot-driver@twin.service", units)
+        for name in ("twin", "lidar", "camera"):
+            self.assertIn("neurobot-driver@{}.service".format(name), units)
+            self.assertEqual(checks.check_supervised("NEUROBOT_DRIVER_{}_CMD".format(name), cfg), [])  # обёртка
+        self.assertEqual(checks.check_supervised("NEUROBOT_ROSBRIDGE_CMD", cfg), [])
         for unit in ("neurobot-safety.service", "neurobot-executor.service", "neurobot-perception.service",
                      "neurobot-rosbridge.service", "neurobot-mcp.service", "neurobot-picoclaw.service"):
             self.assertIn(unit, units)

@@ -1,10 +1,12 @@
-# Сторож агентского контура (root: systemctl restart, журнал): проба MCP и журнал PicoClaw без хода LLM.
-# Долгоживущий сервис, а не таймер: на systemd 245 таймер раз в 10 с даёт две строки systemd на запуск.
+# Сторож (root: systemctl restart, журнал): свежесть тем драйверов и ping rosbridge — часто, проба MCP и журнал
+# PicoClaw без хода LLM — раз в период. Стартует вместе с драйверами, без After=: иначе его старт ждал бы, пока
+# поднимется весь агентский путь, а зависший драйвер камеры, из-за которого не поднимается распознавание, некому
+# было бы перезапустить. Юниты моложе пробы он и так не трогает. Долгоживущий сервис, а не таймер: на systemd 245
+# таймер раз в 10 с даёт две строки systemd на запуск.
 [Unit]
-Description=neurobot: сторож MCP-сервера и PicoClaw
+Description=neurobot: сторож драйверов, rosbridge, MCP-сервера и PicoClaw
 Documentation=file:@PREFIX@/share/RUNBOOK.md
 PartOf=neurobot.target
-After=neurobot-mcp.service neurobot-picoclaw.service
 StartLimitIntervalSec=0
 
 [Service]

@@ -117,6 +117,24 @@ def zero_after(cmds: Sequence[dict], since: float) -> Optional[float]:
     return None
 
 
+def quantiles(values: Sequence[float]) -> Dict[str, Optional[float]]:
+    """n, p50, p95, max (линейная интерполяция, как у прогонов A0/A1)."""
+    v = sorted(values)
+    if not v:
+        return {"n": 0, "p50": None, "p95": None, "max": None}
+
+    def q(p: float) -> float:
+        k = (len(v) - 1) * p
+        lo, hi = int(k), min(int(k) + 1, len(v) - 1)
+        return round(v[lo] + (v[hi] - v[lo]) * (k - lo), 4)
+    return {"n": len(v), "p50": q(0.5), "p95": q(0.95), "max": round(v[-1], 4)}
+
+
+def first_below(cmds: Sequence[dict], since: float, v_ref: float, tol: float = 1e-3) -> Optional[float]:
+    """Момент первого /cmd_vel не раньше since со скоростью вперёд ниже v_ref − tol (началось торможение)."""
+    return next((c["t"] for c in cmds if c["t"] >= since and c["v"] < v_ref - tol), None)
+
+
 def stop_reason(states: Sequence[dict], t: Optional[float]) -> List[str]:
     """Коды причин safety_state, действующие в момент t (последнее состояние не позже t + 0,25 с)."""
     if t is None:

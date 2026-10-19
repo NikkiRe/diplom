@@ -166,8 +166,10 @@ class ProcTest(Tmp):
 
 
 def mcp_cfg(tmp: str, data: dict, **env) -> Config:
+    """Конфиг MCP рядом с env робота: копия состояния safety_gate для агента — как в neurobot.env.example."""
     path = put(os.path.join(tmp, "ros_mcp.json"), json.dumps(data))
-    return Config(dict({"NEUROBOT_MCP_CONFIG": path}, **env), os.path.join(tmp, "n.env"))
+    return Config(dict({"NEUROBOT_MCP_CONFIG": path, "NEUROBOT_AGENT_STATE_TOPIC": "/neurobot/agent/safety_state"},
+                       **env), os.path.join(tmp, "n.env"))
 
 
 class McpConfigTest(Tmp):
@@ -219,6 +221,21 @@ class McpConfigTest(Tmp):
         self.assertIn("шире предела агента 1 с (L3)", got[1].text)
         loose = mcp_cfg(self.tmp, data, NEUROBOT_AGENT_MAX_SPEED="0.5", NEUROBOT_AGENT_MAX_DURATION_S="5")
         self.assertEqual(checks.check_mcp_config(loose), [])
+
+    def test_safety_state_for_status_and_nudge(self):
+        # приёмка: robot_get_status и robot_nudge видят состояние safety_gate только через topics.safety_state
+        data = self.example()
+        del data["topics"]["safety_state"]
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data))
+        self.assertEqual((p.code, p.fatal), ("config_invalid", False))
+        self.assertIn("robot_nudge ответит ok и там, где safety_gate не пустил", p.text)
+        data["topics"]["safety_state"] = {"name": "/scan", "type": "std_msgs/msg/String", "access": "read"}
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data))
+        self.assertIn("/neurobot/safety_state и /neurobot/agent/safety_state", p.text)
+        data["topics"]["safety_state"] = {"name": "/neurobot/safety_state", "type": "std_msgs/msg/String",
+                                          "access": "read_write"}
+        (p,) = checks.check_mcp_config(mcp_cfg(self.tmp, data))
+        self.assertEqual((p.fatal, "открыта запись в /neurobot/safety_state" in p.text), (True, True))
 
     def test_not_json(self):
         cfg = Config({"NEUROBOT_MCP_CONFIG": put(self.p("c.json"), "{")}, self.p("n.env"))
@@ -461,6 +478,9 @@ class AgentPathTest(Tmp):
         from neurobot_deploy.config import parse_env
         example = parse_env((DEPLOY / "neurobot.env.example").read_text(encoding="utf-8"))
         self.assertEqual(checks.check_rosbridge(Config(example, self.p("n.env"))), [])
+        # копия состояния для агента в topics_glob — только когда она объявлена (NEUROBOT_AGENT_STATE_TOPIC)
+        (p,) = checks.check_rosbridge(Config(dict(example, NEUROBOT_AGENT_STATE_TOPIC=""), self.p("n.env")))
+        self.assertIn("лишнее /neurobot/agent/safety_state", p.text)
 
     BASE = "ros2 launch rosbridge_server rosbridge_websocket_launch.xml address:=127.0.0.1 "
     TOPICS = "topics_glob:=\"'[/cmd_vel_agent]'\""
@@ -670,8 +690,22 @@ class PrecheckTest(Tmp):
         self.assertEqual(codes(got), [("config_invalid", True), ("camera_missing", True), ("config_invalid", True)])
         self.assertIn("нет ремапа /cmd_vel", got[0].text)
 
+    def test_unsupervised_ros2_launch_is_a_warning(self):
+        # приёмка: ros2 launch без обёртки переживает смерть узла (rosbridge в main_a1) — юнит active без узла
+        wrapped = ("ros2 launch /opt/neurobot/share/launchfiles/supervised.launch.py "
+                   "include:=urg_node2/urg_node2.launch.py")
+        for cmd, want in (("ros2 launch urg_node2 urg_node2.launch.py", [("unsupervised_launch", False)]),
+                          (wrapped, []), ("ros2 run urg_node2 urg_node2_node", []), ("/usr/bin/python3 x.py", [])):
+            with self.subTest(cmd=cmd):
+                cfg = Config({"NEUROBOT_DRIVER_lidar_CMD": cmd}, self.p("e"))
+                self.assertEqual(codes(checks.precheck("driver@lidar", cfg)), want)
+        cfg = Config({"NEUROBOT_ROSBRIDGE_CMD": AgentPathTest.BASE + AgentPathTest.TOPICS + AgentPathTest.SERVICES
+                      + AgentPathTest.PARAMS, "NEUROBOT_ROSBRIDGE_PORT": "9"}, self.p("e"))
+        self.assertIn(("unsupervised_launch", False), codes(checks.precheck("rosbridge", cfg)))
+
     def test_camera_driver_checks_usb(self):
-        cfg = Config({"NEUROBOT_DRIVER_camera_CMD": "ros2 launch realsense2_camera rs_launch.py",
+        cfg = Config({"NEUROBOT_DRIVER_camera_CMD": "ros2 launch /opt/neurobot/share/launchfiles/supervised.launch.py "
+                                                    "include:=realsense2_camera/rs_launch.py",
                       "NEUROBOT_DRIVER_camera_USB": "8086:0b3a", "NEUROBOT_SYSFS": self.p("sys")}, self.p("e"))
         self.assertEqual(codes(checks.precheck("driver@camera", cfg)), [("camera_missing", True)])
         put(self.p("sys/bus/usb/devices/2-1/idVendor"), "8086")

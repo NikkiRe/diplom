@@ -103,6 +103,13 @@ class LaunchTest(unittest.TestCase):
         services = {e["service_name"] for e in entries if "service_name" in e}
         self.assertIn("/world/default/set_pose", services)
 
+    def test_bridge_sensors_outside_gives_raw_camera(self):
+        # sensors:=outside — камеру отдаёт узел /camera/camera (sensor.launch.py), мост — только сырые темы /twin/*
+        topics = {e["ros_topic_name"] for e in self.launch.bridge_config(cfg.WORLD_NAME, True) if "ros_topic_name" in e}
+        self.assertTrue({src for src, _ in cfg.CAMERA_RAW.values()} <= topics)
+        self.assertFalse(set(cfg.CAMERA_RAW) & topics)
+        self.assertIn(cfg.SCAN_RAW, topics)
+
     def test_controllers_timeout(self):
         src = TWIN / "config" / "controllers.yaml"
         self.assertEqual(self.launch.controllers_config(src, 0.0)["diff_cont"]["ros__parameters"]["cmd_vel_timeout"],

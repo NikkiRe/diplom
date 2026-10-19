@@ -1,7 +1,8 @@
 """safety_gate и исполнитель как процессы ROS 2: явный ноль на старте и на выходе (сигнал, исключение), READY и
-WATCHDOG, блокировка старта, датчики и пределы, защёлка (тема, файл, рестарт, политика снятия), чужой писатель
-/cmd_vel, параметры, цепочка исполнитель → safety_gate (task_end при защёлке; новый процесс исполнителя не
-продолжает манёвр жеста, идущий с его старта).
+WATCHDOG, блокировка старта, датчики и пределы, защёлка (тема, файл, рестарт; снятие — только файлом каталога
+release_dir), копия состояния для агента, чужой писатель /cmd_vel, второй издатель /scan (в том числе с пустыми
+сканами под именем драйвера), ослепший лидар (lidar_fault), параметры, цепочка исполнитель → safety_gate (task_end при
+защёлке; новый процесс исполнителя не продолжает манёвр жеста, идущий с его старта).
 
 Нужен rclpy (ВМ sim, Jazzy; на роботе — Foxy): без него тесты пропускаются. Тестовый узел подаёт датчики, как у
 двойника: скан URG с блоком NaN RS3, одометрию (повторяет /cmd_vel), IMU, глубину 424×240 (ровный пол,
@@ -28,6 +29,8 @@ os.environ["ROS_DOMAIN_ID"] = os.environ.get("NEUROBOT_TEST_DOMAIN", "47")
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from test_safety_parts import CAM, CAMERA, OPTICAL_Q, render  # noqa: E402
+
+SPOOF = ROOT / "neurobot" / "sim" / "suites" / "scan_spoof.py"
 
 try:
     import rclpy
@@ -104,6 +107,14 @@ class Harness:
     def __init__(self, args=(), module="neurobot.safety", code=None, state_dir=None, sensors=True, req=None):
         self.dir = tempfile.TemporaryDirectory()
         self.state_dir = state_dir or self.dir.name
+        # каталог снятия защёлки: в проде — root; тест от своего пользователя (release_uid)
+        self.release_dir = os.path.join(self.state_dir, "release")
+        os.makedirs(self.release_dir, mode=0o755, exist_ok=True)
+        if module == "neurobot.safety" or code is not None:
+            # у каждого Harness свой издатель /scan, и в тестах с двумя процессами их два: стоп по второму издателю —
+            # только в своём тесте (scan_dup_policy block явно)
+            args = ("-p", "release_dir:=" + self.release_dir, "-p", "release_uid:=%d" % os.getuid(),
+                    "-p", "scan_dup_policy:=warn") + tuple(args)
         self.notify_path = os.path.join(self.dir.name, "notify.sock")
         self.notify = socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM)
         self.notify.bind(self.notify_path)
@@ -193,6 +204,17 @@ class Harness:
         doc = {"cmd": cmd, "by": by, "reason": "проверка", "id": "%s-%f" % (cmd, time.time()),
                "t": time.time() if t is None else t}
         (self.estop_pub if by == "human" else self.estop_plain).publish(String(data=json.dumps(doc)))
+
+    def release_file(self, state: dict) -> None:
+        """Снятие, как sudo neurobot estop release: release.json с защёлкой, которую видел человек."""
+        latch = state["estop"]
+        doc = {"id": "rel-%f" % time.time(), "t": time.time(), "since": latch["since"], "reasons": latch["reasons"],
+               "reason": "проверка"}
+        tmp = os.path.join(self.release_dir, ".release.tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(doc, f)
+        os.chmod(tmp, 0o644)
+        os.replace(tmp, os.path.join(self.release_dir, "release.json"))
 
     def notifications(self, seconds: float) -> list:
         out, end = [], time.monotonic() + seconds
@@ -295,11 +317,12 @@ class SafetyProcess(unittest.TestCase):
         with open(os.path.join(h.state_dir, "estop.json"), encoding="utf-8") as f:
             self.assertTrue(json.load(f)["engaged"])
         h.estop("release", by="agent")  # агенту снять нельзя
-        h.estop("release", t=time.time() - 60)  # поздний повтор
+        h.estop("release")  # и узлу, подписавшемуся «human»: по теме не снимает никто
         time.sleep(1.0)
         with h.lock:
             self.assertEqual(h.state[-1][1]["state"], "estop")
-        self.assertIn("снимает только человек", h.stderr())
+            self.assertGreaterEqual(h.state[-1][1]["counters"]["release_denied"], 2)
+        self.assertIn("по теме защёлку не снять", h.stderr())
 
         h.proc.send_signal(signal.SIGTERM)
         self.assertEqual(h.proc.wait(10), 0)
@@ -307,7 +330,14 @@ class SafetyProcess(unittest.TestCase):
         got = h2.wait(h2.state, lambda s: True, 5.0)
         self.assertEqual(got[1]["state"], "estop")  # защёлка пережила рестарт
         t = time.monotonic()
-        h2.estop("release")
+        os.chmod(h2.release_dir, 0o777)  # каталог открыт на запись прочим — файлу не верим
+        h2.release_file(got[1])
+        time.sleep(1.5)
+        with h2.lock:
+            self.assertEqual(h2.state[-1][1]["state"], "estop")
+        self.assertIn("доступен на запись", h2.stderr())
+        os.chmod(h2.release_dir, 0o755)
+        h2.release_file(got[1])
         self.assertIsNotNone(h2.wait(h2.state, lambda s: s["state"] != "estop", 3.0, t))
         time.sleep(1.0)
         with h2.lock:
@@ -349,6 +379,81 @@ class SafetyProcess(unittest.TestCase):
         got = h.wait(h.state, lambda s: s["state"] == "estop", 5.0)
         self.assertIsNotNone(got)
         self.assertTrue(any(r.startswith("foreign_writer") and "nb_test_safety" in r for r in got[1]["reasons"]))
+
+    def test_agent_copy_and_second_scan_publisher(self):
+        h = self.start("-p", "agent_state_topic:=/neurobot/agent/safety_state", "-p", "scan_dup_policy:=block",
+                       "-p", "scan_dup_s:=2.0", req=(0.0, 0.0))
+        self.armed(h)
+        copy = []
+        h.node.create_subscription(String, "/neurobot/agent/safety_state", lambda m: copy.append(json.loads(m.data)),
+                                   10)
+        time.sleep(1.0)
+        self.assertTrue(copy)
+        self.assertEqual(set(copy[-1]), set(h.state[-1][1]))  # тот же документ, что /neurobot/safety_state
+        # чужой издатель /scan (другое имя, чем у драйвера — издателя скана тестового узла): стоп сразу
+        h.req = (0.1, 0.0)
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.05, 3.0))
+        ghost = rclpy.create_node("scan_ghost_%d" % os.getpid())
+        ghost.create_publisher(LaserScan, "/scan", qos_profile_sensor_data)
+        t = time.monotonic()
+        stop = h.wait(h.state, lambda s: any(r.startswith("scan_foreign") for r in s["reasons"]), 3.0, t)
+        self.assertIsNotNone(stop)
+        self.assertEqual(stop[1]["state"], "blocked")
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c == (0.0, 0.0), 1.0, stop[0]))
+        ghost.destroy_node()
+        h.req = (0.0, 0.0)
+        self.assertIsNotNone(h.wait(h.state, lambda s: s["state"] in ("ok", "slow"), 5.0, time.monotonic()))
+        # второй издатель с именем драйвера (рестарт, след убитого в графе DDS): предупреждение, стоп — через scan_dup_s
+        h.req = (0.1, 0.0)
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.05, 3.0))
+        twin = rclpy.create_node(h.node.get_name())
+        self.addCleanup(twin.destroy_node)
+        twin.create_publisher(LaserScan, "/scan", qos_profile_sensor_data)
+        t = time.monotonic()
+        warn = h.wait(h.state, lambda s: any(w.startswith("scan_publishers") for w in s["warnings"]), 5.0, t)
+        self.assertIsNotNone(warn)
+        self.assertFalse(any(r.startswith("scan_") for r in warn[1]["reasons"]))
+        stop = h.wait(h.state, lambda s: any(r.startswith("scan_publishers") for r in s["reasons"]), 6.0, t)
+        self.assertIsNotNone(stop)
+        self.assertGreaterEqual(stop[0] - warn[0], 1.0)
+        self.assertEqual(stop[1]["state"], "blocked")
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c == (0.0, 0.0), 1.0, stop[0]))
+
+    def test_blind_lidar_and_empty_scans_under_driver_name(self):
+        # повторная приёмка 18.10 (S3b): узел с именем драйвера шлёт NaN-сканы между настоящими — стоп сразу, не через
+        # scan_dup_s; сам лидар ослеп (весь скан NaN) — lidar_fault, а не stale_scan: сканы идут
+        h = self.start("-p", "scan_dup_policy:=block", req=(0.0, 0.0))
+        self.armed(h)
+        h.req = (0.1, 0.0)
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.05, 3.0))
+        # подмена — отдельный процесс (свой участник DDS), как чужая программа на роботе
+        spoof = subprocess.Popen([sys.executable, str(SPOOF), h.node.get_name(), "20"], stdout=subprocess.DEVNULL,
+                                 stderr=subprocess.DEVNULL, env=dict(os.environ, PYTHONDONTWRITEBYTECODE="1"))
+        self.addCleanup(spoof.kill)
+        t = time.monotonic()
+        stop = h.wait(h.state, lambda s: any(r.startswith("scan_publishers") for r in s["reasons"]), 8.0, t)
+        self.assertIsNotNone(stop)
+        start = h.wait(h.state, lambda s: any(w.startswith("scan_publishers") for w in s["warnings"]), 8.0, t)
+        self.assertLess(stop[0] - start[0], 1.5)  # граф — раз в секунду; scan_dup_s (30 с) не ждём
+        self.assertIn("пустые сканы", " ".join(stop[1]["reasons"]))
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c == (0.0, 0.0), 1.0, stop[0]))
+        spoof.send_signal(signal.SIGINT)
+        spoof.wait(10)
+        h.req = (0.0, 0.0)
+        self.assertIsNotNone(h.wait(h.state, lambda s: s["state"] in ("ok", "slow"), 15.0, time.monotonic()),
+                             (h.state[-1][1]["state"], h.state[-1][1]["reasons"], h.state[-1][1]["warnings"]))
+        h.req = (0.1, 0.0)
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.05, 3.0, time.monotonic()))
+        good = h.scan.ranges
+        h.scan.ranges = [math.nan] * len(good)
+        t = time.monotonic()
+        fault = h.wait(h.state, lambda s: s["state"] == "blocked" and s["reasons"], 2.0, t)
+        self.assertIsNotNone(fault)
+        self.assertEqual([r.split(":")[0] for r in fault[1]["reasons"]], ["lidar_fault"])
+        self.assertIsNotNone(h.wait(h.cmd, lambda c: c == (0.0, 0.0), 1.0, fault[0]))
+        h.scan.ranges = good
+        h.req = (0.0, 0.0)
+        self.assertIsNotNone(h.wait(h.state, lambda s: s["state"] in ("ok", "slow"), 5.0, time.monotonic()))
 
     def test_bad_parameters_exit_2(self):
         for args, word in ((("-p", "max_speed:='0.25'"), "max_speed"), (("-p", "depth_stale:=stop"), "depth_stale"),

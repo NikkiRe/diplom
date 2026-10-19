@@ -18,6 +18,14 @@ safety_gate — без rclpy.
   защёлка, его предел по нужной оси равен нулю или его состояния нет дольше safety_timeout (require_safety).
   Отмена — событие task_end{task, status: estop|blocked|safety_lost, reasons}. Новый жест в этом состоянии не
   начинается — он отменяется на первом же шаге;
+- выход из тупика (повторная приёмка 18.10): safety_gate дольше escape_after_s держит тупик — поворот на месте заденет
+  (причина touch), вперёд нельзя или только подползти к препятствию или краю (approach, obstacle, cliff), назад можно, —
+  а заявок нет: исполнитель сам отъезжает назад со скоростью escape_speed по своему следу — не дальше escape_dist и
+  прямого пути, пройденного вперёд по /odom после последнего поворота. Следа короче TRAIL_MIN_M нет (робот поставлен
+  руками, только что развернулся) — отъезда нет; защёлка, потеря одометрии (stale_odom) и safety_gate след обнуляют.
+  Ни один жест не ведёт назад, и без этого робот у стены или ножки стула стоял бы до человека. Заявка агента или жеста
+  главнее отъезда и прерывает его (preempted); события — escape{status: start, dist_m} и task_end{task: escape, status:
+  done|preempted|estop|blocked|safety_lost};
 - вперёд (`linear > 0`) запрещено, если `/scan` старше `scan_timeout` (или скана ещё не было), если в секторе
   ±`sector_deg` есть достоверная дальность ближе тормозной `stop_distance(v)` или если сектор «слеп»: сплошной
   провал (NaN или код ошибки ниже `range_min`) шире `max_gap_deg`. Повороты и задний ход не трогаются.
@@ -43,6 +51,9 @@ FRONT_BLIND = "blind"        # провал в секторе шире max_gap_d
 FRONT_STALE = "stale"        # скана нет или он старше scan_timeout
 
 SAFETY_STATES = ("ok", "slow", "blocked", "estop")
+TRAIL_MIN_M = 0.03   # м: след короче — отъезда нет (робот поставлен руками или только что развернулся)
+TRAIL_YAW = 0.15     # рад: поворот больше — позади уже не пройденный путь, след считается заново
+TRAIL_JUMP_M = 0.5   # м: скачок одометрии больше — её сбросили (рестарт базы), следа нет
 
 
 class Params(NamedTuple):
@@ -57,12 +68,15 @@ class Params(NamedTuple):
     safety_timeout: float = 1.0  # с; /neurobot/safety_state старше — safety_gate потерян
     require_safety: bool = False  # без safety_state задачи не исполняются (в узле — true, README)
     start_quiet_s: float = 2.0  # с; удержание старта: вход, впервые ненулевой раньше, ждёт нуля или паузы [допущение]
+    escape_after_s: float = 3.0  # с тупика safety_gate без заявок — отъезд назад; 0 — не отъезжать [допущение]
+    escape_speed: float = 0.05  # м/с назад при отъезде (reverse_speed safety_gate) [задача: PLAN §2.4]
+    escape_dist: float = 0.1    # м отъезда наибольший (по времени): у стены хватило 0,046 [замер приёмки 18.10, S5]
 
 
 class Command(NamedTuple):
     linear: float
     angular: float
-    by: str      # "agent" | "gesture" | "none"
+    by: str      # "agent" | "gesture" | "escape" | "none"
     front: str   # FRONT_*: можно ли вперёд при скорости выбранной команды
     cut: bool    # движение вперёд запрошено и срезано
 
@@ -83,6 +97,18 @@ class Safety(NamedTuple):
     v_rev: float
     w_max: float
     reasons: tuple
+
+
+FRONT_NEAR = ("approach", "obstacle", "cliff")  # причины safety_gate: впереди близко препятствие или край
+
+
+def dead_end(s: Safety) -> bool:
+    """Тупик: поворот на месте заденет (touch), назад можно, а вперёд нельзя или можно лишь подползти к препятствию
+    или краю (FRONT_NEAR: approach — путь короче тормозного на полной скорости, obstacle, cliff): ни один жест робота
+    отсюда не выведет."""
+    codes = {r.split(":", 1)[0] for r in s.reasons}
+    return (s.state in ("blocked", "slow") and s.w_max <= 0.0 and s.v_rev > 0.0 and "touch" in codes
+            and (s.v_max <= 0.0 or any(c in codes for c in FRONT_NEAR)))
 
 
 def parse_safety(data: str) -> Safety:
@@ -181,8 +207,8 @@ class Guard:
 
     counters — структурные счётчики переходов (не вызовов): cut_forward — движение вперёд срезано запретом;
     stale — ненулевой вход перестал приходить (сработал deadman); preempted — агент погасил манёвр жеста;
-    safety_cancel — задача отменена по safety_gate. invalid — нечисловые входы (по сообщениям).
-    events — события task_end для /neurobot/events; узел забирает их после command().
+    safety_cancel — задача отменена по safety_gate; escape — отъезд из тупика начат. invalid — нечисловые входы
+    (по сообщениям). events — события для /neurobot/events; узел забирает их после command().
     """
 
     def __init__(self, params: Params = Params()):
@@ -198,8 +224,13 @@ class Guard:
         self._cut = False
         self._safety: Optional[Safety] = None
         self._safety_t: Optional[float] = None
+        self._dead_since: Optional[float] = None    # начало тупика safety_gate
+        self._escape_until: Optional[float] = None  # идёт отъезд из тупика — до этого момента
+        self._pose: Optional[tuple] = None          # (x, y, курс) последней одометрии
+        self._trail = 0.0                           # м прямого пути позади, пройденного вперёд после поворота
+        self._trail_yaw = 0.0                       # курс, вдоль которого считается след
         self.events: list = []
-        self.counters = {"cut_forward": 0, "stale": 0, "preempted": 0, "safety_cancel": 0, "invalid": 0}
+        self.counters = {"cut_forward": 0, "stale": 0, "preempted": 0, "safety_cancel": 0, "escape": 0, "invalid": 0}
 
     def _finite(self, linear: float, angular: float):
         if math.isfinite(linear) and math.isfinite(angular):
@@ -224,7 +255,21 @@ class Guard:
             self._agent_off = False
 
     def safety(self, now: float, s: Safety) -> None:
+        if s.state == "estop" or any(r.startswith("stale_odom") for r in s.reasons):
+            # защёлка (удар, наклон: робота могли поднять и переставить) или одометрии нет — след позади не доказан;
+            # полный стоп по другим датчикам робот не двигает, след остаётся
+            self._trail = 0.0
         self._safety, self._safety_t = s, now
+
+    def odom(self, x: float, y: float, yaw: float) -> None:
+        """Одометрия: след — прямой путь позади, пройденный вперёд после последнего поворота (назад его тратит)."""
+        if self._pose is None or math.hypot(x - self._pose[0], y - self._pose[1]) > TRAIL_JUMP_M \
+                or abs(_wrap(yaw - self._trail_yaw)) > TRAIL_YAW:
+            self._trail, self._trail_yaw = 0.0, yaw
+        else:
+            px, py, pyaw = self._pose
+            self._trail = max(0.0, self._trail + (x - px) * math.cos(pyaw) + (y - py) * math.sin(pyaw))
+        self._pose = (x, y, yaw)
 
     def safety_fresh(self, now: float) -> bool:
         return self._safety_t is not None and now - self._safety_t <= self.p.safety_timeout
@@ -286,16 +331,21 @@ class Guard:
         elif gesture_on and not self._suppressed:
             linear, angular, by = g.linear, g.angular, "gesture"
         else:
-            linear, angular, by = 0.0, 0.0, "none"
+            linear, angular, by = self._escape(now)
+        if by not in ("escape", "none") and self._escape_until is not None:
+            self._end_escape("preempted", [])
         status = self._safety_block(now, linear, angular) if (linear or angular) else None
         if status:
-            if by == "agent":
-                self._agent_off = True
-            else:
-                self._suppressed = True
-            self.counters["safety_cancel"] += 1
             reasons = [] if status == "safety_lost" else list(self._safety.reasons)
-            self.events.append({"type": "task_end", "task": by, "status": status, "reasons": reasons})
+            if by == "escape":
+                self._end_escape(status, reasons)
+            else:
+                if by == "agent":
+                    self._agent_off = True
+                else:
+                    self._suppressed = True
+                self.events.append({"type": "task_end", "task": by, "status": status, "reasons": reasons})
+            self.counters["safety_cancel"] += 1
             linear, angular, by = 0.0, 0.0, "none"
         front = self.front_state(now, linear)
         cut = front != FRONT_CLEAR and linear > 0.0
@@ -305,3 +355,31 @@ class Guard:
             linear = 0.0
         self._cut = cut
         return Command(linear, angular, by, front, cut)
+
+    def _escape(self, now: float):
+        """Без заявок: отъезд назад из тупика safety_gate (linear, angular, by) или покой."""
+        p = self.p
+        if self._escape_until is not None:
+            if now < self._escape_until:
+                return -p.escape_speed, 0.0, "escape"
+            self._end_escape("done", [])
+            return 0.0, 0.0, "none"
+        s = self._safety if self.safety_fresh(now) else None
+        if s is None:
+            self._trail = 0.0
+        if p.escape_after_s <= 0.0 or s is None or not dead_end(s) or self._trail < TRAIL_MIN_M:
+            self._dead_since = None
+            return 0.0, 0.0, "none"
+        if self._dead_since is None:
+            self._dead_since = now
+        if now - self._dead_since < p.escape_after_s:
+            return 0.0, 0.0, "none"
+        dist = min(p.escape_dist, self._trail)
+        self._escape_until = now + dist / p.escape_speed
+        self.counters["escape"] += 1
+        self.events.append({"type": "escape", "status": "start", "dist_m": round(dist, 3), "reasons": list(s.reasons)})
+        return -p.escape_speed, 0.0, "escape"
+
+    def _end_escape(self, status: str, reasons: list) -> None:
+        self._escape_until = self._dead_since = None
+        self.events.append({"type": "task_end", "task": "escape", "status": status, "reasons": reasons})

@@ -22,7 +22,7 @@ class Params(NamedTuple):
     # корпус [оценка по фото, R7b §2.3]
     robot_radius: float = 0.195          # м, круг палуб Ø0,39
     lateral_margin: float = 0.05         # м, запас коридора вбок
-    turn_margin: float = 0.03            # м, точка ближе radius + turn_margin — поворот на месте заденет
+    turn_margin: float = 0.03            # м, препятствие ближе radius + turn_margin — поворот на месте заденет
     # тормозной путь от края корпуса: v·t_lat + v²/(2·a_brake) + margin [допущение до замера на роботе]
     t_lat: float = 0.25                  # с, период скана + обработка + доставка + реакция контроллера
     a_brake: float = 0.8                 # м/с², замедление базы (L1 двойника — 1,0)
@@ -33,8 +33,9 @@ class Params(NamedTuple):
     # пределы
     max_speed: float = 0.25              # м/с вперёд
     max_turn: float = 0.8                # рад/с
-    max_accel: float = 0.5               # м/с², разгон (торможение не ограничено: его держит L1)
-    max_jerk: float = 2.0                # м/с³, рывок при разгоне (мачта)
+    max_accel: float = 0.5               # м/с², разгон
+    max_jerk: float = 2.0                # м/с³, рывок при разгоне и плавной остановке (мачта)
+    stop_decel: float = 0.5              # м/с², плавная остановка по запросу (по причине безопасности — сразу); 0 — нет
     max_turn_accel: float = 2.0          # рад/с², разгон поворота
     reverse_speed: float = 0.05          # м/с назад; 0 — задний ход запрещён (сзади датчиков нет, S7)
     reverse_dist: float = 0.2            # м назад за один эпизод заднего хода
@@ -55,6 +56,9 @@ class Params(NamedTuple):
     mask_ratio: float = 0.8              # доля сканов «нет данных» у луча, чтобы он попал в маску
     mask_dilate: int = 2                 # лучей расширения маски с каждой стороны (мерцающий край корпуса)
     max_gap_m: float = 0.03              # м: провал «нет данных» уже этого на дальности остановки — терпим
+    nodata_unseen: str = "slow"          # провал вне поля глубины: slow — как слепой сектор, block — вперёд нельзя
+    fault_min_hits: int = 10             # лучей с попаданием дальше корпуса меньше — скан пустой (лидар не видит)
+    fault_scans: int = 3                 # пустых сканов подряд — lidar_fault: стоп, как без скана
     # глубина
     depth_cols: int = 80                 # ширина уменьшенной карты глубины, пикселей
     depth_hz: float = 10.0               # не чаще стольких кадров глубины в секунду
@@ -64,10 +68,12 @@ class Params(NamedTuple):
     obstacle_max_h: float = 0.75         # м: выше — над роботом (верх URG ≈0,69–0,70)
     drop_min: float = 0.04               # м ниже пола — обрыв
     min_pixels: int = 2                  # пикселей опасности в клетке за кадр, чтобы ей поверить
+    depth_err_m: float = 0.04            # м: клетка глубины ближе на столько (ошибка зазора у тонкой ножки: 0,035)
     cell_m: float = 0.05                 # м, клетка памяти глубины
     memory_m: float = 3.0                # м: клетки дальше от робота забываются
     # IMU
     tilt_max_deg: float = 10.0           # наклон больше — защёлка
+    tilt_settle_s: float = 20.0          # с: наибольшая установка фильтра ориентации после перерыва /imu/data
     shock_mps2: float = 6.0              # всплеск ускорения больше — защёлка
     # упор и пробуксовка
     stall_s: float = 1.0                 # с: команда есть, а база стоит — защёлка
@@ -80,18 +86,26 @@ class Params(NamedTuple):
     override_policy: str = "warn"        # их издатели: warn — предупреждение, block — стоять, estop — защёлка
     base_cmd_topic: str = "/diff_cont/cmd_vel_unstamped"  # выход twist_mux: дошла ли команда до базы; "" — нет
     estop_file: str = ""                 # файл защёлки; "" — $STATE_DIRECTORY/estop.json (юнит), иначе только память
+    release_dir: str = "/run/neurobot-estop"  # снятие защёлки: release.json root в каталоге root (sudo neurobot estop)
+    release_uid: int = 0                 # владелец каталога и файла снятия: root; другой — только тесты без root
+    agent_state_topic: str = ""          # копия safety_state для агента (rosbridge 1.3.1, topics_glob); "" — нет
+    scan_dup_policy: str = "block"       # у /scan второй издатель: warn — предупреждение, block — ещё и стоп
+    scan_dup_s: float = 30.0             # с: второй издатель дольше — стоп (block); короче — след убитого драйвера
 
 
 CHOICES = {
     "cmd_vel_type": ("Twist", "TwistStamped"),
     "depth_stale": ("block", "slow"),
     "override_policy": ("warn", "block", "estop"),
+    "scan_dup_policy": ("warn", "block"),
+    "nodata_unseen": ("slow", "block"),
 }
 POSITIVE = ("rate_hz", "state_hz", "robot_radius", "a_brake", "min_speed", "release_s", "max_speed", "max_turn",
             "max_accel", "max_turn_accel", "blind_speed", "max_motion_s", "req_timeout", "scan_timeout", "odom_timeout",
-            "depth_timeout", "imu_timeout", "mask_scans", "mask_ratio", "depth_cols", "depth_hz", "depth_max_m",
-            "depth_min_valid", "obstacle_min_h", "obstacle_max_h", "drop_min", "min_pixels", "cell_m", "memory_m",
-            "tilt_max_deg", "shock_mps2", "stall_s", "stall_cmd", "stall_turn_cmd", "stall_odom", "stall_turn_odom")
+            "depth_timeout", "imu_timeout", "mask_scans", "mask_ratio", "fault_scans", "depth_cols", "depth_hz",
+            "depth_max_m", "depth_min_valid", "obstacle_min_h", "obstacle_max_h", "drop_min", "min_pixels", "cell_m",
+            "memory_m", "tilt_max_deg", "shock_mps2", "stall_s", "stall_cmd", "stall_turn_cmd", "stall_odom",
+            "stall_turn_odom")
 SIGNED = ("mask_from_deg", "mask_to_deg")  # пеленги: знак — сторона
 
 

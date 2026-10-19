@@ -26,11 +26,11 @@ COMMON = [
     "относительно робота; спавн в начале координат.",
     "Руку даёт FakeYolo по таймлайну gesturegen (yolo_hand.pt не исполнялся); SNN лаборатории snn_emnist_small.pth "
     "загружалась с weights_only=True (torch CPU); темп детекции 10 к/с, задержка YOLO не моделировалась.",
-    "LLM — bench/mockllm (оракул) на Mac, 127.0.0.1, ВМ ходит к нему через host.lima.internal; ключей и трат нет. "
-    "Реплики пользователя — в канал pico шлюза PicoClaw (WebSocket, тестовый токен прогона).",
+    "LLM — bench/mockllm (оракул; где он работал — отклонение прогона ниже); ключей и трат нет. Реплики "
+    "пользователя — в канал pico шлюза PicoClaw (WebSocket, тестовый токен прогона).",
     "Оператор прогона (runner.py) — модель человека [допущение]: через 30 с после того, как заметно (процесс умер, "
     "детектор не вызывается 10 с, агент не ответил, касание дольше 20 с, защёлка), чинит; каждое действие — "
-    "вмешательство человека.",
+    "вмешательство человека (правила A1 у прогона — в отклонениях ниже).",
 ]
 DEVIATIONS = {
     "a0": [
@@ -52,10 +52,15 @@ DEVIATIONS = {
         "прогона в env-файле (stacks.A1.env_edit): мир hall и камера цвета 10 к/с у драйвера двойника; кадры "
         "perception — через узел отказов relay.py (ремап темы); журнал probe FakeYolo; прокси лаборатории убран из "
         "NEUROBOT_FOREIGN_MCP — в той же ВМ его запускает A0 (другой домен DDS и шлюз).",
-        "Конфиг PicoClaw пакета (suites/picoclaw.json) + канал pico и api_base mockllm на Mac, затем "
+        "Конфиг PicoClaw пакета (suites/picoclaw.json) + канал pico и api_base mockllm, затем "
         "`neurobot picoclaw-config merge`.",
         "Отказы камеры у A1 — на уровне темы ROS (relay.py: нет кадров, тот же кадр, чёрный кадр) по тому же "
         "faults.json, что подставной pyrealsense2 у A0: на роботе так выглядит сбой realsense2_camera.",
+        "С 17.10 (приёмка): датчики двойника — отдельными юнитами neurobot-driver@lidar (узел /urg_node2) и @camera "
+        "(узел /camera/camera: цвет, глубина, IMU камеры) рядом с @twin (Gazebo, база, twist_mux, madgwick); драйверы "
+        "и rosbridge — через обёртку deploy supervised.launch.py; сторож — свежесть тем драйверов и ping rosbridge. "
+        "Узлы датчиков двойника — Python (sensor_model.py), а не urg_node2 и realsense2_camera: их время подъёма — "
+        "ориентир.",
     ],
 }
 DEVIATIONS["long"] = DEVIATIONS["a1"]
@@ -73,7 +78,8 @@ def sha(path: Path) -> str:
 
 
 def build(dest: Path, kind: str, versions: str, snapshot: str, commands, extra) -> dict:
-    plan = dest / "plan.json"
+    """plan.json — в каталоге или в каталоге прогона vm/, забранном из ВМ (run.sh fetch)."""
+    plan = next((p for p in (dest / "plan.json", dest / "vm" / "plan.json") if p.exists()), None)
     doc = {
         "date": time.strftime("%Y-%m-%d"),
         "component": "интеграция: прогоны A0/A1 на цифровом двойнике (neurobot/sim/runs), вид «%s»" % kind,
@@ -84,7 +90,7 @@ def build(dest: Path, kind: str, versions: str, snapshot: str, commands, extra) 
         "code_sha256": {str(p.relative_to(ROOT)): sha(p) for p in sorted(RUNS.rglob("*"))
                         if p.is_file() and "__pycache__" not in p.parts},
         "vm_snapshot_sha256": Path(snapshot).read_text(encoding="utf-8").splitlines() if snapshot else [],
-        "plan": json.loads(plan.read_text(encoding="utf-8")) if plan.exists() else None,
+        "plan": json.loads(plan.read_text(encoding="utf-8")) if plan else None,
         "files": sorted(str(p.relative_to(dest)) for p in dest.rglob("*") if p.is_file())[:400],
         "deviations": COMMON + DEVIATIONS.get(kind, []) + list(extra),
     }

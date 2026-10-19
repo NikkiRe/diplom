@@ -1,7 +1,8 @@
 """(ВМ sim, root) Жест для start_test пакета (README §6): `neurobot start-test --gesture-cmd "… check …"`.
 
-  python3 -m neurobot.sim.runs.start_gesture prepare --sched DIR      перед start_test: таймлайн профиля start на
-        место таймлайна пакета, узел кадров камеры (relay.py без отказов), пакет остановлен
+  python3 -m neurobot.sim.runs.start_gesture prepare --sched DIR [--mockllm URL]   перед start_test: таймлайн
+        профиля start на место таймлайна пакета, узел кадров камеры (relay.py без отказов), PicoClaw — на mockllm,
+        пакет остановлен
   python3 -m neurobot.sim.runs.start_gesture check --sched DIR --log FILE   в цикле после «ОК» doctor
 
 check: берёт ближайший жест таймлайна, начало которого ещё впереди (якорь ставит perception этого холодного старта),
@@ -32,9 +33,18 @@ def pick(segs, rel_now: float, margin: float = 0.3):
     return None
 
 
+def ros_log_dir(log_path: str) -> str:
+    """Каталог журналов rcl рядом с журналом жестов: start_test зовёт check без HOME и ROS_LOG_DIR, и rclpy.init
+    без них падает («Failed to get logging directory»)."""
+    path = os.path.join(os.path.dirname(os.path.abspath(log_path)), "logs", "ros_gesture")
+    os.makedirs(path, exist_ok=True)
+    return path
+
+
 def check(sched: str, log_path: str, window: float) -> int:
     config, _ = stacks.deploy_lib()
     os.environ.update(config.load(stacks.ENV_FILE).ros_environ())
+    os.environ["ROS_LOG_DIR"] = ros_log_dir(log_path)
     a1 = stacks.A1("/var/tmp/nb-runs/start", sched, "")
     if not stacks.wait(lambda: os.path.exists(a1.anchor_path), 30):
         print("start_gesture: якоря нет — perception не вызвал детектор", file=sys.stderr)
@@ -88,6 +98,7 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     pr = sub.add_parser("prepare", help="таймлайн start и узел кадров перед start_test")
     pr.add_argument("--sched", required=True, help="каталог расписания профиля start")
+    pr.add_argument("--mockllm", default="", help="bench/mockllm в ВМ для PicoClaw пакета (пусто — не трогать)")
     ch = sub.add_parser("check", help="жест холодного старта (--gesture-cmd start_test)")
     ch.add_argument("--sched", required=True, help="каталог расписания профиля start")
     ch.add_argument("--log", required=True, help="журнал жестов JSONL")
@@ -95,7 +106,7 @@ def main(argv=None) -> int:
     a = p.parse_args(argv)
     if a.cmd == "prepare":
         os.makedirs("/var/tmp/nb-runs/start/logs", exist_ok=True)
-        stacks.A1("/var/tmp/nb-runs/start", a.sched, "").prepare()
+        stacks.A1("/var/tmp/nb-runs/start", a.sched, a.mockllm).prepare()
         return 0
     return check(a.sched, a.log, a.window)
 

@@ -82,6 +82,7 @@ do_install() {
   find "$prefix/lib" "$prefix/src" -name __pycache__ -prune -exec rm -rf {} +
   install -m 0755 "$SRC/bin/neurobot" "$SRC/bin/neurobot-run" "$prefix/bin/"
   install -m 0644 "$SRC/README.md" "$SRC/RUNBOOK.md" "$prefix/share/"
+  install -D -m 0644 "$SRC/launchfiles/supervised.launch.py" "$prefix/share/launchfiles/supervised.launch.py"
   install -m 0644 "$TMP/units/"* "$UNIT_DIR/"
   ln -sfn "$prefix/bin/neurobot" "$LINK"
   stash "$LOGROTATE"
@@ -112,7 +113,7 @@ do_uninstall() {
   rm -f "$LINK"
   rm -rf "$prefix/bin/neurobot" "$prefix/bin/neurobot-run" "$prefix/lib/neurobot_deploy" "$prefix/lib/fakes" \
     "$prefix/lib/picoclaw" "$prefix/src/neurobot/executor" "$prefix/src/neurobot/safety" "$prefix/share/README.md" \
-    "$prefix/share/RUNBOOK.md"
+    "$prefix/share/RUNBOOK.md" "$prefix/share/launchfiles"
   if [[ -d $prefix ]]; then find "$prefix" -depth -type d -empty -delete; fi
   systemctl daemon-reload
   systemctl reset-failed 'neurobot-*' 2>/dev/null || true

@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
-# Прогоны A0/A1 на двойнике — с хоста, из корня проекта (README §4). ВМ sim запущена; mockllm — на Mac (127.0.0.1).
-#   run.sh snapshot                       ВМ-локальный снимок кода (/var/tmp/nb-runs/src) и venv mcp прокси
-#   run.sh mockllm start|stop DIR         bench/mockllm на 127.0.0.1:$RUNS_MOCK_PORT, журнал — DIR/mockllm_all.jsonl
-#   run.sh sched PROFILE                  расписание main | long | start → /var/tmp/nb-runs/sched_PROFILE
+# Прогоны A0/A1 на двойнике — с хоста, из корня проекта (README §4). Всё идёт в ВМ sim (на Mac — только limactl):
+# mockllm и прогоны — юниты ВМ, сессию на Mac можно останавливать и продолжать.
+#   run.sh snapshot                       ВМ-локальный снимок кода (/var/tmp/nb-runs/src), venv mcp прокси и mockllm
+#   run.sh mockllm start|stop             bench/mockllm в ВМ (юнит runs-mockllm, 127.0.0.1:$RUNS_MOCK_PORT), журнал —
+#                                         /var/tmp/nb-runs/mockllm/mockllm_all.jsonl
+#   run.sh sched PROFILE [ИМЯ]            расписание main | long | long30 | start → /var/tmp/nb-runs/sched_ИМЯ
+#                                         (по умолчанию ИМЯ = PROFILE; готовое не перезаписывается)
 #   run.sh shapeclass PROFILE             «форма → класс» сетью лаборатории на жестах расписания → shapeclass_PROFILE
 #   run.sh a1-install | a1-teardown       пакет neurobot на двойнике (setup_twin.sh снимка + правки прогона)
-#   run.sh run a0|a1 LABEL PROFILE        прогон юнитом runs-LABEL в ВМ (переживает обрыв limactl)
-#   run.sh wait LABEL                     дождаться конца прогона
-#   run.sh start-test LABEL N [СЦЕН]      start_test пакета: N холодных стартов с жестом; СЦЕН — «сломанные» старты
-#                                         через запятую ("" — без них; без аргумента — все по составу)
-#   run.sh budget LABEL MEM PROFILE       A1 в jetson.slice (budget_a1.py) по расписанию PROFILE, MemoryMax MEM МиБ
+#   run.sh queue NAME ШАГ…                очередь шагов юнитом runs-NAME (queue.py): run:a0|a1:МЕТКА:РАСПИСАНИЕ
+#                                         [:world=…,no_return=…], budget:МЕТКА:МиБ:РАСПИСАНИЕ,
+#                                         start:МЕТКА:N[:СЦЕНАРИИ|all]; готовые пропускает
+#   run.sh wait NAME                      дождаться конца очереди
 #   run.sh fetch LABEL DEST               каталог прогона ВМ → DEST на хосте (DEST не должен существовать); тестовые
 #                                         токены канала pico (pico_token, .security.yml) не копируются
 #   run.sh versions DEST                  версии ВМ (пакеты ROS и Gazebo, Python, torch, mcp, PicoClaw) → DEST
@@ -22,8 +24,9 @@ source "$HERE/../../../scripts/sim/lib.sh"
 BASE=/var/tmp/nb-runs
 SRC=$BASE/src
 PORT=${RUNS_MOCK_PORT:-18150}
-MOCK=http://host.lima.internal:$PORT
+MOCK=http://127.0.0.1:$PORT
 VENV_MCP=${RUNS_VENV_MCP:-/home/chosenundead.guest/budget_20261016/venv-mcp}
+TK=research/new_topic/GAP2_artifacts/.cache/tk
 die() { echo "run.sh: $*" >&2; exit 2; }
 py() { echo "source $SRC/scripts/sim/vm_env.sh; cd $SRC; PYTHONPATH=$SRC:\$PYTHONPATH PYTHONDONTWRITEBYTECODE=1 python3 $*"; }
 
@@ -41,26 +44,31 @@ case $cmd in
       sudo find $SRC -name __pycache__ -prune -exec rm -rf {} + && sudo chmod -R a+rX $SRC && \
       (cd $SRC && sudo find . -type f -exec sha256sum {} + | sort -k2 | sudo tee $BASE/snapshot.sha256 >/dev/null) && \
       if [ ! -d $BASE/mcpvenv ]; then sudo cp -a $VENV_MCP $BASE/mcpvenv; fi && \
+      if [ ! -x $BASE/mockvenv/bin/python ]; then sudo python3 -m venv $BASE/mockvenv && \
+        sudo $BASE/mockvenv/bin/pip install -q tiktoken==0.14.0; fi && \
+      sudo rm -rf $BASE/tkcache && sudo cp -R $PROJ/$TK $BASE/tkcache && \
       wc -l < $BASE/snapshot.sha256"
     ;;
   mockllm)
-    [[ $# -eq 2 ]] || die "mockllm start|stop DIR"
-    mkdir -p "$2"
+    [[ $# -eq 1 && $1 =~ ^(start|stop)$ ]] || die "mockllm start|stop"
     if [[ $1 == start ]]; then
-      PYTHONDONTWRITEBYTECODE=1 nohup "$PROJ/.venv/bin/python" -m bench.mockllm --mode oracle --port "$PORT" \
-        --journal "$2/mockllm_all.jsonl" >"$2/mockllm.out" 2>"$2/mockllm.err" </dev/null &
-      echo $! >"$2/mockllm.pid"
-      sleep 2
-      curl -fsS "http://127.0.0.1:$PORT/healthz" >/dev/null || die "mockllm не отвечает (см. $2/mockllm.err)"
-      vm 20 "curl -fsS $MOCK/healthz" >/dev/null || die "ВМ не видит mockllm на $MOCK"
+      vm 60 "systemctl is-active --quiet runs-mockllm || { sudo mkdir -p $BASE/mockllm && \
+        sudo systemd-run --unit runs-mockllm --collect --quiet -p Restart=always \
+          -p StandardOutput=append:$BASE/mockllm/mockllm.log -p StandardError=append:$BASE/mockllm/mockllm.log \
+          --setenv=PYTHONPATH=$SRC --setenv=PYTHONDONTWRITEBYTECODE=1 --setenv=TIKTOKEN_CACHE_DIR=$BASE/tkcache \
+          $BASE/mockvenv/bin/python -m bench.mockllm --mode oracle --host 127.0.0.1 --port $PORT \
+          --journal $BASE/mockllm/mockllm_all.jsonl; }; \
+        for i in \$(seq 20); do curl -fsS $MOCK/healthz >/dev/null 2>&1 && exit 0; sleep 1; done; exit 1" \
+        || die "mockllm не отвечает (см. $BASE/mockllm/mockllm.log в ВМ)"
     else
-      kill -TERM "$(cat "$2/mockllm.pid")" 2>/dev/null || true
+      vm 60 "sudo systemctl stop runs-mockllm"
     fi
     ;;
   sched)
-    [[ $# -eq 1 ]] || die "sched PROFILE"
-    vm 120 "sudo bash -c '$(py -m neurobot.sim.runs.schedule make --profile "$1" --out $BASE/sched_"$1")' && \
-      sudo chmod -R a+rX $BASE/sched_$1"
+    [[ $# -eq 1 || $# -eq 2 ]] || die "sched PROFILE [ИМЯ]"
+    name=${2:-$1}
+    vm 120 "sudo bash -c '$(py -m neurobot.sim.runs.schedule make --profile "$1" --out $BASE/sched_"$name")' && \
+      sudo chmod -R a+rX $BASE/sched_$name"
     ;;
   shapeclass)
     [[ $# -eq 1 ]] || die "shapeclass PROFILE"
@@ -75,36 +83,19 @@ case $cmd in
   a1-teardown)
     vm 600 "sudo bash -c '$(py -m neurobot.sim.runs.runner a1-teardown)'"
     ;;
-  run)
-    [[ $# -eq 3 && $1 =~ ^a[01]$ ]] || die "run a0|a1 LABEL PROFILE"
-    vm 60 "sudo systemd-run --unit runs-$2 --collect --quiet -p StandardOutput=truncate:$BASE/$2.log \
-      -p StandardError=append:$BASE/$2.log -E SUDO_USER=\$(id -un) --working-directory $SRC /bin/bash -c \
-      '$(py -m neurobot.sim.runs.runner run --system "$1" --label "$2" --sched $BASE/sched_"$3" \
-        --out $BASE/"$2" --mockllm "$MOCK")'"
+  queue)
+    [[ $# -ge 2 ]] || die "queue NAME ШАГ…"
+    name=$1
+    shift
+    steps=$(printf "%q " "$@")
+    vm 60 "sudo systemd-run --unit runs-$name --collect --quiet -p StandardOutput=append:$BASE/$name.queue.log \
+      -p StandardError=append:$BASE/$name.queue.log -E SUDO_USER=\$(id -un) --working-directory $SRC /bin/bash -c \
+      '$(py -m neurobot.sim.runs.queue --mockllm "$MOCK" --log $BASE/"$name".queue.jsonl "$steps")'"
     ;;
   wait)
-    [[ $# -eq 1 ]] || die "wait LABEL"
+    [[ $# -eq 1 ]] || die "wait NAME"
     while vm 30 "systemctl is-active --quiet runs-$1"; do sleep 60; done
-    vm 30 "tail -n 5 $BASE/$1.log; test -f $BASE/$1/run.json"
-    ;;
-  start-test)
-    [[ $# -ge 2 ]] || die "start-test LABEL N [СЦЕНАРИИ через запятую; пусто — без сломанных]"
-    broken=""
-    [[ $# -ge 3 ]] && broken="--broken=$3"
-    gest="python3 -m neurobot.sim.runs.start_gesture check --sched $BASE/sched_start --log $BASE/$1/gestures.jsonl"
-    vm 60 "sudo systemd-run --unit runs-$1 --collect --quiet -p StandardOutput=truncate:$BASE/$1.log \
-      -p StandardError=append:$BASE/$1.log --working-directory $SRC /bin/bash -c 'source $SRC/scripts/sim/vm_env.sh; \
-      export PYTHONPATH=$SRC:\$PYTHONPATH PYTHONDONTWRITEBYTECODE=1; \
-      python3 -m neurobot.sim.runs.start_gesture prepare --sched $BASE/sched_start && \
-      neurobot start-test --cycles $2 $broken --out $BASE/$1 --gesture-cmd \"$gest\" \
-        --deviation \"двойник (мир hall), perception — FakeYolo по таймлайну start, кадры через relay.py\"'"
-    ;;
-  budget)
-    [[ $# -eq 3 ]] || die "budget LABEL MEM PROFILE"
-    vm 60 "sudo systemd-run --unit runs-$1 --collect --quiet -p StandardOutput=truncate:$BASE/$1.log \
-      -p StandardError=append:$BASE/$1.log -E SUDO_USER=\$(id -un) --working-directory $SRC /bin/bash -c \
-      '$(py -m neurobot.sim.runs.budget_a1 --out $BASE/"$1" --mem "$2" --sched $BASE/sched_"$3" --label "$1" \
-        --mockllm "$MOCK")'"
+    vm 30 "tail -n 5 $BASE/$1.queue.jsonl"
     ;;
   fetch)
     [[ $# -eq 2 ]] || die "fetch LABEL DEST"

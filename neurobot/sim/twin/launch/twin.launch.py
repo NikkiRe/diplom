@@ -6,18 +6,21 @@
 TwistStamped, а в Foxy на роботе — /diff_cont/cmd_vel_unstamped сам (use_stamped_vel: false).
 Датчики: /scan (через sensor_model.py), /camera/color/*, /camera/depth/* (через sensor_model.py), /camera/imu →
 imu_filter_madgwick → /imu/data; /odom и /tf — diff_cont, /joint_states — joint_broad, остальное дерево TF —
-robot_state_publisher. Истина: /ground_truth/pose, /twin/contacts, /twin/models (логическая камера twin_eye, которую
-launch добавляет в копию мира run_dir/world.sdf), /twin/truth (truth.py). rosbridge — только 127.0.0.1, порт
-rosbridge_port.
+robot_state_publisher. sensors:=outside — датчики не здесь, а отдельными юнитами, как драйверы робота
+(launch/sensor.launch.py: узлы /urg_node2 и /camera/camera): мост отдаёт камеру сырыми темами /twin/*
+(twin_config.CAMERA_RAW), узла sensor_model нет. Истина: /ground_truth/pose, /twin/contacts, /twin/models (логическая
+камера twin_eye, которую launch добавляет в копию мира run_dir/world.sdf), /twin/truth (truth.py). rosbridge — только
+127.0.0.1, порт rosbridge_port.
 
 Аргументы (умолчания — twin_config.py): world (lab|step|ramp|путь.sdf), x_pose, y_pose, z_pose, yaw (пусто — поза
 спавна мира), cmd_vel_timeout (с; 0 — hold), lidar_hz, color_hz, depth_hz, imu_hz, truth_hz, rosbridge,
-rosbridge_port, run_dir, gz_verbose. Каждый запуск — в своём разделе gz-transport (GZ_PARTITION = twin_<каталог
-прогона>, run_dir/gz_partition). Если в ВМ остался `gz sim` прошлого двойника (сирота из того же корня прогонов), launch
-не стартует. Выход любого узла «железа» (мост, sensor_model, twist_mux, cmd_relay, robot_state_publisher,
-madgwick, truth) гасит всю группу процессов двойника (stand_procs.py down). Время симуляции — только у узлов, которым
-оно нужно (robot_state_publisher, madgwick, мост); узлы двойника на Python работают по монотонным часам ВМ: /clock идёт
-с частотой шага физики (1 кГц), и его разбор в rclpy стоит ≈25 % ядра на узел [замер].
+rosbridge_port, run_dir, gz_verbose, sensors (inside | outside). Каждый запуск — в своём разделе gz-transport
+(GZ_PARTITION = twin_<каталог прогона>, run_dir/gz_partition). Если в ВМ остался `gz sim` прошлого двойника (сирота из
+того же корня прогонов), launch не стартует. Выход любого узла «железа» (мост, sensor_model, twist_mux, cmd_relay,
+robot_state_publisher, madgwick, truth) гасит всю группу процессов двойника (stand_procs.py down). Время симуляции —
+только у узлов, которым оно нужно (robot_state_publisher, madgwick, мост); узлы двойника на Python работают по
+монотонным часам ВМ: /clock идёт с частотой шага физики (1 кГц), и его разбор в rclpy стоит ≈25 % ядра на узел
+[замер].
 """
 import os
 import subprocess
@@ -70,9 +73,11 @@ def orphan_gz(procs, run_root, pgid):
     return [p for p in gz_sim(procs, exclude_pgid=pgid) if run_root + '/' in ' '.join(p.argv)]
 
 
-def bridge_config(world_name):
+def bridge_config(world_name, outside=False):
     """Мост gz ↔ ROS: темы робота (R7a §1.5, realsense2_camera), истина и сервисы мира. Камера ленивая: без
-    подписчика в ROS мост не подписан в gz, и Gazebo её не рендерит."""
+    подписчика в ROS мост не подписан в gz, и Gazebo её не рендерит. outside — камера сырыми темами /twin/* (их отдаёт
+    узел камеры sensor.launch.py)."""
+    raw = {out: src for out, (src, _) in cfg.CAMERA_RAW.items()} if outside else {}
     def t(ros, gz, ros_type, gz_type, lazy=False):
         e = {'ros_topic_name': ros, 'gz_topic_name': gz, 'ros_type_name': ros_type, 'gz_type_name': gz_type,
              'direction': 'GZ_TO_ROS'}
@@ -83,11 +88,14 @@ def bridge_config(world_name):
     out = [
         t('/clock', '/clock', 'rosgraph_msgs/msg/Clock', 'gz.msgs.Clock'),
         t(cfg.SCAN_RAW, '/twin/scan', 'sensor_msgs/msg/LaserScan', 'gz.msgs.LaserScan'),
-        t('/camera/imu', '/twin/imu', 'sensor_msgs/msg/Imu', 'gz.msgs.IMU'),
-        t('/camera/color/image_raw', '/twin/color/image', img, 'gz.msgs.Image', lazy=True),
-        t('/camera/color/camera_info', '/twin/color/camera_info', info, 'gz.msgs.CameraInfo', lazy=True),
+        t(raw.get('/camera/imu', '/camera/imu'), '/twin/imu', 'sensor_msgs/msg/Imu', 'gz.msgs.IMU'),
+        t(raw.get('/camera/color/image_raw', '/camera/color/image_raw'), '/twin/color/image', img, 'gz.msgs.Image',
+          lazy=True),
+        t(raw.get('/camera/color/camera_info', '/camera/color/camera_info'), '/twin/color/camera_info', info,
+          'gz.msgs.CameraInfo', lazy=True),
         t(cfg.DEPTH_RAW, '/twin/depth/image', img, 'gz.msgs.Image', lazy=True),
-        t('/camera/depth/camera_info', '/twin/depth/camera_info', info, 'gz.msgs.CameraInfo', lazy=True),
+        t(raw.get('/camera/depth/camera_info', '/camera/depth/camera_info'), '/twin/depth/camera_info', info,
+          'gz.msgs.CameraInfo', lazy=True),
         t('/ground_truth/pose', '/model/%s/pose' % cfg.MODEL, 'geometry_msgs/msg/PoseStamped', 'gz.msgs.Pose'),
         t('/twin/contacts', '/twin/contacts', 'ros_gz_interfaces/msg/Contacts', 'gz.msgs.Contacts'),
         t(cfg.MODELS_TOPIC, '/twin/models', 'ros_gz_interfaces/msg/LogicalCameraImage', 'gz.msgs.LogicalCameraImage'),
@@ -140,7 +148,10 @@ def _twin(ctx):
         'controllers': controllers, **{k: a[k] for k in ('lidar_hz', 'color_hz', 'depth_hz', 'imu_hz', 'truth_hz')}
     }).toxml()
     urdf_path = write('robot.urdf', urdf)
-    bridge = write('bridge.yaml', yaml.safe_dump(bridge_config(cfg.WORLD_NAME), sort_keys=False))
+    if a['sensors'] not in ('inside', 'outside'):
+        raise RuntimeError('sensors: inside | outside, получено %r' % a['sensors'])
+    outside = a['sensors'] == 'outside'
+    bridge = write('bridge.yaml', yaml.safe_dump(bridge_config(cfg.WORLD_NAME, outside), sort_keys=False))
 
     sim = {'use_sim_time': True}
 
@@ -172,10 +183,12 @@ def _twin(ctx):
         node('imu_filter_madgwick', package='imu_filter_madgwick', executable='imu_filter_madgwick_node',
              parameters=[sim, {'use_mag': False, 'publish_tf': False, 'world_frame': 'enu'}],
              remappings=[('imu/data_raw', '/camera/imu'), ('imu/data', '/imu/data')]),
-        node('twin_sensor_model', executable=sys.executable, arguments=[os.path.join(TWIN, 'sensor_model.py')]),
         node('twin_truth', executable=sys.executable, arguments=[os.path.join(TWIN, 'truth.py')],
              parameters=[{'world_sdf': world_out, 'robot_urdf': urdf_path, 'rate_hz': cfg.TRUTH_HZ}]),
     ]
+    if not outside:
+        actions.append(node('twin_sensor_model', executable=sys.executable,
+                            arguments=[os.path.join(TWIN, 'sensor_model.py')]))
     if a['rosbridge'].lower() in TRUE:
         actions.append(IncludeLaunchDescription(
             AnyLaunchDescriptionSource(os.path.join(get_package_share_directory('rosbridge_server'), 'launch',

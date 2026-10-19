@@ -12,14 +12,16 @@ urg_node2 отдаёт NaN и на «нет отражения» (открыта
 который свежий кадр глубины видит свободным (камера смотрит сквозь эту точку плоскости скана дальше), тоже не
 запрещает. Остальные неизвестные лучи запрещают, если в их серии на дальнем конце участка поместится предмет шире
 max_gap_m: одиночные коды ошибок и мерцающие лучи не останавливают робота, сектор без данных перед корпусом —
-останавливает.
+останавливает. Исключение (приёмка 17.10, nodata_unseen=slow): участок вне поля камеры глубины (у корпуса
+слева-спереди) — как слепой сектор корпуса камеры справа: вперёд не быстрее blind_speed по глубине и её памяти; запрет
+остаётся там, где камера участок видит, но свободным его не видит.
 Лучи маски (корпус D435i перед URG, RS3) — «слепые»: перед в их секторе видит только глубина. Маска учится только в
 секторе корпуса: «нет данных» обстановки на старте в неё не попадает.
 """
 from __future__ import annotations
 
 import math
-from typing import Callable, NamedTuple, Optional, Sequence, Tuple
+from typing import NamedTuple, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -162,7 +164,8 @@ class LidarView(NamedTuple):
     clearance_m: float                       # от края корпуса до ближайшей точки в любом направлении; inf — нет
     touch: bool                              # точка ближе radius + turn_margin: поворот на месте заденет
     nodata: Optional[Tuple[float, float]]    # серия неизвестных лучей, запрещающая вперёд (градусы), или None
-    unknown: list                            # неизвестные лучи впереди, которые не запрещают: [[от, до], …] градусов
+    unseen: Optional[Tuple[float, float]]    # серия неизвестных лучей вне поля глубины: как слепой сектор, или None
+    unknown: list                            # неизвестные лучи впереди, которые не ограничивают: [[от, до], …] градусов
     blind: bool                              # лучи маски смотрят вперёд: перед в их секторе — только глубина
 
 
@@ -190,33 +193,53 @@ def _runs(flags: np.ndarray):
     return np.flatnonzero(d == 1), np.flatnonzero(d == -1)
 
 
-def unknown_front(unknown: np.ndarray, mask: np.ndarray, rays: Rays, p: Params,
-                  free: Optional[Callable[[np.ndarray], np.ndarray]] = None):
-    """Неизвестные направления перед роботом: (серия, запрещающая вперёд, — (от, до) в градусах — или None;
-    серии, которые не запрещают, — [[от, до], …]). Запрещает серия, в которой участок в коридоре за корпусом не короче
-    max_gap_m, его не видит свободным глубина (free: точки базы → свободны ли) и на дальнем конце участка в серии
-    поместится предмет шире max_gap_m."""
+class Unknown(NamedTuple):
+    nodata: Optional[Tuple[float, float]]    # серия, запрещающая вперёд (градусы), или None
+    unseen: Optional[Tuple[float, float]]    # серия вне поля глубины — как слепой сектор (nodata_unseen=slow) или None
+    other: list                              # неизвестные лучи впереди, которые не ограничивают: [[от, до], …]
+
+
+def unknown_front(unknown: np.ndarray, mask: np.ndarray, rays: Rays, p: Params, free=None) -> Unknown:
+    """Неизвестные направления перед роботом. Запрещает вперёд серия, в которой участок в коридоре за корпусом не
+    короче max_gap_m, на дальнем конце участка поместится предмет шире max_gap_m, а кадр глубины (free: точки базы →
+    свободны ли, free.visible — в поле ли камеры) участок свободным не видит: точка в поле камеры, но не свободна, или
+    кадра нет. Участок, точки которого камера видит свободными или не видит вовсе, при nodata_unseen=slow — как слепой
+    сектор корпуса камеры: только глубина и её память, не быстрее blind_speed. Вне поля камеры — начало участка у
+    корпуса на пеленгах дальше ≈25° от курса: камера стоит всего на 7 см впереди лидара (поле 87°) [расчёт по
+    геометрии двойника, test_safety_parts.py]."""
     real = rays.dir_ray >= 0
     flags = np.ones(len(rays.dir_ray), dtype=bool)
     flags[real] = unknown[rays.dir_ray[real]] & ~mask[rays.dir_ray[real]]
     start, end = rays.corridor(p)
     deep = flags & (end - start >= p.max_gap_m)
+    hidden = np.zeros(len(deep), dtype=bool)
     if free is not None and deep.any():
         k = np.flatnonzero(deep)
         r = start[k, None] + (end - start)[k, None] * np.asarray(DEPTH_PROBES)
         b = rays.dir_bearing[k, None]
         pts = np.stack((rays.ox + r * np.cos(b), rays.oy + r * np.sin(b), np.full(r.shape, rays.oz)), axis=-1)
-        deep[k[free(pts.reshape(-1, 3)).reshape(r.shape).all(axis=1)]] = False
+        pts = pts.reshape(-1, 3)
+        ok, seen = free(pts).reshape(r.shape), free.visible(pts).reshape(r.shape)
+        clear = ok.all(axis=1)
+        deep[k[clear]] = False
+        if p.nodata_unseen == "slow":
+            out = ~clear & (ok | ~seen).all(axis=1)  # ни одной точки «в поле, но не свободна»
+            hidden[k[out]], deep[k[out]] = True, False
     deg = np.degrees(rays.dir_bearing)
     step = abs(rays.meta.angle_increment)
-    for lo, hi in zip(*_runs(deep)):
-        if (hi - lo) * step * float(np.max(end[lo:hi])) > p.max_gap_m:
-            return (round(float(deg[lo]), 1), round(float(deg[hi - 1]), 1)), []
-    return None, [[round(float(deg[lo]), 1), round(float(deg[hi - 1]), 1)] for lo, hi in zip(*_runs(flags))]
+
+    def wide(flagged: np.ndarray) -> Optional[Tuple[float, float]]:
+        for lo, hi in zip(*_runs(flagged)):
+            if (hi - lo) * step * float(np.max(end[lo:hi])) > p.max_gap_m:
+                return round(float(deg[lo]), 1), round(float(deg[hi - 1]), 1)
+        return None
+    nodata, unseen = wide(deep), wide(hidden)
+    rest = flags & ~hidden if unseen else flags
+    other = [] if nodata else [[round(float(deg[lo]), 1), round(float(deg[hi - 1]), 1)] for lo, hi in zip(*_runs(rest))]
+    return Unknown(nodata, unseen, other)
 
 
-def view(ranges: Sequence[float], rays: Rays, mask: np.ndarray, p: Params,
-         free: Optional[Callable[[np.ndarray], np.ndarray]] = None) -> LidarView:
+def view(ranges: Sequence[float], rays: Rays, mask: np.ndarray, p: Params, free=None) -> LidarView:
     r, hit, unknown = classify(ranges, rays.meta)
     rr = np.where(hit, r, 0.0)
     x, y = rays.ox + rr * rays.cos, rays.oy + rr * rays.sin
@@ -226,8 +249,8 @@ def view(ranges: Sequence[float], rays: Rays, mask: np.ndarray, p: Params,
     clearance = float(np.min(dist[real]) - radius) if real.any() else math.inf
     corridor = real & (x > 0.0) & (np.abs(y) <= radius + p.lateral_margin)
     front = float(np.min(edge_distance(x[corridor], y[corridor], radius))) if corridor.any() else math.inf
-    gap, other = unknown_front(unknown, mask, rays, p, free)
-    return LidarView(max(front, 0.0), max(clearance, 0.0), clearance < p.turn_margin, gap, other,
+    u = unknown_front(unknown, mask, rays, p, free)
+    return LidarView(max(front, 0.0), max(clearance, 0.0), clearance < p.turn_margin, u.nodata, u.unseen, u.other,
                      bool(mask[rays.front].any()))
 
 

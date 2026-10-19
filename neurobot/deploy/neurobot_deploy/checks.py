@@ -21,6 +21,7 @@ from . import picoclaw_cfg
 from .config import Config, EnvError
 
 LOOPBACK = ("127.0.0.1", "localhost", "::1")
+SUPERVISED = "supervised.launch.py"  # обёртка ros2 launch deploy: смерть узла гасит launch, юнит перезапускается
 # Списки тем rosbridge 2.x (Jazzy) раздельно для публикации и подписки: объединяются с topics_glob; в 1.3.1 их нет.
 ROSBRIDGE_GLOBS_2X = ("topics_pub_glob", "topics_sub_glob")
 # Ключи секции server патча ros_mcp_server (уходят в FastMCP(**server)).
@@ -608,15 +609,32 @@ def _launch_args(command: str) -> Dict[str, List[str]]:
     return out
 
 
+def check_supervised(key: str, cfg: Config) -> List[Problem]:
+    """ros2 launch без обёртки deploy (launchfiles/supervised.launch.py) переживает смерть своего узла: юнит active, а
+    узла нет, и systemd его не поднимет [замер main_a1: rosbridge после kill -9 узла — до конца прогона].
+    Предупреждение: у «ros2 run» и одного процесса такой беды нет."""
+    try:
+        argv = shlex.split(cfg.get(key))
+    except ValueError:
+        return []
+    if argv[:2] != ["ros2", "launch"] or (len(argv) > 2 and argv[2].endswith(SUPERVISED)):
+        return []
+    return [Problem("unsupervised_launch", "{}: «{}» без обёртки {} — если узел внутри launch умрёт, юнит останется "
+                    "active без узла; запускать через ros2 launch {}/share/launchfiles/{} include:=…".format(
+                        key, " ".join(argv[:4]), SUPERVISED, cfg.get("NEUROBOT_PREFIX"), SUPERVISED), fatal=False)]
+
+
 def check_rosbridge(cfg: Config) -> List[Problem]:
     """Команда rosbridge — второй рубеж L3 для любого клиента WebSocket (MCP-сервер ограничивает себя сам,
     check_mcp_config). Аргументы ros2 launch (rosbridge 1.3.1 и 2.x), каждый ровно один раз:
     - address:=127.0.0.1 — по умолчанию адрес пуст, и rosbridge слушает все интерфейсы, то есть сеть лаборатории;
-    - topics_glob:="'[/cmd_vel_agent]'" — только тема агента: тема из списка открыта клиенту и на запись (раздельных
-      списков подписки и публикации в rosbridge 1.3.1 нет), а без глоба открыты все — /cmd_vel, вход safety_gate,
-      защёлка, датчики safety_gate и состояние, которое читают doctor и neurobot estop. В rosbridge 2.x (Jazzy) есть и
-      раздельные topics_pub_glob и topics_sub_glob, они объединяются с topics_glob: topics_pub_glob — тот же список
-      разрешённого, topics_sub_glob (только подписка) — любой; оба необязательны, в 1.3.1 их нет;
+    - topics_glob:="'[/cmd_vel_agent]'" — только тема агента (и копия состояния safety_gate для агента
+      NEUROBOT_AGENT_STATE_TOPIC, если задана): тема из списка открыта клиенту и на запись (раздельных списков
+      подписки и публикации в rosbridge 1.3.1 нет), а без глоба открыты все — /cmd_vel, вход safety_gate, защёлка,
+      датчики safety_gate и состояние, которое читают исполнитель, doctor и neurobot estop. Копию читает только
+      MCP-сервер: подменить её агент может лишь себе. В rosbridge 2.x (Jazzy) есть и раздельные topics_pub_glob и
+      topics_sub_glob, они объединяются с topics_glob: topics_pub_glob — тот же список разрешённого, topics_sub_glob
+      (только подписка, там — /neurobot/safety_state) — любой; оба необязательны, в 1.3.1 их нет;
     - services_glob:="'[/rosapi/topics]'" — только /rosapi/…: их rosbridge при любом services_glob пропускает сам, а
       без глоба открыт любой сервис (set_parameters safety_gate, контроллера базы, twist_mux, драйверов датчиков,
       /controller_manager/*);
@@ -639,8 +657,11 @@ def check_rosbridge(cfg: Config) -> List[Problem]:
                                     cfg.get("NEUROBOT_SCAN_TOPIC")] + [t for t, _, _ in cfg.sensors()]
     services = (["/{}/{}".format(n, s) for n in nodes if n for s in ("set_parameters", "set_parameters_atomically")]
                 + ["/controller_manager/switch_controller", "/controller_manager/unload_controller", estop])
+    mirror = cfg.get("NEUROBOT_AGENT_STATE_TOPIC")
+    agent_topics = {agent, mirror} - {""}
     # аргумент: (разрешён ли элемент, что разрешено, что открыто без глоба, имена для текста, пример значения)
-    topic_rule = (lambda g: g == agent, "только тема агента " + agent,
+    topic_rule = (lambda g: g in agent_topics, "только тема агента " + agent + (
+                      " и копия состояния для агента " + mirror if mirror else ""),
                   "запись в любые темы, в том числе {}, {} и {}".format(cfg.get("NEUROBOT_CMD_VEL"), req, estop),
                   topics, agent)
     rules = {"topics_glob": topic_rule, "topics_pub_glob": topic_rule,
@@ -730,6 +751,15 @@ def check_mcp_config(cfg: Config) -> List[Problem]:
     if writable:
         problems.append(Problem("config_invalid", "{}: агенту открыта запись в {} — пишет он только {}".format(
             path, ", ".join(writable), agent)))
+    state = (topics.get("safety_state") or {}).get("name")
+    known = [t for t in (cfg.get("NEUROBOT_SAFETY_STATE_TOPIC"), cfg.get("NEUROBOT_AGENT_STATE_TOPIC")) if t]
+    if not state:
+        problems.append(Problem("config_invalid", "{}: нет topics.safety_state — robot_get_status не скажет агенту о "
+                                "защёлке и блоке, robot_nudge ответит ok и там, где safety_gate не пустил".format(path),
+                                fatal=False))
+    elif state not in known:
+        problems.append(Problem("config_invalid", "{}: topics.safety_state.name={} — состояние safety_gate идёт в "
+                                "{}".format(path, state, " и ".join(known)), fatal=False))
     if not (data.get("safety") or {}).get("reject_unknown_topics", True):
         problems.append(Problem("config_invalid", "{}: safety.reject_unknown_topics=false — агент сможет писать в "
                                 "любые темы, в том числе /cmd_vel и {}".format(path, cfg.get("NEUROBOT_ESTOP_TOPIC"))))
@@ -855,6 +885,7 @@ def precheck(component: str, cfg: Config, proc: str = "/proc",
             name = component.split("@", 1)[1]
             usb = cfg.driver(name, "USB")
             return (check_env(cfg, ["NEUROBOT_DRIVER_{}_CMD".format(name)])
+                    + check_supervised("NEUROBOT_DRIVER_{}_CMD".format(name), cfg)
                     + check_device(cfg.driver(name, "DEVICE"))
                     + (check_camera(cfg.get("NEUROBOT_SYSFS"), usb) if usb else []))
         if component.startswith("labworker@"):
@@ -891,6 +922,7 @@ def precheck(component: str, cfg: Config, proc: str = "/proc",
                     + check_python(cfg.get("NEUROBOT_PERCEPTION_CMD"), "NEUROBOT_PERCEPTION_MODULES", cfg))
         if component == "rosbridge":
             return (check_env(cfg, ["NEUROBOT_ROSBRIDGE_CMD"]) + check_rosbridge(cfg)
+                    + check_supervised("NEUROBOT_ROSBRIDGE_CMD", cfg)
                     + check_port_free(cfg.port("NEUROBOT_ROSBRIDGE_PORT"), proc))
         if component == "mcp":
             return (check_env(cfg, ["NEUROBOT_MCP_CMD"]) + check_port_free(cfg.mcp_endpoint()[1], proc)

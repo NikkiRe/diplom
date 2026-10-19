@@ -53,6 +53,11 @@ DEFAULTS = {
     "NEUROBOT_MOTION_STATE_TOPIC": "/neurobot/motion_state",
     "NEUROBOT_SAFETY_STATE_TOPIC": "/neurobot/safety_state",
     "NEUROBOT_ESTOP_TOPIC": "/neurobot/estop",
+    # снятие защёлки: release.json root в каталоге root (тот же release_dir у safety_gate); по теме — нельзя
+    "NEUROBOT_ESTOP_RELEASE_DIR": "/run/neurobot-estop",
+    # копия состояния safety_gate для агента (agent_state_topic): rosbridge 1.3.1 (Foxy) не умеет открыть тему только
+    # на чтение, а /neurobot/safety_state читают исполнитель и doctor; пусто — копии нет
+    "NEUROBOT_AGENT_STATE_TOPIC": "",
     "NEUROBOT_SAFETY_NODE": "safety_gate",
     "NEUROBOT_EXECUTOR_NODE": "motion_executor",
     # узел predict_live (имя — из кода лаборатории): его писателей проверяет wait-graph после READY
@@ -84,6 +89,9 @@ DEFAULTS = {
     "NEUROBOT_WRITER_CHECK_S": "0.75",
     "NEUROBOT_PRECHECK_BACKOFF_S": "5",
     "NEUROBOT_WATCHDOG_PERIOD_S": "10",
+    # частые пробы сторожа: свежесть тем драйверов (NEUROBOT_DRIVER_<имя>_FRESH) и ping rosbridge
+    "NEUROBOT_WATCHDOG_FAST_S": "1",
+    "NEUROBOT_WATCHDOG_STALE_S": "2",
     # Чужие процессы (имя программы или файла-аргумента). Камера — один владелец на устройство: демо, просмотрщик
     # и ROS-узел камеры вне наших юнитов (S4, N12; при --camera ros узел камеры в юните драйвера — свой); YOLO-воркер
     # лаборатории вне юнита — второй контекст CUDA (≈1 ГиБ) на Nano с 4 ГБ. Сервер робота и воркеры лаборатории вне

@@ -67,6 +67,7 @@ def render(cfg: Config, src_dir: str) -> Dict[str, str]:
 
 
 def enable_list(cfg: Config) -> List[str]:
-    """Что включает install.sh: цель, компоненты, экземпляры драйверов и воркеров, сторож."""
-    return (["neurobot.target"] + [u for _, u in cfg.plan()]
-            + (["neurobot-watchdog.service"] if {"mcp", "picoclaw"} & set(cfg.components()) else []))
+    """Что включает install.sh: цель, компоненты, экземпляры драйверов и воркеров, сторож (если ему есть кого
+    сторожить: драйверы, rosbridge, MCP или PicoClaw)."""
+    watched = cfg.drivers() or {"rosbridge", "mcp", "picoclaw"} & set(cfg.components())
+    return ["neurobot.target"] + [u for _, u in cfg.plan()] + (["neurobot-watchdog.service"] if watched else [])

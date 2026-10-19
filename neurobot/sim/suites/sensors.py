@@ -261,19 +261,26 @@ class Sensors:
                 **err, "rtf_ok_share": round(len(m.ok_truth(truth)) / max(len(truth), 1), 3)}
 
     def silence(self) -> dict:
-        """/scan и глубина замолкли на ходу: SIGSTOP узла датчиков двойника (на роботе — urg_node2 и камера)."""
+        """/scan и глубина замолкли на ходу: SIGSTOP узлов /urg_node2 и /camera/camera двойника (как urg_node2 и
+        realsense2_camera робота). Если сторож за это время перезапустит драйвер (тема молчит две пробы подряд),
+        SIGCONT достанется уже ушедшему процессу — проверка та же: стоп и «движение само не продолжается»."""
         t = self.t
         t.relocate(*START)
-        pid = t.unit_pid("neurobot-driver@twin", "sensor_model.py")
+        pids = [t.unit_pid("neurobot-driver@" + d, "sensor_model.py") for d in ("lidar", "camera")]
         t.spin(3.0, drive={AGENT: (0.15, 0.0)})
         scans = []
         sub = t.node.create_subscription(LaserScan, "/scan", lambda _: scans.append(time.monotonic()),
                                          qos_profile_sensor_data)
         t.spin(0.5, drive={AGENT: (0.15, 0.0)})
-        os.kill(pid, signal.SIGSTOP)
+        for pid in pids:
+            os.kill(pid, signal.SIGSTOP)
         t_stop = time.monotonic()
         t.spin(3.0, drive={AGENT: (0.15, 0.0)})
-        os.kill(pid, signal.SIGCONT)
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGCONT)
+            except ProcessLookupError:
+                pass
         t_cont = time.monotonic()
         t.spin(3.0, drive={AGENT: (0.15, 0.0)})       # исполнитель всё ещё просит вперёд — движение не продолжается
         resumed = [r for r in t.since("truth", t_cont + 1.0) if abs(r["v"]) > 0.02]

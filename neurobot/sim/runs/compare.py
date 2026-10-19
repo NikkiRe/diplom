@@ -1,10 +1,19 @@
-"""Сводка compare.md (README §9): таблица A0/A1 по метрикам PLAN §1 и итог по критериям приёмки Э2 и §13.4.
+"""Сводка compare.md (README §9): A0 и прогоны A1 по метрикам PLAN §1, итог по критериям приёмки Э2 и §13.4.
 
-  python3 -m neurobot.sim.runs.compare --a0 DIR --a1 DIR [--start DIR] [--budget DIR] [--long DIR]
-       [--shapeclass DIR] --out compare.md
+  python3 -m neurobot.sim.runs.compare --a0 DIR --a1 МЕТКА=DIR [--a1 МЕТКА=DIR …] [--also МЕТКА=DIR …]
+       [--start МЕТКА=DIR …] [--budget МЕТКА=DIR] [--k6 МЕТКА=FILE …] [--k6-ref ПОДПИСЬ=FILE …]
+       [--long МЕТКА=DIR] [--shapeclass DIR] [--runs МЕТКА=DIR …] [--title ТЕКСТ] [--notes FILE] --out compare.md
 
-Каталоги — результаты прогонов (runner.py, budget_a1.py, start_test пакета, shapeclass); метрики считаются
-metrics.py, если рядом нет metrics.json. Все числа — стенд в общей ВМ: ориентир, не результат робота.
+Столбцы — A0 и прогоны A1 по порядку --a1 (МЕТКА — версия кода, например «A1 16.10»); итог по критериям — по
+последнему столбцу. Прочие источники привязаны к столбцу его МЕТКОЙ: --also — другие прогоны того же кода (повторы,
+бюджет, длительный, дымовой): «0 касаний» считается по всем прогонам столбца сразу, а не по одному; --start — части
+start_test (циклы сводятся вместе тем же summarize, что у пакета); --budget — прогон budget_a1.py; --k6 — замеры
+verify/k6.py пакета deploy (stop через MCP, препятствие по скану), каждый файл — серия. Чего у столбца нет — «не
+измерено», а 100 циклов start_test не набралось — «мало данных». --k6-ref — серии k6.py для справки (только таблица
+K6, без итога): прежние замеры на другой версии кода. Каталоги прогонов — метрики metrics.py (metrics.json рядом или
+пересчёт). --runs — прогоны A1 для таблицы по отдельности (повторы, бюджет, длительный, чувствительность к «нет
+отражения» лидара и миру). --notes — разбор прогонов человеком (Markdown), идёт в конец как есть. Все числа — стенд в
+общей ВМ: ориентир, не результат робота.
 """
 from __future__ import annotations
 
@@ -12,9 +21,15 @@ import argparse
 import json
 import os
 import sys
-from typing import List, Optional
+from typing import Callable, Dict, List, Optional, Tuple
 
 from neurobot.sim.runs import metrics as M
+
+DEPLOY = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "deploy"))
+# T холодного старта на стенде: ⌈1,2 × наибольшее «ОК» doctor во всех циклах до итогового start_test⌉ — 21,1 с в 122
+# циклах 16–18.10 → 26 с; зафиксировано до start_test итогового кода (acceptfix2/k9_T.json) [замер, ориентир]
+K9_T_S = 26.0
+K6_MCP_S, K6_SCAN_S = 0.100, 0.150   # PLAN §1, K6: stop через MCP → ноль; препятствие → ноль после скана (p95)
 
 
 def load_metrics(run_dir: Optional[str]) -> Optional[dict]:
@@ -27,6 +42,19 @@ def load_metrics(run_dir: Optional[str]) -> Optional[dict]:
     return M.summarize(run_dir)
 
 
+def start_summary(dirs: List[str]) -> Optional[dict]:
+    """Циклы start_test из каталогов по порядку (cycles.jsonl) → summary пакета; None — каталогов нет."""
+    if not dirs:
+        return None
+    if DEPLOY not in sys.path:
+        sys.path.insert(0, DEPLOY)
+    from neurobot_deploy.start_test import summarize
+    cycles = []
+    for d in dirs:
+        cycles += M.load_jsonl(os.path.join(d, "cycles.jsonl"))
+    return summarize(cycles)
+
+
 def num(v, nd: int = 2) -> str:
     """Число по-русски: десятичная запятая."""
     if v is None:
@@ -36,10 +64,18 @@ def num(v, nd: int = 2) -> str:
     return str(v)
 
 
+def ms(v: Optional[float]) -> str:
+    return "—" if v is None else "%s мс" % num(1000.0 * v, 1 if abs(v) < 0.01 else 0)
+
+
 def lat(d: Optional[dict]) -> str:
     if not d or not d.get("n"):
         return "нет"
     return "%s / %s (n=%d)" % (num(d.get("p50")), num(d.get("p95")), d["n"])
+
+
+def is_a0(m: dict) -> bool:
+    return m.get("system") == "a0"
 
 
 def reactions(m: dict) -> str:
@@ -47,11 +83,82 @@ def reactions(m: dict) -> str:
     return ", ".join("%s %d" % (k, r[k]) for k in ("correct", "wrong", "none", "interrupted", "unobserved") if k in r)
 
 
-def k6(m: dict) -> str:
+def correct(m: dict) -> Tuple[int, int]:
+    """(верных реакций, жестов) по наблюдателю."""
+    return (m.get("reactions") or {}).get("correct", 0), (m.get("segments") or {}).get("gestures", 0)
+
+
+def early(m: dict) -> str:
+    d = m.get("early_t0_to_cmd_s") or {}
+    return "%s (n=%d)" % (num(d.get("p50")), d["n"]) if d.get("n") else "нет"
+
+
+def travel(m: dict) -> str:
+    t = m.get("travel") or {}
+    if not t:
+        return "—"
+    jumps = t.get("teleports") or {}
+    return "%s м; в движении %s с (%s %%)%s" % (
+        num(t.get("distance_m"), 1), num(t.get("moving_s"), 0), num(100.0 * (t.get("moving_share") or 0), 0),
+        "; переносы не в счёт: %d, %s м" % (jumps["n"], num(jumps.get("m"), 1)) if jumps.get("n") else "")
+
+
+def safety_share(m: dict) -> str:
+    sh = (m.get("travel") or {}).get("safety_share") or {}
+    if not sh:
+        return "нет safety_gate" if is_a0(m) else "—"
+    return " / ".join("%s %s %%" % (k, num(100.0 * sh.get(k, 0.0), 0)) for k in M.SAFETY_STATES)
+
+
+def dead_end(m: dict) -> str:
+    d = m.get("dead_ends")
+    if d is None:
+        return "—"
+    if is_a0(m) or not d["n"]:
+        return "нет safety_gate" if is_a0(m) else "0"
+    return "%d: %s с, жестов без реакции %d (%s)" % (d["n"], num(d["total_s"], 0), d["gestures"], "; ".join(
+        "с %s с: %s" % (num(x["at_s"], 0), ", ".join(x["reasons"])) for x in d["spans"]))
+
+
+def escape(m: dict) -> str:
+    """Эпизоды тупика (touch, вперёд нельзя или к препятствию) и отъезды исполнителя из них (приёмка 18.10)."""
+    e = m.get("escapes")
+    if is_a0(m):
+        return "нет safety_gate"
+    if not e or not (e["episodes"] or e["starts"]):
+        return "0"
+    return "%d, вышел отъездом %d; дольше всего %s с; отъездов %d (%s)" % (
+        e["episodes"], e["escaped"], num(e["max_s"], 0), e["starts"],
+        ", ".join("%s %d" % kv for kv in sorted(e["outcomes"].items())) or "исходов нет")
+
+
+def moves(m: dict) -> str:
+    mv = m.get("move_requests") or {}
+    if not mv.get("n"):
+        return "—"
+    out = "%d из %d: поехал %d, сообщил о запрете %d; «готово» без движения %d, не подтверждено %d, без ответа %d" % (
+        mv["success"], mv["n"], mv.get("moved", 0), mv.get("refused", 0), mv.get("false_ok", 0),
+        mv.get("unconfirmed", 0), mv.get("no_answer", 0))
+    return out + (" (воркер 8766 — заглушка: робот не двигается)" if is_a0(m) else "")
+
+
+def unsafe(m: dict) -> str:
     d = m.get("K6_unsafe_no_fresh_cmd") or {}
     silent, ign = d.get("silent") or {}, d.get("ignored_zero") or {}
-    return "%d эпизодов, %s с (молчание писателя %d, ноль не исполнен %d)" % (
-        d.get("n", 0), num(d.get("total_s")), silent.get("n", 0), ign.get("n", 0))
+    out = (m.get("K6_world_outage") or {})
+    return "эпизодов %d, %s с (молчание писателя %d, ноль не исполнен %d)%s" % (
+        d.get("n", 0), num(d.get("total_s")), silent.get("n", 0), ign.get("n", 0),
+        "; из них мир двойника стоял (смерть базы, робот по истине не ехал): %d, %s с" % (
+            out["n"], num(out.get("total_s"), 1)) if out.get("n") else "")
+
+
+def k6_moving(m: dict) -> Optional[tuple]:
+    """(эпизодов K6 вне перерывов мира двойника, в перерывах) — K6 по истине: в перерыв робот стоит."""
+    d = m.get("K6_unsafe_no_fresh_cmd")
+    if d is None:
+        return None
+    out = (m.get("K6_world_outage") or {}).get("n", 0)
+    return d.get("n", 0) - out, out
 
 
 def touches(m: dict) -> str:
@@ -73,31 +180,118 @@ def agent(m: dict) -> str:
     a = (m.get("K4") or {}).get("agent") or {}
     calls = (a.get("llm_calls_per_request") or {}).get("p50")
     tok = (a.get("prompt_tokens_per_call") or {}).get("p50")
-    return "%d из %d; LLM на реплику %s, токенов на вызов %s, инструментов %s" % (
-        a.get("ok", 0), a.get("requests", 0), num(calls, 0), num(tok, 0),
-        "/".join(str(x) for x in a.get("n_tools_in_catalog") or []) or "—")
+    service = ", ".join(str(k) for k in sorted(a.get("service_calls_by_request") or {}, key=int))
+    return "%d из %d; LLM на реплику %s, токенов на вызов %s, инструментов %s; служебных вызовов (сжатие истории " \
+           "PicoClaw) %d%s" % (a.get("ok", 0), a.get("requests", 0), num(calls, 0), num(tok, 0),
+                               "/".join(str(x) for x in a.get("n_tools_in_catalog") or []) or "—",
+                               a.get("service_calls", 0), " — на репликах № " + service if service else "")
 
 
-def row(name: str, a0: str, a1: str, goal: str = "") -> str:
-    return "| %s | %s | %s | %s |" % (name, a0, a1, goal)
+def lost(m: dict) -> str:
+    k3 = m.get("K3") or {}
+    return "%s (заняты своим манёвром %d, на защёлке %d)" % (
+        k3.get("deaf_gestures_n"), len(k3.get("busy_gestures") or []), len(k3.get("latched_gestures") or []))
 
 
-def fault_table(a0: dict, a1: dict) -> List[str]:
-    out = ["| Отказ | путь | A0: TTR, с | A0: видим? | A1: TTR, с | A1: видим? |", "|---|---|---|---|---|---|"]
-    rows1 = {f["fault"] + "#%d" % i: f for i, f in enumerate(a1.get("K5_faults") or [])}
-    for i, f0 in enumerate(a0.get("K5_faults") or []):
-        f1 = rows1.get(f0["fault"] + "#%d" % i, {})
+def humans(m: dict) -> str:
+    k3 = m.get("K3") or {}
+    total, safety = k3.get("operator_interventions") or 0, k3.get("operator_safety") or 0
+    return "%d: ремонт %d, безопасность (перенос, снятие защёлки) %d" % (total, total - safety, safety)
 
-        def cell(f):
-            if f.get("skipped"):
-                return "нет компонента", "—"
-            return num(f.get("ttr_s"), 1) if f.get("ttr_s") is not None else "не поднялось", (
-                "да: " + "; ".join(f.get("why") or []) if f.get("visible") else "нет")
-        t0, v0 = cell(f0)
-        t1, v1 = cell(f1)
-        out.append("| %s (%s с) | %s | %s | %s | %s | %s |" % (f0["fault"], num(f0["at_s"], 0), f0.get("path", "—"),
-                                                             t0, v0, t1, v1))
+
+def column(label: str, m: dict, also=(), start=None, budget=None, budget_run=None, k6=()) -> dict:
+    """Столбец сводки: прогон и всё, что относится к той же версии кода (README §9)."""
+    return {"label": label, "m": m, "also": list(also), "start": start, "budget": budget, "budget_run": budget_run,
+            "k6": list(k6)}
+
+
+def table(head: List[str], rows: List[List[str]]) -> List[str]:
+    return ["| " + " | ".join(head) + " |", "|" + "---|" * len(head)] + ["| " + " | ".join(r) + " |" for r in rows]
+
+
+def fault_table(cols: List[dict]) -> List[str]:
+    """Отказы всех систем по сегменту расписания (одни жесты — одни сегменты): отказ, которого у системы в
+    расписании не было (драйверы — с 18.10), — «не прогонялся»."""
+    def key(f):
+        return f["fault"], f.get("seg") if f.get("seg") is not None else round(f["at_s"])
+    by = [{key(f): f for f in c["m"].get("K5_faults") or []} for c in cols]
+
+    def cell(f):
+        if f is None:
+            return "не прогонялся"
+        if f.get("skipped"):
+            return "нет компонента"
+        ttr = "%s с" % num(f["ttr_s"], 1) if f.get("ttr_s") is not None else "не поднялось"
+        return ttr + (" — **да**: " + "; ".join(f.get("why") or []) if f.get("visible") else " — нет")
+    keys = sorted({k for b in by for k in b}, key=lambda k: next(b[k]["at_s"] for b in by if k in b))
+    rows = []
+    for k in keys:
+        f = next((b[k] for b in by if k in b and not b[k].get("skipped")), next(b[k] for b in by if k in b))
+        rows.append(["%s (%s с)" % (f["fault"], num(f["at_s"], 0)), f.get("path", "—")] + [cell(b.get(k)) for b in by])
+    return table(["Отказ (от якоря)", "путь"] + ["%s: TTR — видим?" % c["label"] for c in cols], rows)
+
+
+def k6_stats(doc: dict) -> dict:
+    """Серия verify/k6.py: квантили и доли в пределе по замерам (mcp: ноль до исполнителя, начало торможения и ноль в
+    /cmd_vel; scan: ноль в /cmd_vel после скана с препятствием, касания)."""
+    out = {}
+    runs = (doc.get("mcp_stop") or {}).get("runs") or []
+    if runs:
+        def col(key):
+            return [r.get(key) for r in runs]
+        out["mcp"] = {"n": len(runs), "req": M.quantiles(col("req_zero_s")), "brake": M.quantiles(col("brake_s")),
+                      "zero": M.quantiles(col("zero_s")),
+                      "brake_ok": sum(1 for v in col("brake_s") if v is not None and v <= K6_MCP_S),
+                      "zero_ok": sum(1 for v in col("zero_s") if v is not None and v <= K6_MCP_S),
+                      "lost": sum(1 for v in col("req_zero_s") if v is None)}
+    runs = (doc.get("scan_stop") or {}).get("runs") or []
+    if runs:
+        vals = [r.get("zero_after_scan_s") for r in runs]
+        out["scan"] = {"n": len(runs), "zero": M.quantiles(vals),
+                       "ok": sum(1 for v in vals if v is not None and v <= K6_SCAN_S),
+                       "contacts": sum(1 for r in runs if r.get("contacts"))}
     return out
+
+
+def q3(d: dict, peak: bool = False) -> str:
+    return "%s / %s%s" % (ms(d.get("p50")), ms(d.get("p95")), " / " + ms(d.get("max")) if peak else "")
+
+
+def k6_tables(cols: List[dict], ref: List[tuple] = ()) -> List[str]:
+    """Серии verify/k6.py: по столбцам (их итог — в критериях) и для справки (ref: [(подпись, имя, замеры)]); stop
+    через MCP и препятствие по скану."""
+    mcp, scan = [], []
+    series = [(c["label"], name, doc) for c in cols for name, doc in c["k6"]] + list(ref)
+    for label, name, doc in series:
+        st = k6_stats(doc)
+        if "mcp" in st:
+            s = st["mcp"]
+            mcp.append(["%s: %s" % (label, name), str(s["n"]), q3(s["req"]),
+                        "%s; %d из %d" % (q3(s["brake"]), s["brake_ok"], s["n"]),
+                        "%s; %d из %d" % (q3(s["zero"]), s["zero_ok"], s["n"]), str(s["lost"])])
+        if "scan" in st:
+            s = st["scan"]
+            scan.append(["%s: %s" % (label, name), str(s["n"]),
+                         "%s; %d из %d" % (q3(s["zero"], True), s["ok"], s["n"]), str(s["contacts"])])
+    out = []
+    if mcp:
+        out += ["stop через MCP (робот едет манёвром жеста, агент вызывает robot_stop; метки от вызова):", ""] + table(
+            ["Серия", "n", "ноль в /neurobot/cmd_vel_req, p50 / p95", "начало торможения в /cmd_vel, p50 / p95; "
+             "≤ 100 мс", "ноль в /cmd_vel, p50 / p95; ≤ 100 мс", "ноль не дошёл до исполнителя"], mcp) + [""]
+    if scan:
+        out += ["Препятствие по скану (столб Ø 5 см в 2 см от корпуса; задержка < 0 — глубина увидела раньше лидара):",
+                ""] + table(["Серия", "n", "ноль в /cmd_vel после скана, p50 / p95 / max; ≤ 150 мс", "касаний"], scan)
+    return out
+
+
+def k6_verdict(c: dict, case: str, key: str, limit: float) -> Tuple[Optional[str], Optional[bool]]:
+    """Подкритерий K6 по всем сериям столбца: выполнен, если p95 ≤ limit в каждой серии."""
+    got = [(name, k6_stats(doc).get(case)) for name, doc in c["k6"]]
+    got = [(name, s[key]) for name, s in got if s and s[key].get("n")]
+    if not got:
+        return None, None
+    text = "; ".join("%s: p95 %s (n=%d)" % (name, ms(d["p95"]), d["n"]) for name, d in got)
+    return text, all(d["p95"] <= limit for _, d in got)
 
 
 def agent_errors_after(m: dict, fault: str) -> Optional[int]:
@@ -107,60 +301,165 @@ def agent_errors_after(m: dict, fault: str) -> Optional[int]:
 
 
 def start_counts(start: Optional[dict]) -> tuple:
-    """(прошло, всего) холодных стартов и сломанных сценариев start_test."""
+    """(прошло, всего) холодных стартов (вместе с контрольным после сломанных) и сломанных сценариев start_test."""
     if not start:
         return None, None
     ok = start.get("ok") or {}
     broken = {k: v for k, v in start.items() if k != "ok" and isinstance(v, dict) and "cycles" in v}
-    return (ok.get("passed"), ok.get("cycles")), (sum(v.get("passed", 0) for v in broken.values()),
-                                                 sum(v.get("cycles", 0) for v in broken.values()))
+    total = sum(v.get("cycles", 0) for v in broken.values())
+    return (ok.get("passed"), ok.get("cycles")), (sum(v.get("passed", 0) for v in broken.values()), total) \
+        if total else None
 
 
-def verdicts(a0: dict, a1: dict, start: Optional[dict], budget: Optional[dict]) -> List[str]:
-    """Критерии PLAN (Э2, §1, §13.4): значение A0, A1 и вердикт по A1. Время — ориентир стенда."""
-    k1 = lambda m: (m.get("K1_t0_to_cmd_s") or {}).get("p50")  # noqa: E731
-    deaf = lambda m: (m.get("K3") or {}).get("deaf_gestures_n")  # noqa: E731
-    vis = lambda m: (m.get("K3") or {}).get("visible_restarts")  # noqa: E731
-    k6n = lambda m: (m.get("K6_unsafe_no_fresh_cmd") or {}).get("n")  # noqa: E731
-    unk = lambda m: (m.get("K7") or {}).get("moved_on_unknown")  # noqa: E731
-    tch = lambda m: (m.get("touches") or {}).get("episodes")  # noqa: E731
-    llm = lambda m: (m.get("K4") or {}).get("llm_calls_outside_requests")  # noqa: E731
-    hum = lambda m: (m.get("K3") or {}).get("operator_interventions")  # noqa: E731
-    cold, broken = start_counts(start)
+def start_tmax(start: Optional[dict]) -> Optional[float]:
+    """Наибольшее время до «ОК» doctor в холодных стартах start_test."""
+    return ((start or {}).get("ok") or {}).get("t_doctor_s", {}).get("max")
 
-    def stuck(m: dict) -> Optional[int]:
-        """Отказы пути жеста, после которых система сама не поднялась или понадобился человек («глухие
-        состояния»)."""
-        rows = [f for f in m.get("K5_faults") or [] if f.get("path") == "жест" and not f.get("skipped")]
-        return sum(1 for f in rows if f.get("ttr_s") is None or f.get("operator")) if rows else None
 
-    def mark(value, ok) -> str:
-        return "нет данных" if value is None else ("выполнено" if ok(value) else "**не выполнено**")
-    rows = [
-        ("0 «глухих» состояний: путь жеста сам поднялся после каждого отказа", stuck(a0), stuck(a1),
-         mark(stuck(a1), lambda v: v == 0)),
-        ("0 потерянных жестов из-за глухоты (детектор не работал)", deaf(a0), deaf(a1),
-         mark(deaf(a1), lambda v: v == 0)),
-        ("0 вмешательств человека", hum(a0), hum(a1), mark(hum(a1), lambda v: v == 0)),
-        ("0 видимых перезапусков (PLAN §1)", vis(a0), vis(a1), mark(vis(a1), lambda v: v == 0)),
-        ("0 движений по «не распознано» (K7)", unk(a0), unk(a1), mark(unk(a1), lambda v: v == 0)),
-        ("0 эпизодов «едет без свежей команды > 0,5 с» (K6)", k6n(a0), k6n(a1), mark(k6n(a1), lambda v: v == 0)),
-        ("p50 t0 → /cmd_vel ≤ 0,7 с при 10 к/с (Э2) [ориентир]", num(k1(a0)), num(k1(a1)),
-         mark(k1(a1), lambda v: v <= 0.7)),
-        ("0 вызовов LLM на жест (K4)", llm(a0), llm(a1), mark(llm(a1), lambda v: v == 0)),
-        ("PicoClaw по HTTP после kill MCP-сервера — ≤ 1 ошибка", agent_errors_after(a0, "kill_mcp"),
-         agent_errors_after(a1, "kill_mcp"), mark(agent_errors_after(a1, "kill_mcp"), lambda v: v <= 1)),
-        ("0 касаний (безопасность v2, истина Gazebo)", tch(a0), tch(a1), mark(tch(a1), lambda v: v == 0)),
-        ("start_test: 100 из 100 холодных стартов (K9)", "нет механизма", cold and "%s из %s" % cold,
-         mark(cold, lambda v: v[0] == v[1] == 100)),
-        ("doctor называет сломанный компонент во всех сценариях", "нет doctor", broken and "%s из %s" % broken,
-         mark(broken, lambda v: v[1] > 0 and v[0] == v[1])),
-        ("бюджет 4 ГБ: 0 OOM за прогон", "—", budget and budget.get("oom_kill"),
-         mark(budget and budget.get("oom_kill"), lambda v: v == 0)),
+def touches_all(c: dict) -> Tuple[str, int]:
+    """Касания по всем прогонам столбца: («N в M прогонах (метка эпизоды, …)», N)."""
+    runs = [c["m"]] + c["also"]
+    eps = [(m.get("label"), (m.get("touches") or {}).get("episodes", 0)) for m in runs]
+    total = sum(n for _, n in eps)
+    if len(runs) == 1:
+        return str(total), total
+    return "%d в %d прогонах (%s)" % (total, len(eps), ", ".join("%s %d" % e for e in eps)), total
+
+
+def moves_ok(m: dict) -> Optional[tuple]:
+    mv = m.get("move_requests") or {}
+    return (mv["success"], mv["n"], mv.get("false_ok", 0)) if mv.get("n") else None
+
+
+def stuck(m: dict) -> Optional[int]:
+    """Отказы пути жеста, после которых система сама не поднялась или понадобился человек («глухие состояния»)."""
+    rows = [f for f in m.get("K5_faults") or [] if f.get("path") == "жест" and not f.get("skipped")]
+    return sum(1 for f in rows if f.get("ttr_s") is None or f.get("operator")) if rows else None
+
+
+Getter = Callable[[dict], Tuple[Optional[str], Optional[bool]]]
+
+
+def by_metric(fn: Callable[[dict], object], ok: Callable[[object], bool],
+              show: Callable[[object], str] = str) -> Getter:
+    def get(c: dict):
+        v = fn(c["m"])
+        return (None, None) if v is None else (show(v), ok(v))
+    return get
+
+
+def criteria() -> List[Tuple[str, Getter, bool]]:
+    """Критерии PLAN (Э2, §1, §13.4): (название, значение и выполнен ли по столбцу, применим ли к A0)."""
+    k3 = lambda m: m.get("K3") or {}  # noqa: E731
+
+    def touch(c):
+        text, total = touches_all(c)
+        return text, total == 0
+
+    def k9_cold(c):
+        cold, _ = start_counts(c["start"])
+        if not cold:
+            return None, None
+        return "%s из %s" % cold, None if cold[0] == cold[1] < 100 else cold[0] == cold[1] >= 100
+
+    def k9_t(c):
+        t = start_tmax(c["start"])
+        return (None, None) if t is None else ("max %s с" % num(t, 1), t <= K9_T_S)
+
+    def k9_broken(c):
+        _, broken = start_counts(c["start"])
+        return (None, None) if not broken else ("%s из %s" % broken, broken[1] > 0 and broken[0] == broken[1])
+
+    def oom(c):
+        v = (c["budget"] or {}).get("oom_kill") if c["budget"] else None
+        return (None, None) if v is None else (str(v), v == 0)
+    return [
+        ("0 «глухих» состояний: путь жеста сам поднялся после каждого отказа",
+         by_metric(stuck, lambda v: v == 0), True),
+        ("0 потерянных жестов из-за глухоты (детектор не работал)",
+         by_metric(lambda m: k3(m).get("deaf_gestures_n"), lambda v: v == 0), True),
+        ("0 вмешательств человека", by_metric(lambda m: k3(m).get("operator_interventions"), lambda v: v == 0), True),
+        ("0 видимых перезапусков (PLAN §1)", by_metric(lambda m: k3(m).get("visible_restarts"), lambda v: v == 0),
+         True),
+        ("0 движений по «не распознано» (K7)",
+         by_metric(lambda m: (m.get("K7") or {}).get("moved_on_unknown"), lambda v: v == 0), True),
+        ("0 эпизодов «едет без свежей команды > 0,5 с» (K6; в перерыв мира двойника робот стоит)",
+         by_metric(k6_moving, lambda v: v[0] == 0,
+                   lambda v: "%d%s" % (v[0], " (+%d в перерыв мира)" % v[1] if v[1] else "")), True),
+        ("p50 t0 → /cmd_vel без ранних ≤ 0,7 с при 10 к/с (Э2) [ориентир]",
+         by_metric(lambda m: (m.get("K1_t0_to_cmd_s") or {}).get("p50"), lambda v: v <= 0.7, num), True),
+        ("0 вызовов LLM на жест (K4)",
+         by_metric(lambda m: (m.get("K4") or {}).get("llm_calls_outside_requests"), lambda v: v == 0), True),
+        ("PicoClaw по HTTP после kill MCP-сервера — ≤ 1 ошибка",
+         by_metric(lambda m: agent_errors_after(m, "kill_mcp"), lambda v: v <= 1), True),
+        ("0 касаний (безопасность v2, истина Gazebo), все прогоны столбца", touch, True),
+        ("верная реакция на каждый жест (наблюдатель; разбор — ниже)",
+         by_metric(correct, lambda v: v[1] > 0 and v[0] == v[1], lambda v: "%d из %d" % v), True),
+        ("реплика «вперёд»: робот поехал или агент сообщил о запрете; 0 «готово» без движения",
+         by_metric(moves_ok, lambda v: v[0] == v[1] and v[2] == 0,
+                   lambda v: "%d из %d, «готово» без движения %d" % v), True),
+        ("stop через MCP → ноль в /cmd_vel ≤ 100 мс (p95, каждая серия), K6",
+         lambda c: k6_verdict(c, "mcp", "zero", K6_MCP_S), False),
+        ("…справочно: начало торможения в /cmd_vel ≤ 100 мс (p95) — штатный стоп safety_gate плавный",
+         lambda c: k6_verdict(c, "mcp", "brake", K6_MCP_S), False),
+        ("препятствие → ноль ≤ 150 мс после скана (p95, каждая серия), K6",
+         lambda c: k6_verdict(c, "scan", "zero", K6_SCAN_S), False),
+        ("start_test: 100 из 100 холодных стартов — рестарт neurobot.target, не перезагрузка ОС (K9)", k9_cold, False),
+        ("холодный старт: «ОК» doctor ≤ T = %s с (стенд; на роботе T — по HIL)" % num(K9_T_S, 0), k9_t, False),
+        ("doctor называет сломанный компонент во всех сценариях", k9_broken, False),
+        ("бюджет 4 ГБ: 0 OOM за прогон", oom, False),
     ]
-    out = ["| Критерий | A0 | A1 | Итог A1 |", "|---|---|---|---|"]
-    return out + ["| %s | %s | %s | %s |" % (c, "—" if a is None else a, "—" if b is None else b, v)
-                  for c, a, b, v in rows]
+
+
+def verdicts(a0: dict, cols: List[dict]) -> List[str]:
+    """Критерии по столбцам: значение A0 и каждого A1, итог — по последнему столбцу. Время — ориентир стенда.
+    Подкритерии K6, start_test и бюджет у A0 не мерили: агентский stop у лаборатории идёт мимо любого стража,
+    препятствие демо видит только в скане, механизмов старта и бюджета нет."""
+    a0c = column("A0", a0)
+    rows = []
+    for name, get, for_a0 in criteria():
+        cells = [get(a0c)[0] if for_a0 else None] + [get(c)[0] for c in cols]
+        value, ok = get(cols[-1])
+        mark = "не измерено" if value is None else "мало данных" if ok is None else "выполнено" if ok \
+            else "**не выполнено**"
+        if name.startswith("…справочно") and value is not None:
+            mark = "справочно: " + ("в пределе" if ok else "вне предела")
+        rows.append([name] + ["—" if v is None else v for v in cells] + [mark])
+    return table(["Критерий", "A0"] + [c["label"] for c in cols] + ["Итог: " + cols[-1]["label"]], rows)
+
+
+def breakdown_table(ms_: List[dict], heads: List[str]) -> List[str]:
+    """Разбор верной реакции (metrics.reaction_breakdown) по системам."""
+    def g(m, key, *reactions):
+        d = ((m.get("reaction_breakdown") or {}).get("by_class") or {}).get(key) or {}
+        return sum(d.get(r, 0) for r in reactions) if reactions else sum(d.values())
+
+    def cls_known(m):
+        return "unknown" not in ((m.get("reaction_breakdown") or {}).get("by_class") or {})
+
+    def cell(m, fn):
+        return fn(m) if cls_known(m) else "класс не публикуется"
+
+    def reasons(m):
+        r = ((m.get("reaction_breakdown") or {}).get("safety") or {}).get("reasons") or {}
+        return ", ".join("%s %d" % kv for kv in sorted(r.items(), key=lambda kv: -kv[1])) or "—"
+    every = ("correct", "wrong", "none", "interrupted", "unobserved")
+    rows = [
+        ["жестов", *[str((m.get("reaction_breakdown") or {}).get("gestures", 0)) for m in ms_]],
+        ["класс perception верный (решающее сообщение)", *[cell(m, lambda m: str(g(m, "ok"))) for m in ms_]],
+        ["…манёвр доведён — верная реакция", *[cell(m, lambda m: str(g(m, "ok", "correct"))) for m in ms_]],
+        ["…манёвр оборвала / не пустила защита (safety_gate)", *[cell(m, lambda m: "%d / %d" % (
+            (m["reaction_breakdown"]["safety"]).get("interrupted", 0),
+            (m["reaction_breakdown"]["safety"]).get("none", 0))) for m in ms_]],
+        ["…оборван или не начат без защиты, другой рисунок, не видно", *[cell(m, lambda m: str(
+            g(m, "ok", *every) - g(m, "ok", "correct") - sum(
+                m["reaction_breakdown"]["safety"].get(k, 0) for k in ("interrupted", "none")))) for m in ms_]],
+        ["класс неверный / сообщения нет или «не распознано»",
+         *[cell(m, lambda m: "%d / %d" % (g(m, "wrong"), g(m, "none"))) for m in ms_]],
+        ["верная реакция всего (класс у A0 — по манёвру)", *["%d из %d" % correct(m) for m in ms_]],
+        ["причины остановок защитой при верном классе (жестов)", *[cell(m, reasons) for m in ms_]],
+    ]
+    return table([""] + heads, rows)
 
 
 def p4(p) -> str:
@@ -168,125 +467,237 @@ def p4(p) -> str:
 
 
 def shape_table(groups: dict) -> List[str]:
-    out = ["| Форма | замысел (класс) | demo: p(0…3) | demo: «немые» | полилиния: p(0…3) |", "|---|---|---|---|---|"]
-    for name, g in sorted(groups.items()):
-        if "demo" not in g:
-            continue
-        out.append("| %s | %s | %s | %s | %s |" % (name, g.get("cls"), p4(g["demo"]["p"]), num(g["demo"].get("mute")),
-                                                 p4(g["poly"]["p"])))
-    return out
+    rows = [[name, str(g.get("cls")), p4(g["demo"]["p"]), num(g["demo"].get("mute")), p4(g["poly"]["p"])]
+            for name, g in sorted(groups.items()) if "demo" in g]
+    return table(["Форма", "замысел (класс)", "demo: p(0…3)", "demo: «немые»", "полилиния: p(0…3)"], rows)
 
 
 def start_table(start: dict) -> List[str]:
-    out = ["| Сценарий | прошло / всего | время до «ОК» doctor p50 / p95, с | не прошли |", "|---|---|---|---|"]
+    rows = []
     for name, v in sorted(start.items()):
         if not isinstance(v, dict) or "cycles" not in v:
             continue
         t = v.get("t_doctor_s") or {}
-        out.append("| %s | %s / %s | %s / %s | %s |" % (name, v.get("passed"), v.get("cycles"), num(t.get("p50"), 1),
-                                                       num(t.get("p95"), 1), ", ".join(map(str, v.get("failed") or []))
-                                                       or "—"))
-    return out
+        rows.append([name, "%s / %s" % (v.get("passed"), v.get("cycles")),
+                     "%s / %s / %s" % (num(t.get("p50"), 1), num(t.get("p95"), 1), num(t.get("max"), 1)),
+                     ", ".join(map(str, v.get("failed") or [])) or "—"])
+    return table(["Сценарий", "прошло / всего", "время до «ОК» doctor p50 / p95 / max, с", "не прошли"], rows)
 
 
 def budget_table(b: dict) -> List[str]:
-    out = ["MemoryMax %s МиБ, квота %s %% на %s ядра, отношение A57/ВМ %s; OOM за прогон: %s." % (
-        b.get("mem_max_mib"), b.get("quota_pct"), b.get("cpus"), num(b.get("ratio_a57"), 3), b.get("oom_kill")), "",
-        "| Компонент | уникальные страницы, МиБ |", "|---|---|"]
-    out += ["| %s | %s |" % (k, num(v, 1)) for k, v in sorted((b.get("unique_mib") or {}).items())]
-    out += ["| **slice** | **%s** (PSS %s, RSS %s) |" % (num(b.get("slice_unique_mib"), 1), num(b.get("slice_pss_mib"), 1),
-                                                          num(b.get("slice_rss_mib"), 1)),
-            "", "| Ветка ОС | запас, МиБ (value / pessimistic / optimistic) |", "|---|---|"]
-    out += ["| %s | %s / %s / %s |" % (br, num(c.get("value"), 0), num(c.get("pessimistic"), 0),
-                                      num(c.get("optimistic"), 0)) for br, c in (b.get("margin_mib") or {}).items()]
+    out = ["MemoryMax %s МиБ, квота %s %% на %s ядра, отношение A57/ВМ %s; OOM за прогон: %s. Квота и отношение — "
+           "[допущение] калибровки бюджета 16.10: независимая проверка её вывод о квоте не воспроизвела, калибровка "
+           "ядра зависит от нагрузки ВМ, — всё, что про CPU, ненадёжно." % (
+               b.get("mem_max_mib"), b.get("quota_pct"), b.get("cpus"), num(b.get("ratio_a57"), 3), b.get("oom_kill")),
+           ""]
+    rows = [[k, num(v, 1)] for k, v in sorted((b.get("unique_mib") or {}).items())]
+    rows.append(["**slice**", "**%s** (PSS %s, RSS %s)" % (
+        num(b.get("slice_unique_mib"), 1), num(b.get("slice_pss_mib"), 1), num(b.get("slice_rss_mib"), 1))])
+    out += table(["Компонент", "уникальные страницы, МиБ"], rows) + [""]
+    margins = (b.get("margin_mib") or {}).items()
+    out += table(["Ветка ОС", "запас, МиБ (value / pessimistic / optimistic)"],
+                 [[br, "%s / %s / %s" % (num(c.get("value"), 0), num(c.get("pessimistic"), 0),
+                                         num(c.get("optimistic"), 0))] for br, c in margins])
     return out
+
+
+def runs_table(runs: List[tuple]) -> List[str]:
+    """Прогоны A1 по отдельности: [(метка, метрики)] — мир, «нет отражения» лидара, верные реакции, оборвала или не
+    пустила защита (из них с lidar_nodata), доли состояний safety_gate, тупики защиты, пробег, касания, K1,
+    вмешательства человека и видимые перезапуски, K6."""
+    rows = []
+    for label, m in runs:
+        stops = (m.get("stopped_by_safety") or {}).get("by_seg") or {}
+        nodata = sum(1 for v in stops.values() if "lidar_nodata" in v.get("reasons", []))
+        k3 = m.get("K3") or {}
+        k6 = k6_moving(m) or (None, 0)
+        ends = m.get("dead_ends") or {}
+        rows.append([label, "%s, %s" % (m.get("world", "hall"), {"inf": "+inf"}.get(m.get("no_return"), "NaN")),
+                     "%d из %d" % correct(m), "%d (%d)" % (len(stops), nodata), safety_share(m),
+                     "%d; %s с" % (ends.get("n", 0), num(ends.get("total_s", 0.0), 0)), travel(m),
+                     str((m.get("touches") or {}).get("episodes", 0)), lat(m.get("K1_t0_to_cmd_s")),
+                     "%s / %s" % (k3.get("operator_interventions"), k3.get("visible_restarts")),
+                     "%s%s" % (k6[0], " (+%d в перерыв мира)" % k6[1] if k6[1] else "")])
+    return table(["Прогон", "мир, «нет отражения»", "верных реакций", "оборвала или не пустила защита (lidar_nodata)",
+                  "ok / slow / blocked / estop", "тупики защиты", "пробег; в движении", "касания", "K1 p50 / p95",
+                  "человек / видимые перезапуски", "K6"], rows)
+
+
+def paused(m: dict) -> str:
+    """Остановки ВМ (сон Mac) за прогон — по скачку стенных часов против монотонных."""
+    p = m.get("vm_pauses") or []
+    return "; ".join("пауза ВМ %s с между %s и %s с таймлайна" % (num(x["wall_jump_s"], 0), num(x["after_s"], 0),
+                                                                num(x["before_s"], 0)) for x in p) or "пауз ВМ нет"
 
 
 def long_table(m: dict) -> List[str]:
     mem = (m.get("K8") or {}).get("memory") or {}
     d = (m.get("K8") or {}).get("drift_cmd") or {}
     k3 = m.get("K3") or {}
-    out = ["Длительность %s с; K1 p50 / p95 %s; дрейф K1: первая треть %s, последняя %s; касания %s; перезапуски "
-           "видимые / невидимые %s / %s; вмешательств человека %s; рестарты юнитов: %s." % (
-               num(m.get("duration_s"), 0), lat(m.get("K1_t0_to_cmd_s")), lat(d.get("first")), lat(d.get("last")),
-               touches(m), k3.get("visible_restarts"), k3.get("invisible_restarts"), k3.get("operator_interventions"),
-               ", ".join("%s %s" % kv for kv in sorted((m.get("restarts") or {}).items()))), "",
-           "| Компонент | PSS в начале → в конце, МиБ | наклон, МиБ/ч |", "|---|---|---|"]
-    out += ["| %s | %s → %s | %s |" % (k, num(v.get("pss_mib_start"), 1), num(v.get("pss_mib_end"), 1),
-                                      num(v.get("slope_mib_h"), 1)) for k, v in sorted(mem.items())]
-    return out
+    out = ["Длительность %s с по монотонным часам ВМ (%s); K1 p50 / p95 %s; дрейф K1: первая треть %s, последняя %s; "
+           "касания %s; перезапуски видимые / невидимые %s / %s; вмешательства человека %s; рестарты юнитов (сам "
+           "systemd): %s." % (
+               num(m.get("duration_s"), 0), paused(m), lat(m.get("K1_t0_to_cmd_s")), lat(d.get("first")),
+               lat(d.get("last")), touches(m), k3.get("visible_restarts"), k3.get("invisible_restarts"), humans(m),
+               ", ".join("%s %s" % kv for kv in sorted((m.get("restarts") or {}).items()))), ""]
+    return out + table(["Компонент", "PSS в начале → в конце, МиБ", "наклон, МиБ/ч"],
+                       [[k, "%s → %s" % (num(v.get("pss_mib_start"), 1), num(v.get("pss_mib_end"), 1)),
+                         num(v.get("slope_mib_h"), 1)] for k, v in sorted(mem.items())])
 
 
-def build(a0: dict, a1: dict, start: Optional[dict], budget: Optional[dict], long: Optional[dict],
-          shapes: Optional[dict]) -> str:
+TITLE = ("ВМ sim (Jazzy, Gazebo Harmonic), мир `hall` (README §3), одно расписание жестов и отказов (у A1 18.10 — плюс "
+         "отказы драйверов на своих сегментах).")
+REACTION_NOTE = (
+    "Верная реакция (наблюдатель) — класс распознан верно **и** манёвр демо исполнен целиком по рисунку команд и "
+    "длительностям. У A0 класс демо не публикует: верность видна только по манёвру, и ошибки распознавания у его "
+    "конвейера другие. A0 не останавливается защитой — доводит манёвры ценой касаний; у A1 часть манёвров с верным "
+    "классом обрывает или не пускает safety_gate (причины — в последней строке). Поэтому «верная реакция» A0 и A1 "
+    "сравнивает и распознавание, и цену безопасности. Формы жестов — гипотеза (R7b §4.5), сеть лаборатории — на "
+    "синтетике: о точности на настоящей руке эти числа не говорят.")
+
+
+def build(a0: dict, cols: List[dict], long: Optional[tuple] = None, shapes: Optional[dict] = None,
+          title: str = TITLE, runs: Optional[List[tuple]] = None, k6_ref: List[tuple] = ()) -> str:
+    """long — (метка, метрики) длительного прогона A1; runs — [(метка, метрики)]; k6_ref — [(подпись, имя, замеры)]."""
+    ms_ = [a0] + [c["m"] for c in cols]
+    heads = ["A0 — стек лаборатории как на роботе"] + ["%s — пакет 1 + безопасность v2 (`%s`)" % (
+        c["label"], c["m"].get("label")) for c in cols]
     k3 = lambda m: m.get("K3") or {}  # noqa: E731
+    k7 = lambda m: m.get("K7") or {}  # noqa: E731
+    rtf = lambda m: m.get("rtf_observer") or {}  # noqa: E731
+    rows = [
+        ("Длительность, жестов / отрицательных", lambda m: "%s с, %d / %d" % (
+            num(m["duration_s"], 0), m["segments"]["gestures"], m["segments"]["negatives"]), ""),
+        ("K1 t0 → первая ненулевая /cmd_vel, p50 / p95, с (без ранних)", lambda m: lat(m.get("K1_t0_to_cmd_s")),
+         "стенд ≤ 0,5 (p95); Э2: p50 ≤ 0,7"),
+        ("…ранние (реакция раньше t0), p50, с", early, "—"),
+        ("K2 t0 → начало движения, p50 / p95, с (без ранних)", lambda m: lat(m.get("K2_t0_to_motion_s")),
+         "K1 + ≤ 0,3"),
+        ("Реакции на жесты (наблюдатель)", reactions, "—"),
+        ("Верная реакция на жест (разбор — ниже)", lambda m: "%d из %d" % correct(m), "все"),
+        ("…из них оборвала или не пустила защита", lambda m: "—" if is_a0(m) else "%d" % (
+            m.get("stopped_by_safety") or {}).get("n", 0), "—"),
+        ("K3 глухие жесты (детектор не работал)", lost, "0 глухих"),
+        ("K3 вмешательства человека", humans, "0"),
+        ("K3 перезапуски: видимые / невидимые", lambda m: "%s / %s" % (
+            k3(m).get("visible_restarts"), k3(m).get("invisible_restarts")), "0 видимых"),
+        ("K4 вызовы LLM на жест", lambda m: str((m.get("K4") or {}).get("llm_calls_outside_requests")), "0"),
+        ("Агент: ответил на реплики", agent, "—"),
+        ("Реплики «вперёд»: поехал или агент сообщил о запрете", moves, "все; 0 «готово» без движения"),
+        ("Пробег по истине; время в движении", travel, "—"),
+        ("safety_gate: доля времени ok / slow / blocked / estop", safety_share, "—"),
+        ("Тупики защиты: blocked без движения ≥ 60 с при жестах", dead_end, "0"),
+        ("Тупики «поворот заденет (touch), вперёд нельзя или к препятствию»: эпизодов, вышел отъездом", escape,
+         "все — без человека"),
+        ("K6 «едет без свежей команды > 0,5 с»", unsafe, "0"),
+        ("K7 нежелательные действия (в час)", lambda m: "%s (%s)" % (k7(m).get("total"), num(k7(m).get("per_hour"), 1)),
+         "0 по «не распознано»"),
+        ("Касания (истина Gazebo)", touches, "0"),
+        ("K8 память всех процессов системы (PSS)", memory, "≤ 1 МиБ/ч (8 ч)"),
+        ("RTF (наблюдатель, медиана; доля < 0,95)", lambda m: "%s; %s" % (
+            num(rtf(m).get("median"), 3), num(rtf(m).get("share_below"), 3)), "≥ 0,95"),
+    ]
     lines = ["# A0 против A1 на цифровом двойнике: сводка", "",
-             "Прогоны 16.10.2026, ВМ sim (Jazzy, Gazebo Harmonic), мир `hall` (README §3), одно расписание жестов и "
-             "отказов. Все числа — **ориентир стенда, не результат робота** [замер на двойнике]; результат дают "
+             title + " Все числа — **ориентир стенда, не результат робота** [замер на двойнике]; результат дают "
              "счётчики (касания, глухие жесты, вмешательства человека) и только HIL у лаборатории.", "",
-             "## Таблица A0 / A1", "",
-             "| Метрика (PLAN §1) | A0 — стек лаборатории как на роботе | A1 — пакет 1 + безопасность v2 | Цель |",
-             "|---|---|---|---|",
-             row("Длительность, жестов / отрицательных", "%s с, %d / %d" % (
-                 num(a0["duration_s"], 0), a0["segments"]["gestures"], a0["segments"]["negatives"]),
-                 "%s с, %d / %d" % (num(a1["duration_s"], 0), a1["segments"]["gestures"],
-                                   a1["segments"]["negatives"])),
-             row("K1 t0 → первая ненулевая /cmd_vel, p50 / p95, с", lat(a0.get("K1_t0_to_cmd_s")),
-                 lat(a1.get("K1_t0_to_cmd_s")), "стенд ≤ 0,5 (p95); Э2: p50 ≤ 0,7"),
-             row("K2 t0 → начало движения, p50 / p95, с", lat(a0.get("K2_t0_to_motion_s")),
-                 lat(a1.get("K2_t0_to_motion_s")), "K1 + ≤ 0,3"),
-             row("Реакции на жесты (наблюдатель)", reactions(a0), reactions(a1), "—"),
-             row("…из них оборвала или не пустила защита", "—", "%d" % (a1.get("stopped_by_safety") or {}).get("n", 0),
-                 "—"),
-             row("K3 глухие жесты (детектор не работал)", str(k3(a0).get("deaf_gestures_n")),
-                 str(k3(a1).get("deaf_gestures_n")), "0"),
-             row("K3 вмешательства человека", str(k3(a0).get("operator_interventions")),
-                 str(k3(a1).get("operator_interventions")), "0"),
-             row("K3 перезапуски: видимые / невидимые", "%s / %s" % (k3(a0).get("visible_restarts"),
-                                                                 k3(a0).get("invisible_restarts")),
-                 "%s / %s" % (k3(a1).get("visible_restarts"), k3(a1).get("invisible_restarts")), "0 видимых"),
-             row("K4 вызовы LLM на жест", str((a0.get("K4") or {}).get("llm_calls_outside_requests")),
-                 str((a1.get("K4") or {}).get("llm_calls_outside_requests")), "0"),
-             row("Агент: ответил на реплики", agent(a0), agent(a1), "—"),
-             row("K6 «едет без свежей команды > 0,5 с»", k6(a0), k6(a1), "0"),
-             row("K7 нежелательные действия (в час)", "%s (%s)" % ((a0.get("K7") or {}).get("total"),
-                                                                 num((a0.get("K7") or {}).get("per_hour"), 1)),
-                 "%s (%s)" % ((a1.get("K7") or {}).get("total"), num((a1.get("K7") or {}).get("per_hour"), 1)),
-                 "0 по «не распознано»"),
-             row("Касания (истина Gazebo)", touches(a0), touches(a1), "0"),
-             row("K8 память всех процессов системы (PSS)", memory(a0), memory(a1), "≤ 1 МиБ/ч (8 ч)"),
-             row("RTF (наблюдатель, медиана; доля < 0,95)", "%s; %s" % (
-                 num((a0.get("rtf_observer") or {}).get("median"), 3),
-                 num((a0.get("rtf_observer") or {}).get("share_below"), 3)),
-                 "%s; %s" % (num((a1.get("rtf_observer") or {}).get("median"), 3),
-                             num((a1.get("rtf_observer") or {}).get("share_below"), 3)), "≥ 0,95"),
-             "", "## Итог по критериям", ""] + verdicts(a0, a1, start, budget) + [
-             "", "## K5: отказы по расписанию", ""] + fault_table(a0, a1)
-    if start:
-        lines += ["", "## K9: start_test (A1)", ""] + start_table(start)
-    if budget:
-        lines += ["", "## Бюджет 4 ГБ: A1 целиком в jetson.slice", ""] + budget_table(budget)
+             "## Таблица A0 / A1", ""]
+    lines += table(["Метрика (PLAN §1)"] + heads + ["Цель"], [[n] + [fn(m) for m in ms_] + [g] for n, fn, g in rows])
+    lines += ["", "## Итог по критериям", ""] + verdicts(a0, cols)
+    lines += ["", "## Верная реакция на жест: разбор", ""] + breakdown_table(ms_, ["A0"] + [c["label"] for c in cols])
+    lines += ["", REACTION_NOTE]
+    lines += ["", "## K5: отказы по расписанию", ""] + fault_table([column("A0", a0)] + cols)
+    if k6_ref or any(c["k6"] for c in cols):
+        lines += ["", "## K6: подкритерии (verify/k6.py пакета deploy)", ""] + k6_tables(cols, k6_ref)
+    for c in cols:
+        if c["start"]:
+            lines += ["", "## K9: start_test, %s" % c["label"], ""] + start_table(c["start"])
+        if c["budget"]:
+            lines += ["", "## Бюджет 4 ГБ: %s целиком в jetson.slice" % c["label"], ""] + budget_table(c["budget"])
+        if c["budget_run"]:
+            lines += ["", "Тот же прогон по метрикам PLAN §1:", ""] + long_table(c["budget_run"])
     if long:
-        lines += ["", "## Длительный прогон A1", ""] + long_table(long)
+        lines += ["", "## Длительный прогон, %s (`%s`)" % (long[0], long[1].get("label")), ""] + long_table(long[1])
+    if runs:
+        lines += ["", "## Прогоны A1 по отдельности", ""] + runs_table(runs)
     if shapes:
         lines += ["", "## «Форма → класс» сетью лаборатории (shapeclass, 50 кодирований)", ""] + shape_table(shapes)
     return "\n".join(lines) + "\n"
 
 
+def labeled(items: List[str], flag: str) -> List[Tuple[str, str]]:
+    out = []
+    for item in items:
+        label, sep, path = item.partition("=")
+        if not sep or not label or not path:
+            raise ValueError("%s: нужно МЕТКА=ПУТЬ, получено %r" % (flag, item))
+        out.append((label, path))
+    return out
+
+
+def columns(a: argparse.Namespace) -> List[dict]:
+    """Столбцы A1 по --a1 и привязанные к ним по МЕТКЕ источники; чужая МЕТКА — ошибка."""
+    cols = [column(label, load_metrics(path)) for label, path in labeled(a.a1, "--a1")]
+    by: Dict[str, dict] = {c["label"]: c for c in cols}
+
+    def target(label: str, flag: str) -> dict:
+        if label not in by:
+            raise ValueError("%s: метки %r нет среди --a1 (%s)" % (flag, label, ", ".join(by)))
+        return by[label]
+    for label, path in labeled(a.also, "--also"):
+        target(label, "--also")["also"].append(load_metrics(path))
+    starts: Dict[str, List[str]] = {}
+    for label, path in labeled(a.start, "--start"):
+        target(label, "--start")
+        starts.setdefault(label, []).append(path)
+    for label, dirs in starts.items():
+        by[label]["start"] = start_summary(dirs)
+    for label, path in labeled(a.budget, "--budget"):
+        c = target(label, "--budget")
+        c["budget"] = (M.load_json(os.path.join(path, "run.json")) or {}).get("budget")
+        c["budget_run"] = load_metrics(path)
+    for label, path in labeled(a.k6, "--k6"):
+        target(label, "--k6")["k6"].append((os.path.basename(path).rsplit(".", 1)[0], M.load_json(path) or {}))
+    return cols
+
+
 def main(argv=None) -> int:
     p = argparse.ArgumentParser(prog="python -m neurobot.sim.runs.compare", description=__doc__.split("\n\n")[0])
     p.add_argument("--a0", required=True, help="каталог прогона A0")
-    p.add_argument("--a1", required=True, help="каталог прогона A1")
-    p.add_argument("--start", default="", help="каталог start_test (summary.json)")
-    p.add_argument("--budget", default="", help="каталог budget_a1.py (run.json)")
-    p.add_argument("--long", default="", help="каталог длительного прогона A1")
+    p.add_argument("--a1", action="append", required=True, metavar="МЕТКА=КАТАЛОГ",
+                   help="прогон A1 — столбец сводки; можно несколько, итог — по последнему")
+    p.add_argument("--also", action="append", default=[], metavar="МЕТКА=КАТАЛОГ",
+                   help="другой прогон кода столбца МЕТКА (для «0 касаний» по всем прогонам)")
+    p.add_argument("--start", action="append", default=[], metavar="МЕТКА=КАТАЛОГ",
+                   help="часть start_test столбца (cycles.jsonl); можно несколько")
+    p.add_argument("--budget", action="append", default=[], metavar="МЕТКА=КАТАЛОГ",
+                   help="прогон budget_a1.py столбца (run.json)")
+    p.add_argument("--k6", action="append", default=[], metavar="МЕТКА=ФАЙЛ",
+                   help="серия verify/k6.py столбца (JSON); можно несколько")
+    p.add_argument("--k6-ref", action="append", default=[], metavar="ПОДПИСЬ=ФАЙЛ",
+                   help="серия verify/k6.py для справки (только таблица K6); можно несколько")
+    p.add_argument("--long", default="", metavar="МЕТКА=КАТАЛОГ", help="длительный прогон A1 (МЕТКА — версия кода)")
     p.add_argument("--shapeclass", default="", help="каталог shapeclass (table.json)")
+    p.add_argument("--runs", action="append", default=[], metavar="МЕТКА=КАТАЛОГ",
+                   help="прогон A1 для таблицы по отдельности (повтор, бюджет, мир, no_return); можно несколько")
+    p.add_argument("--title", default=TITLE, help="первая фраза сводки: даты, мир, расписание")
+    p.add_argument("--notes", default="", help="разбор прогонов (Markdown) — в конец сводки")
     p.add_argument("--out", required=True, help="compare.md")
     a = p.parse_args(argv)
-    start = M.load_json(os.path.join(a.start, "summary.json")) if a.start else None
-    budget = (M.load_json(os.path.join(a.budget, "run.json")) or {}).get("budget") if a.budget else None
+    try:
+        cols = columns(a)
+        runs = [(label, load_metrics(path)) for label, path in labeled(a.runs, "--runs")]
+        ref = [(label, os.path.basename(path).rsplit(".", 1)[0], M.load_json(path) or {})
+               for label, path in labeled(a.k6_ref, "--k6-ref")]
+        long = next(((label, load_metrics(path)) for label, path in labeled([a.long], "--long")), None) \
+            if a.long else None
+    except ValueError as e:
+        print("compare: %s" % e, file=sys.stderr)
+        return 2
     shapes = (M.load_json(os.path.join(a.shapeclass, "table.json")) or {}).get("groups") if a.shapeclass else None
-    text = build(load_metrics(a.a0), load_metrics(a.a1), start, budget, load_metrics(a.long or None), shapes)
+    text = build(load_metrics(a.a0), cols, long, shapes, a.title, runs, ref)
+    if a.notes:
+        with open(a.notes, encoding="utf-8") as f:
+            text += "\n" + f.read()
     with open(a.out, "w", encoding="utf-8") as f:
         f.write(text)
     return 0

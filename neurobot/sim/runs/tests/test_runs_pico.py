@@ -69,7 +69,7 @@ class FakeGateway(threading.Thread):
             conn.sendall(b"HTTP/1.1 401 Unauthorized\r\n\r\n")
             conn.close()
             return
-        key = [l.split(": ", 1)[1] for l in text.split("\r\n") if l.startswith("Sec-WebSocket-Key")][0]
+        key = [ln.split(": ", 1)[1] for ln in text.split("\r\n") if ln.startswith("Sec-WebSocket-Key")][0]
         acc = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
         conn.sendall(("HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                       "Sec-WebSocket-Accept: %s\r\n\r\n" % acc).encode() + server_frame(pico.OP_PING, b"p"))

@@ -1,4 +1,5 @@
-"""Выход «драйверов» двойника (sensor_model.py) без ROS: скан как у urg_node2, глубина как у realsense2_camera."""
+"""Выход «драйверов» двойника (sensor_model.py) без ROS: скан как у urg_node2 (NaN на «нет отражения» или +inf
+по REP 117), глубина как у realsense2_camera."""
 from __future__ import annotations
 
 import math
@@ -19,6 +20,13 @@ class ScanTest(unittest.TestCase):
         out = sm.urg_ranges([0.05, 0.099, 0.15, 1.2, float("inf"), 5.7, float("nan"), 5.6], 5.6, sm.SELF_HIT_M)
         self.assertTrue(all(math.isnan(v) for v in out[:2] + out[4:7]))
         self.assertEqual(out[2:4] + out[7:], [0.15, 1.2, 5.6])
+
+    def test_rep117_no_return_is_plus_inf(self):
+        # no_return inf — urg_node2 по REP 117: «нет отражения» — +inf, свой корпус (код 0 URG) — по-прежнему NaN
+        out = sm.urg_ranges([0.05, 1.2, float("inf"), 5.7, float("nan"), 5.6], 5.6, sm.SELF_HIT_M, "inf")
+        self.assertTrue(math.isnan(out[0]))
+        self.assertEqual(out[1:4] + out[5:], [1.2, math.inf, math.inf, 5.6])
+        self.assertEqual(out[4], math.inf)
 
     def test_threshold_covers_camera_body_with_noise(self):
         # дальний угол корпуса D435i — 0,099 м от оси лидара; шум gpu_lidar σ 0,01 м: порог ≥ 0,099 + 5σ

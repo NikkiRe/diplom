@@ -62,6 +62,29 @@ PYTHONPATH=<корень проекта>:$PYTHONPATH python3 -m neurobot.executo
    рестарта исполнителя, не продолжаются (PLAN §13.3; находка ревью W2 — прежний автомат брал идущий манёвр жеста с
    первого же скана). Демо в покое шлёт нули — вход жестов взводится первым нулём; вход агента, молчавший
    `start_quiet_s`, взведён. Цена: команда агента, пришедшая в первые 2 с после старта исполнителя, ждёт паузы.
+10. **Выход из тупика** (повторная приёмка 18.10). Тупик — поворот на месте заденет (`limits.w_max` = 0, причина
+    `touch`), назад можно (`v_rev` > 0), а вперёд нельзя (`v_max` = 0) или можно лишь подползти к препятствию или краю
+    (`slow` с причиной `approach` — путь короче тормозного на полной скорости, ≈0,15 м, — `obstacle` или `cliff`;
+    `FRONT_NEAR` в `guard.py`): робот подъехал к стене под углом или к ножке стула. Второй случай — прогон `lab_v4`
+    (§1 notes acceptfix2): 2–3 мин `slow` с `approach` и `touch`, жесты с поворотом отменялись, «вперёд» вёл бы в
+    препятствие. Ни один жест не ведёт назад (рефлекс демо: turn180, come, go_left/go_right, think), и в прогоне A1
+    18.10 робот так простоял у стула 221 с и пропустил 9 жестов. Если тупик
+    длится `escape_after_s` (3 с), а заявок нет, исполнитель сам отъезжает назад со скоростью `escape_speed`
+    (0,05 м/с) **по своему следу**: не дальше `escape_dist` (0,1 м) и прямого пути, пройденного вперёд по `/odom` после
+    последнего поворота (по времени, `dist / escape_speed`). Сзади датчиков нет, поэтому назад — только туда, где
+    корпус только что был: поворот больше 0,15 рад, скачок одометрии больше 0,5 м (рестарт базы), защёлка (удар,
+    наклон — робота могли поднять), потеря одометрии (`stale_odom`) и потеря safety_gate след обнуляют; полный стоп
+    по другим датчикам (отказ драйвера лидара или камеры) робота не двигает — след остаётся (в прогоне 1 ч на
+    промежуточном правиле «полный стоп обнуляет» отказ лидара стёр след, и два тупика 150 и 253 с остались без
+    отъезда — §1 notes acceptfix2); следа короче 3 см нет — робот поставлен руками или только что развернулся, — и
+    отъезда нет. У стены под углом поворот снова разрешился после 0,046 м назад [замер приёмки 18.10, S5]. Заявка
+    агента (в том числе явный стоп) или жеста главнее отъезда и прерывает его; защёлка, потеря safety_gate или запрет
+    заднего хода (`reverse_limit` safety_gate: не дальше `reverse_dist` за самую дальнюю точку пути) его отменяют.
+    События — `escape {status: start, dist_m, reasons}` и
+    `task_end {task: escape, status: done|preempted|estop|blocked|safety_lost}`. Чего отъезд не решает: следа нет
+    (поставлен руками, развернулся вплотную), касание сбоку (`touch` по лидару у борта) назад не уходит, перенос
+    робота без защёлки одометрия не видит (след остаётся прежним). Тогда тупик — агенту или человеку (RUNBOOK §4.10);
+    `escape_after_s:=0.0` — отъезд выключен.
 
 Публикация в `/neurobot/cmd_vel_req`: при смене команды — сразу из колбэка входа (L2); на тике 20 Гц — каждая
 ненулевая команда, нули в покое — каждый второй тик (10 Гц). Явный ноль — при старте (до READY), на SIGTERM/SIGINT и
@@ -86,6 +109,9 @@ PYTHONPATH=<корень проекта>:$PYTHONPATH python3 -m neurobot.executo
 | `safety_timeout` | 1.0 | с; `/neurobot/safety_state` старше — safety_gate потерян |
 | `require_safety` | true | без свежего `safety_state` задачи не исполняются (`Guard()` без параметров — правила v1 без safety_gate, для тестов) |
 | `start_quiet_s` | 2.0 | с, удержание старта (правило 9): с запасом на discovery DDS [допущение; не мерено на Jetson] |
+| `escape_after_s` | 3.0 | с тупика safety_gate без заявок до отъезда назад (правило 10); 0 — не отъезжать [допущение] |
+| `escape_speed` | 0.05 | м/с назад при отъезде — как `reverse_speed` safety_gate (PLAN §2.4: задний ход ≤ 0,05 м/с) |
+| `escape_dist` | 0.1 | м отъезда наибольший (и не дальше следа по `/odom`), по времени [допущение; у стены хватило 0,046 м — S5 приёмки 18.10] |
 
 Неверный параметр — код выхода 2 и причина в журнале; типы проверяет сам узел (на Foxy rclpy их не сверяет: строка
 `'"false"'` в `allow_blind` была бы истинной — находка ревью); исключение — код 1 (ноль уже отправлен).
@@ -97,21 +123,23 @@ PYTHONPATH=<корень проекта>:$PYTHONPATH python3 -m neurobot.executo
 | `/cmd_vel_gesture` | `geometry_msgs/Twist` | вход (perception legacy, ремап `/cmd_vel`) |
 | `/cmd_vel_agent` | `geometry_msgs/Twist` | вход (агентский путь; имя — ремапом под конфиг MCP лаборатории) |
 | `/scan` | `sensor_msgs/LaserScan`, QoS сенсоров (best effort — совместим с reliable-издателем) | вход |
+| `/odom` | `nav_msgs/Odometry`, QoS сенсоров | вход: след для отъезда из тупика (правило 10) |
 | `/neurobot/safety_state` | `std_msgs/String`, JSON safety_gate | вход |
 | `/neurobot/cmd_vel_req` | `Twist` или `TwistStamped` | выход: вход safety_gate |
 | `/neurobot/motion_state` | `std_msgs/String`, JSON | выход |
-| `/neurobot/events` | `std_msgs/String`, JSON `{type: task_end, task: gesture\|agent, status: estop\|blocked\|safety_lost, reasons, boot, seq}` | выход |
+| `/neurobot/events` | `std_msgs/String`, JSON `{type: task_end, task: gesture\|agent\|escape, status: estop\|blocked\|safety_lost\|done\|preempted, reasons, boot, seq}`; начало отъезда — `{type: escape, status: start, reasons}` | выход |
 
-`/neurobot/motion_state`: `{boot, seq, moving, by: agent|gesture|none, blocked_front, front, cut, linear, angular,
-scan_age_s, front_min_m, front_gap_deg, safety, counters: {cut_forward, stale, preempted, safety_cancel, invalid,
-ticks, published}}`; `safety` — состояние safety_gate или `null`, если его нет дольше `safety_timeout`.
+`/neurobot/motion_state`: `{boot, seq, moving, by: agent|gesture|escape|none, blocked_front, front, cut, linear,
+angular, scan_age_s, front_min_m, front_gap_deg, safety, counters: {cut_forward, stale, preempted, safety_cancel,
+escape, invalid, ticks, published}}`; `safety` — состояние safety_gate или `null`, если его нет дольше
+`safety_timeout`.
 - `front` — можно ли вперёд при скорости выбранной команды: `clear`, `obstacle`, `blind`, `stale`;
   `blocked_front` = `front != clear`; `cut` — движение вперёд запрошено и срезано.
 - `front_min_m` — ближайшая достоверная дальность в секторе (`null` — ничего), `front_gap_deg` — самый широкий
   провал.
 - Счётчики — переходы, а не вызовы: `cut_forward` — движение вперёд срезано; `stale` — ненулевой вход перестал
-  приходить; `preempted` — агент погасил манёвр жеста; `safety_cancel` — задача отменена по safety_gate. `invalid` —
-  нечисловые входы, по сообщениям.
+  приходить; `preempted` — агент погасил манёвр жеста; `safety_cancel` — задача отменена по safety_gate; `escape` —
+  начат отъезд из тупика. `invalid` — нечисловые входы, по сообщениям.
 
 perception v2 по полю `moving` ставит детекцию на паузу, а по `cut` при `by=gesture` отменяет остаток манёвра.
 
@@ -140,16 +168,20 @@ READY уходит после первого нуля, WATCHDOG — с тика 
 source scripts/sim/vm_env.sh && python3 -m pytest -q -p no:cacheprovider neurobot/tests/test_executor_node.py
 ```
 
-`test_executor_guard.py` — таблица переходов (жест / агент / устарело / препятствие / слепой сектор / скан
-устарел; входы до таблицы в покое — удержание старта проверяет `test_safety_executor.py`), тормозная дальность,
-границы сектора, сканы TurtleBot3 и URG робота (683 луча, блок NaN RS3, коды ошибок N14). Ноль на выходе —
+`test_executor_guard.py` — таблица переходов (жест / агент / устарело / препятствие / слепой сектор / скан устарел;
+входы до таблицы в покое — удержание старта проверяет `test_safety_executor.py`), тормозная дальность, границы
+сектора, сканы TurtleBot3 и URG робота (683 луча, блок NaN RS3, коды ошибок N14). Ноль на выходе —
 `test_executor_node.py` (процесс; правила v1 — с `require_safety:=false`). Работа под safety_gate —
-`test_safety_executor.py` (логика: отмена и `task_end`, слепой сектор, нечисловые входы, вырожденный скан,
-удержание старта) и `test_safety_node.py` (процессы: исполнитель → safety_gate → `task_end{estop}`; новый процесс
-исполнителя не продолжает идущий манёвр жеста). Тесты ROS берут домен `NEUROBOT_TEST_DOMAIN`
-(41; стенд и его тесты — 30 и 70–99). Под Foxy узел не запускался — проверены синтаксис и логика под Python 3.8,
-API rclpy сверены по исходникам ветки foxy (`ParameterException`, `declare_parameter`, `qos_profile_sensor_data`,
-обработчик SIGINT только будит guard conditions — свой обработчик сигналов безопасен).
+`test_safety_executor.py` (логика: отмена и `task_end`, слепой сектор, нечисловые входы, вырожденный скан, удержание
+старта, выход из тупика: отъезд через `escape_after_s` на `escape_dist` по следу и не дальше следа, след после
+полного стопа по лидару цел; без отъезда — поворот можно, назад нельзя, защёлка, safety_gate потерян, отъезд
+выключен, следа нет, он короче 3 см, обнулён поворотом, скачком одометрии, защёлкой или потерей одометрии; агент
+прерывает, запрет назад отменяет) и `test_safety_node.py`
+(процессы: исполнитель → safety_gate → `task_end{estop}`; новый процесс исполнителя не продолжает идущий манёвр
+жеста). Тесты ROS берут домен `NEUROBOT_TEST_DOMAIN` (41; стенд и его тесты — 30 и 70–99). Под Foxy узел не
+запускался — проверены синтаксис и логика под Python 3.8, API rclpy сверены по исходникам ветки foxy
+(`ParameterException`, `declare_parameter`, `qos_profile_sensor_data`, обработчик SIGINT только будит guard
+conditions — свой обработчик сигналов безопасен).
 
 Проверка 14–15.10.2026 — `experiments/results/neurobot_20261014_onboard_final/` (вместе с perception): тесты
 под 3.12 и 3.8 на Mac и в ВМ sim; в дымовых прогонах и на стенде Gazebo (stm32_sim hold) — 0 «едет без свежей

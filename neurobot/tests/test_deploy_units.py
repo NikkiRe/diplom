@@ -119,7 +119,8 @@ class UnitsTest(unittest.TestCase):
             "neurobot-labworker@.service": {"neurobot-perception.service", "neurobot-rosbridge.service"},
             "neurobot-mcp.service": {"neurobot-rosbridge.service"},
             "neurobot-picoclaw.service": {"neurobot-rosbridge.service", "neurobot-mcp.service"},
-            "neurobot-watchdog.service": {"neurobot-mcp.service", "neurobot-picoclaw.service"},
+            # сторож — вместе с драйверами: зависший драйвер не даёт подняться остальным, а перезапускает его он
+            "neurobot-watchdog.service": set(),
         }
         self.assertEqual(set(want), set(self.units) - {"neurobot.target"})
         for name, after in want.items():
@@ -195,7 +196,7 @@ class UnitsTest(unittest.TestCase):
         fake = parse_env((DEPLOY / "fakes/fake.env").read_text(encoding="utf-8"))
 
         def generic(keys):
-            return {re.sub(r"NEUROBOT_(DRIVER|LABWORKER)_[a-z]\w*?_(CMD|DEVICE|TOPIC|USB|URL|MODULES|CAMERA)$",
+            return {re.sub(r"NEUROBOT_(DRIVER|LABWORKER)_[a-z]\w*?_(CMD|DEVICE|TOPIC|USB|URL|MODULES|CAMERA|FRESH)$",
                            r"NEUROBOT_\1_<имя>_\2", k) for k in keys}
         keys = generic((set(DEFAULTS) | set(example) | set(fake)) - set(ROS_KEYS))
         keys |= {"NEUROBOT_LABWORKER_<имя>_{}".format(f) for f in ("CMD", "URL", "MODULES", "CAMERA")}

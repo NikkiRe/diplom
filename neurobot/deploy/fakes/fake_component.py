@@ -3,10 +3,11 @@
 движения; только то, что видят systemd и doctor: READY/WATCHDOG, порты, темы, строки журнала PicoClaw.
 
     fake_component.py safety              узел safety_gate: нули в /cmd_vel 10 Гц, /neurobot/safety_state 5 Гц,
-                                          защёлка по /neurobot/estop (engage — кто угодно, release — by=human), она
-                                          хранится в $STATE_DIRECTORY/estop.json и читается до READY (файл не
-                                          читается — старт с защёлкой); READY после первого нуля, WATCHDOG от тика,
-                                          ноль при выходе
+                                          защёлка: engage — по /neurobot/estop (кто угодно), снятие — только
+                                          release.json root в NEUROBOT_ESTOP_RELEASE_DIR (sudo neurobot estop
+                                          release), как у safety_gate; хранится в $STATE_DIRECTORY/estop.json и
+                                          читается до READY (файл не читается — старт с защёлкой); READY после
+                                          первого нуля, WATCHDOG от тика, ноль при выходе
     fake_component.py executor            узел motion_executor (как страж v1): нули в «/cmd_vel» 10 Гц — во вход
                                           safety_gate их уводит ремап из --ros-args; /neurobot/motion_state 2 Гц;
                                           READY после первого нуля, WATCHDOG от тика
@@ -40,6 +41,7 @@ import json
 import os
 import signal
 import socket
+import stat
 import sys
 import threading
 import time
@@ -163,6 +165,21 @@ def save_latch(path: str, reasons: list) -> None:
         print("fake: защёлка не сохранена в {}: {}".format(path, e), file=sys.stderr, flush=True)
 
 
+def release_request(directory: str, owner: int = 0):
+    """Запрос снятия, как у safety_gate (latch.read_release): каталог и файл владельца owner, без записи группе и
+    прочим, обычный файл; иначе (и без файла) — None."""
+    path = os.path.join(directory, "release.json")
+    try:
+        for p, kind in ((directory, stat.S_ISDIR), (path, stat.S_ISREG)):
+            st = os.lstat(p)
+            if not kind(st.st_mode) or st.st_uid != owner or st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+                return None
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
 def run_safety(args, faults: Faults) -> int:
     from geometry_msgs.msg import Twist
     from std_msgs.msg import String
@@ -175,6 +192,8 @@ def run_safety(args, faults: Faults) -> int:
         state_dir = os.environ.get("STATE_DIRECTORY", "").split(":")[0]
         path = os.path.join(state_dir, "estop.json") if state_dir else ""
         latch = load_latch(path)
+        since = [time.time() if latch else None]
+        release_dir = os.environ.get("NEUROBOT_ESTOP_RELEASE_DIR", "/run/neurobot-estop")
 
         def on_estop(msg):
             try:
@@ -183,19 +202,23 @@ def run_safety(args, faults: Faults) -> int:
                 return
             if cmd.get("cmd") == "engage" and not latch:
                 latch.append("estop: " + (cmd.get("reason") or cmd.get("by") or "?"))
-                save_latch(path, latch)
-            elif cmd.get("cmd") == "release" and cmd.get("by") == "human" and latch:
-                latch.clear()
+                since[0] = time.time()
                 save_latch(path, latch)
         node.create_subscription(Twist, os.environ.get("NEUROBOT_CMD_VEL_REQ", "/neurobot/cmd_vel_req"),
                                  lambda _m: None, 10)
         node.create_subscription(String, os.environ.get("NEUROBOT_ESTOP_TOPIC", "/neurobot/estop"), on_estop, 10)
 
         def state(n):
+            req = release_request(release_dir) if latch else None
+            if req and req.get("since") == since[0] and req.get("reasons") == latch:
+                latch.clear()
+                since[0] = None
+                save_latch(path, latch)
             if n % 2 == 0:
                 state_pub.publish(String(data=json.dumps({
                     "state": "estop" if latch else "ok", "reasons": list(latch), "min_clearance_m": None,
-                    "limits": {"v_max": 0.25, "w_max": 0.8}})))
+                    "limits": {"v_max": 0.25, "w_max": 0.8},
+                    "estop": {"engaged": bool(latch), "since": since[0], "reasons": list(latch)}})))
         _ticking(node, faults, zero, state)
         return zero
     return ros_node(os.environ.get("NEUROBOT_SAFETY_NODE") or "safety_gate", body)

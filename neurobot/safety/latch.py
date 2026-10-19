@@ -1,18 +1,26 @@
-"""Аварийная защёлка safety_gate: команды /neurobot/estop и хранение в файле (контракт neurobot/deploy).
+"""Аварийная защёлка safety_gate: команды /neurobot/estop, снятие через каталог root и хранение в файле (контракт
+neurobot/deploy).
 
 Команда — std_msgs/String с JSON {"cmd": "engage" | "release", "by", "reason", "id", "t"}; CLI `neurobot estop`
-шлёт её трижды с одним id. Защёлка — состояние safety_gate: причины атомарно (временный файл, fsync, rename)
-пишутся в estop.json до того, как состояние estop уйдёт в /neurobot/safety_state, и читаются до READY. Файл есть,
-но не читается — старт с защёлкой; не удалось записать — защёлка остаётся в памяти, строка в журнале. Формат файла —
-{"engaged", "reasons", "t"}, как у подставного safety_gate deploy.
+шлёт её трижды с одним id. Ставит защёлку кто угодно. Снятие по теме не принимается: поле by самозаявленное, и узел
+ROS (или клиент rosbridge с открытой темой) подписался бы «human». Снимает защёлку только файл release.json в
+каталоге release_dir, которые принадлежат root и не доступны на запись группе и прочим: его пишет `sudo neurobot
+estop release` после подтверждения в терминале, а агенту (PicoClaw без exec, MCP-сервер, rosbridge — не root)
+создать такой файл нечем. В файле — {"id", "t", "since", "reasons", "reason"}: защёлка, которую видел человек (её
+since и причины), и время записи.
+Защёлка — состояние safety_gate: причины атомарно (временный файл, fsync, rename) пишутся в estop.json до того, как
+состояние estop уйдёт в /neurobot/safety_state, и читаются до READY. Файл есть, но не читается — старт с защёлкой;
+не удалось записать — защёлка остаётся в памяти, строка в журнале. Формат файла — {"engaged", "reasons", "t"}, как у
+подставного safety_gate deploy.
 """
 from __future__ import annotations
 
 import json
 import logging
 import os
+import stat
 import time
-from typing import List, NamedTuple, Optional
+from typing import List, NamedTuple, Optional, Tuple
 
 log = logging.getLogger("safety_gate")
 
@@ -37,6 +45,52 @@ def parse(data: str) -> EstopCmd:
     t = doc.get("t")
     return EstopCmd(cmd, str(doc.get("by") or "?"), str(doc.get("reason") or ""), str(doc.get("id") or ""),
                     float(t) if isinstance(t, (int, float)) and not isinstance(t, bool) else None)
+
+
+class ReleaseReq(NamedTuple):
+    """Снятие защёлки человеком: файл release.json каталога root (sudo neurobot estop release)."""
+    id: str
+    t: float                      # время записи (часы робота), с
+    since: Optional[float]        # since защёлки, которую видел человек
+    reasons: Tuple[str, ...]      # её причины
+    reason: str
+
+
+RELEASE_FILE = "release.json"
+RELEASE_MAX_BYTES = 65536
+
+
+def _root_only(st: os.stat_result, owner: int, what: str, path: str) -> None:
+    if st.st_uid != owner:
+        raise ValueError("{} {} принадлежит uid {}, а не {} — снятие не принято".format(what, path, st.st_uid, owner))
+    if st.st_mode & (stat.S_IWGRP | stat.S_IWOTH):
+        raise ValueError("{} {} доступен на запись группе или прочим ({:o}) — снятие не принято".format(
+            what, path, stat.S_IMODE(st.st_mode)))
+
+
+def read_release(directory: str, owner: int = 0) -> Optional[ReleaseReq]:
+    """Запрос снятия из directory/release.json; None — файла нет. ValueError — каталог или файл не root (owner),
+    доступны на запись группе или прочим, ссылка вместо файла, не разобран."""
+    path = os.path.join(directory, RELEASE_FILE)
+    try:
+        st_dir = os.lstat(directory)
+        st = os.lstat(path)
+    except FileNotFoundError:
+        return None
+    if not stat.S_ISDIR(st_dir.st_mode):
+        raise ValueError("{} — не каталог".format(directory))
+    _root_only(st_dir, owner, "каталог", directory)
+    if not stat.S_ISREG(st.st_mode) or st.st_size > RELEASE_MAX_BYTES:
+        raise ValueError("{} — не обычный файл или больше {} байт".format(path, RELEASE_MAX_BYTES))
+    _root_only(st, owner, "файл", path)
+    try:
+        with open(path, encoding="utf-8") as f:
+            doc = json.load(f)
+        t, since = doc["t"], doc.get("since")
+        return ReleaseReq(str(doc["id"]), float(t), None if since is None else float(since),
+                          tuple(str(r) for r in doc.get("reasons") or ()), str(doc.get("reason") or ""))
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        raise ValueError("{} не разобран: {}".format(path, e)) from e
 
 
 class Latch:

@@ -19,7 +19,8 @@
 коридора вперёд. Кадр с покрытием ниже depth_min_valid safety_gate не принимает — глубина устаревает.
 
 Принятый кадр ещё и отвечает лидару (FreeSpace): точка плоскости скана свободна, если камера смотрит сквозь неё и видит
-поверхность дальше. Так «нет данных» лидара (луч без отражения, чёрный предмет) впереди в поле камеры закрывает глубина.
+поверхность дальше. Так «нет данных» лидара (луч без отражения, чёрный предмет) впереди в поле камеры закрывает глубина;
+про точку вне поля камеры кадр не говорит ничего (visible).
 """
 from __future__ import annotations
 
@@ -34,6 +35,7 @@ from .geometry import Pose
 OBSTACLE, DROP = "obstacle", "drop"
 BAND_M = 0.1  # м, ширина полосы коридора для покрытия: провал глубины такой ширины уже не «одиночные пиксели»
 FREE_TOL_M = 0.05  # м: камера видит поверхность за точкой дальше на столько — точка свободна [допущение: клетка памяти]
+FREE_BELOW_RAD = math.radians(10.0)  # пиксель точки без глубины: лучи ниже в том же столбце не дальше [допущение]
 
 # Кодировки realsense2_camera (16UC1, мм; 0 — нет данных) и gz/ros_gz (32FC1, м).
 ENCODINGS = {"16UC1": ("u2", 0.001), "mono16": ("u2", 0.001), "32FC1": ("f4", 1.0)}
@@ -85,13 +87,19 @@ class Sampler:
 
 class FreeSpace:
     """Свободна ли точка базы по кадру глубины: камера смотрит сквозь неё и видит поверхность дальше FREE_TOL_M (по
-    оси камеры). Точка за камерой, вне кадра или в пикселе без глубины — не свободна."""
+    оси камеры). В пикселе точки глубины нет (поверхность дальше дальности камеры: зал, проём, — или чёрное и блестящее)
+    — точка свободна, если первый луч ниже в том же столбце (не дальше FREE_BELOW_RAD) уходит дальше неё: он проходит
+    под точкой, а предмет, стоящий там от пола, его бы остановил; не свободна — предмет без глубины от пола до этой
+    высоты. Точка за камерой или вне кадра — не свободна. visible — точка в поле камеры (впереди неё и внутри кадра):
+    про точку вне поля кадр не говорит ничего."""
 
     def __init__(self, sampler: Sampler, pose: Pose, depth: np.ndarray):
         self.sampler, self.pose = sampler, pose
         self.depth = depth.reshape(len(sampler.rows), len(sampler.cols))
+        self.below = max(1, int(math.ceil(FREE_BELOW_RAD * sampler.camera.fy / sampler.stride)))
 
-    def __call__(self, points: np.ndarray) -> np.ndarray:
+    def _project(self, points: np.ndarray):
+        """(в поле камеры, строка и столбец уменьшенной карты, глубина точки по оси камеры)."""
         s, cam = self.sampler, self.sampler.camera
         q = (points - self.pose.pos) @ self.pose.rot  # в оптический кадр: x вправо, y вниз, z вперёд
         z = q[:, 2]
@@ -101,8 +109,23 @@ class FreeSpace:
         inside = ahead & (u >= 0.0) & (u < cam.width) & (v >= 0.0) & (v < cam.height)
         i = np.clip(np.rint((v - s.rows[0]) / s.stride), 0, len(s.rows) - 1).astype(int)
         j = np.clip(np.rint((u - s.cols[0]) / s.stride), 0, len(s.cols) - 1).astype(int)
+        return inside, i, j, z
+
+    def __call__(self, points: np.ndarray) -> np.ndarray:
+        inside, i, j, z = self._project(points)
         d = self.depth[i, j]
-        return inside & (d > 0.0) & (d >= z + FREE_TOL_M)
+        free = inside & (d > 0.0) & (d >= z + FREE_TOL_M)
+        hole = np.flatnonzero(inside & (d <= 0.0))
+        if len(hole):
+            rows = np.minimum(i[hole, None] + np.arange(1, self.below + 1), len(self.sampler.rows) - 1)
+            col = self.depth[rows, j[hole, None]]
+            first = np.argmax(col > 0.0, axis=1)
+            below = col[np.arange(len(hole)), first]
+            free[hole] = (below > 0.0) & (below >= z[hole] + FREE_TOL_M)
+        return free
+
+    def visible(self, points: np.ndarray) -> np.ndarray:
+        return self._project(points)[0]
 
 
 class Coverage:

@@ -162,9 +162,12 @@ class RenderTest(unittest.TestCase):
 
     def test_enable_list(self):
         cfg = Config({"NEUROBOT_DRIVERS": "urg", "NEUROBOT_COMPONENTS": "safety executor perception"}, "/e/n.env")
+        # сторож и без агентского пути: свежесть тем драйверов (зависший драйвер)
         self.assertEqual(render.enable_list(cfg), ["neurobot.target", "neurobot-driver@urg.service",
                                                    "neurobot-safety.service", "neurobot-executor.service",
-                                                   "neurobot-perception.service"])
+                                                   "neurobot-perception.service", "neurobot-watchdog.service"])
+        cfg = Config({"NEUROBOT_COMPONENTS": "safety executor perception"}, "/e/n.env")
+        self.assertNotIn("neurobot-watchdog.service", render.enable_list(cfg))  # сторожить нечего
         cfg = Config({"NEUROBOT_COMPONENTS": "safety executor mcp", "NEUROBOT_LABWORKERS": "vision"}, "/e/n.env")
         self.assertEqual(render.enable_list(cfg)[-3:], ["neurobot-labworker@vision.service", "neurobot-mcp.service",
                                                         "neurobot-watchdog.service"])

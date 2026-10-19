@@ -1,7 +1,7 @@
 """CLI neurobot: doctor, проверки перед стартом, ожидание готовности, явный ноль, сторож, start_test.
 
     neurobot doctor [--json] [--no-ros]          всё ли поднялось (коды: 0 ОК, 1 проблема, 2 ошибка, 3 запуск)
-    neurobot estop engage|release [--reason Т]   аварийная защёлка safety_gate; release — человеком, в терминале
+    neurobot estop engage|release [--reason Т]   аварийная защёлка safety_gate; release — человеком, в терминале, root
     neurobot precheck <компонент>                ExecStartPre: safety | executor | perception | rosbridge | mcp |
                                                  picoclaw | driver@<имя> | labworker@<имя>
     neurobot wait-port rosbridge                 ExecStartPost: WebSocket на NEUROBOT_ROSBRIDGE_PORT
@@ -11,7 +11,7 @@
     neurobot wait-http labworker@<имя>           ExecStartPost: GET NEUROBOT_LABWORKER_<имя>_URL отвечает 200
     neurobot wait-graph executor|perception      ExecStartPost: узел компонента в графе и не пишет в /cmd_vel
     neurobot zero                                ExecStopPost safety_gate: явный ноль в /cmd_vel
-    neurobot watchdog [--once]                   сторож MCP и PicoClaw
+    neurobot watchdog [--once]                   сторож: драйверы и rosbridge (часто), MCP и PicoClaw (период)
     neurobot start-test --cycles N --out КАТАЛОГ холодные старты и «сломанные» старты (root)
     neurobot picoclaw-config check|merge         конфиг PicoClaw: проверка / наложение оверлея
     neurobot render --out КАТАЛОГ                юниты из шаблонов (install.sh); печатает, что включать
@@ -36,7 +36,7 @@ from .report import emit, hint
 from .sd import Systemd, SystemdError
 
 DEPLOY_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-ROS_COMMANDS = ("doctor", "estop", "zero", "wait-topic", "wait-graph", "precheck")
+ROS_COMMANDS = ("doctor", "estop", "zero", "wait-topic", "wait-graph", "precheck", "watchdog")
 GRAPH_PRECHECK = ("safety", "executor")
 
 
@@ -88,7 +88,7 @@ def cmd_doctor(cfg: Config, args) -> int:
 
 def cmd_estop(cfg: Config, args) -> int:
     from . import rosgraph
-    ros = estop.Ros(rosgraph.safety_state, rosgraph.send_estop, rosgraph.estop_message)
+    ros = estop.Ros(rosgraph.safety_state, rosgraph.send_estop, rosgraph.estop_message, rosgraph.wait_safety_state)
     try:
         if args.action == "engage":
             return estop.engage(cfg, ros, args.reason)
@@ -97,7 +97,7 @@ def cmd_estop(cfg: Config, args) -> int:
             sys.stderr.write(prompt)
             sys.stderr.flush()
             return sys.stdin.readline()
-        return estop.release(cfg, ros, args.reason, sys.stdin.isatty(), ask)
+        return estop.release(cfg, ros, args.reason, sys.stdin.isatty(), ask, os.geteuid())
     except (rosgraph.RosUnavailable, RuntimeError) as e:
         emit("estop", "safety", "ros_unavailable", str(e))
         return 1
@@ -262,7 +262,16 @@ def cmd_watchdog(cfg: Config, args) -> int:
     if args.once:
         watchdog.run_once(cfg, sd)
         return 0
-    watchdog.loop(cfg, sd, cfg.num("NEUROBOT_WATCHDOG_PERIOD_S"))
+    topics = sorted({t for ts in watchdog.driver_watch(cfg).values() for t, _ in ts})
+    watch = None
+    if topics:
+        from .rosgraph import RosUnavailable, TopicWatch
+        try:
+            watch = TopicWatch(cfg, topics)
+        except (RosUnavailable, RuntimeError) as e:  # RuntimeError — и RCLError инициализации rclpy
+            emit("watchdog", "watchdog", "ros_unavailable", "свежесть тем драйверов не смотрю: {}".format(e),
+                 level="warning")
+    watchdog.loop(cfg, sd, cfg.num("NEUROBOT_WATCHDOG_PERIOD_S"), cfg.num("NEUROBOT_WATCHDOG_FAST_S"), watch)
     return 0
 
 
@@ -346,8 +355,10 @@ def build_parser() -> argparse.ArgumentParser:
     sub.add_parser("wait-graph").add_argument("component", choices=("executor", "perception"))
     for name in ("wait-mcp", "wait-agent", "zero"):
         sub.add_parser(name)
-    s = sub.add_parser("watchdog", help="сторож MCP и PicoClaw (период — NEUROBOT_WATCHDOG_PERIOD_S)")
-    s.add_argument("--once", action="store_true", help="один проход (действия — строками причин в stderr)")
+    s = sub.add_parser("watchdog", help="сторож: свежесть тем драйверов и ping rosbridge (NEUROBOT_WATCHDOG_FAST_S), "
+                                         "MCP и PicoClaw (NEUROBOT_WATCHDOG_PERIOD_S)")
+    s.add_argument("--once", action="store_true", help="один проход MCP и PicoClaw (действия — строками причин в "
+                                                       "stderr); частым пробам нужна история — только в цикле")
     s = sub.add_parser("start-test", help="холодные и «сломанные» старты (root)")
     s.add_argument("--cycles", type=int, default=100, help="холодных стартов (по умолчанию 100, K9)")
     s.add_argument("--broken", type=lambda v: [x for x in v.split(",") if x],

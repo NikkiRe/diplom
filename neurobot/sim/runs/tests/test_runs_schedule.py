@@ -57,12 +57,29 @@ class PlaceTest(unittest.TestCase):
 
 
 class MakeTest(unittest.TestCase):
-    def test_main_profile_faults_and_agent_never_share_a_segment(self):
-        for name in ("main", "long", "long30"):
+    def test_faults_drivers_and_agent_never_share_a_segment(self):
+        for name in ("main", "long", "long30", "smoke"):
             prof = schedule.PROFILES[name]
             faults = set(range(prof["fault_first"], 10 ** 4, prof["fault_every"]))
             agent = set(range(prof["agent_first"], 10 ** 4, prof["agent_every"]))
+            drivers = set(range(prof["driver_first"], 10 ** 4, prof["driver_every"]))
             self.assertFalse(faults & agent, name)
+            self.assertFalse(drivers & (faults | agent), name)
+
+    def test_driver_faults_do_not_move_old_events(self):
+        # приёмка 17.10: kill -9 узлов urg_node2, realsense2_camera и базы, SIGSTOP узлов лидара и камеры — своими
+        # сегментами: жесты, прежние отказы и реплики те же, что у прогонов 16.10 (A0 сравним по ним)
+        truth = [seg(i, 20.0 * i, 20.0 * i + 5) for i in range(100)]
+        prof = dict(schedule.PROFILES["main"])
+        new = schedule.build_events(truth, prof)
+        old = schedule.build_events(truth, dict(prof, driver_every=0))
+        self.assertEqual([e for e in new if e.get("cycle") != "driver"], old)
+        drivers = [e for e in new if e.get("cycle") == "driver"]
+        self.assertEqual(len(drivers), 12)
+        self.assertEqual({(e["kind"], e["target"]) for e in drivers},
+                         {("kill", "lidar"), ("kill", "camera"), ("kill", "base"), ("stop", "lidar"),
+                          ("stop", "camera")})
+        self.assertTrue(all(e.get("duration_s", 30.0) == 30.0 for e in drivers))
 
     def test_make_writes_plan_faults_and_refuses_to_overwrite(self):
         with tempfile.TemporaryDirectory() as d:
@@ -72,6 +89,9 @@ class MakeTest(unittest.TestCase):
             self.assertEqual(plan["profile"], "smoke")
             kinds = {e["kind"] for e in plan["events"]}
             self.assertEqual(kinds, {"camera", "kill", "stop", "agent"})
+            # дымовой проходит весь цикл драйверов, в том числе kill -9 базы
+            self.assertEqual([(e["kind"], e["target"]) for e in plan["events"] if e.get("cycle") == "driver"],
+                             [(d["kind"], d["target"]) for d in schedule.DRIVER_CYCLE])
             info = schedule.info(d)
             self.assertEqual(info["gestures"]["seed"], 7)
             with self.assertRaises(FileExistsError):

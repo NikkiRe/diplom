@@ -11,6 +11,9 @@
 - распознавание: /neurobot/perception_health;
 - rosbridge — WebSocket, воркеры лаборатории — HTTP GET, MCP — initialize + tools/list + один вызов состояния,
   PicoClaw — журнал запуска.
+Пока какой-нибудь юнит ещё поднимается, молчащий или пропавший датчик — «ещё поднимается», а не ошибка: глубину и
+камеру драйвер может отдавать позже (а у двойника — только при подписчике), и ошибка датчика заслонила бы настоящую
+первую причину (safety_gate не стал готов и т. п.).
 Причина отказа — последняя строка «neurobot-…: компонент: код: текст» с приоритетом ≤ 3 в журнале запуска
 юнита, иначе — Result юнита и последняя похожая на ошибку строка процесса; у перезапускавшихся юнитов — ещё и
 последний отказ из сообщений systemd. Корневая причина — первый по порядку компонент с ошибкой: зависимые от
@@ -49,6 +52,7 @@ FAILED_WITH = re.compile(r"Failed with result '([\w-]+)'")
 FAILURE = {"timeout": ("start_timeout", "не стал готов за TimeoutStartSec"),
            "watchdog": ("watchdog", "нет WATCHDOG дольше WatchdogSec — процесс завис")}
 ERRORISH = re.compile(r"error|exception|traceback|failed|fatal|killed|denied|not found|нет |ошибк", re.I)
+SENSOR_LATE = ("sensor_stale", "sensor_missing", "scan_stale")  # пока система поднимается — «ещё поднимается»
 
 
 class Finding(NamedTuple):
@@ -380,6 +384,13 @@ def _merge(unit_f: Finding, live: Finding) -> Finding:
     return Finding(unit_f.component, unit_f.unit, live.level, live.code, live.text)
 
 
+def _late(f: Finding, starting: bool) -> Finding:
+    """Датчик молчит, пока система ещё поднимается, — «ещё поднимается» с той же причиной в тексте."""
+    if starting and f.level == FAIL and f.code in SENSOR_LATE:
+        return f._replace(level=STARTING, code="starting", text="ждём датчик, система ещё поднимается: " + f.text)
+    return f
+
+
 def diagnose(cfg: Config, sd: Systemd, observe: Optional[Callable[[Config, float], Dict[str, dict]]] = None,
              probe: Callable = probe_mcp, ws: Callable = ws_handshake, get: Callable = http_get,
              now_mono: Optional[float] = None, now_real: Optional[float] = None) -> Report:
@@ -389,6 +400,7 @@ def diagnose(cfg: Config, sd: Systemd, observe: Optional[Callable[[Config, float
     props = sd.show([u for _, u in plan])
     jobs = sd.jobs()
     states = [unit_state(c, u, props.get(u, {}), jobs, sd, now_mono, now_real) for c, u in plan]
+    starting = any(s.level == STARTING for s in states)
     obs, obs_error = None, ""
     if observe and any(s.level == OK and (s.component in ROS_LIVE or s.component.startswith("driver@"))
                        for s in states):
@@ -415,14 +427,14 @@ def diagnose(cfg: Config, sd: Systemd, observe: Optional[Callable[[Config, float
             elif obs is not None and s.component in live_ros:
                 live = live_ros[s.component]()
             elif obs is not None and s.component == scan_owner:
-                live = _check_scan(s.component, cfg, obs)
+                live = _late(_check_scan(s.component, cfg, obs), starting)
         findings.append(_merge(s, live) if live else s)
     at = sum(1 for c, _ in plan if c.startswith("driver@"))
     if obs is not None:
         # датчики — после драйверов, до safety_gate: без них он не пустит робота, и причина — в них
         sensors = [] if scan_owner else [_check_scan("scan", cfg, obs)]
         sensors += [_check_sensor(t, typ, hz, obs) for t, typ, hz in cfg.sensors()]
-        findings[at:at] = sensors
+        findings[at:at] = [_late(f, starting) for f in sensors]
         joy = ["{} ({})".format(t, ", ".join(sorted(set(e["pub"])))) for t, e in sorted(obs["joy"].items())
                if e["pub"]]
         if joy:

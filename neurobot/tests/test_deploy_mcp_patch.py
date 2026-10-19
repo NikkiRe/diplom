@@ -1,7 +1,9 @@
-"""Патчи neurobot к MCP-серверам лаборатории (≤ 20 добавленных строк, накладываются на присланные версии).
+"""Патчи neurobot к MCP-серверам лаборатории (накладываются на присланные версии).
 
 ros_mcp_server: пропатченный сервер отвечает по streamable HTTP, пишет в /cmd_vel_agent, ничего не печатает в stdout,
-автостоп срабатывает и при исключении в цикле толчка (finally), и при SIGTERM (atexit); против подставного rosbridge.
+автостоп срабатывает и при исключении в цикле толчка (finally), и при SIGTERM (atexit); robot_get_status отдаёт
+состояние safety_gate (state, reasons, estop), robot_nudge — отказ blocked/estop с причиной вместо ok, если safety_gate
+не пускает или не пропустил толчок; против подставного rosbridge с подставным safety_state.
 robot_vision_mcp_proxy: без патча — дубли инструментов движения (FastMCP оставляет первую регистрацию, мс уходят
 воркеру как секунды, N1), doctor видит это по tools/list; с патчем — дублей нет, длительность и скорость ограничены,
 HTTP на 127.0.0.1, стоп воркеру при SIGTERM; против подставного воркера 8766.
@@ -42,6 +44,7 @@ try:
     import mcp  # noqa: F401
     import websocket  # noqa: F401
     from websockets.asyncio.server import serve
+    from websockets.exceptions import ConnectionClosed
     DEPS = sys.version_info >= (3, 10)
 except ImportError:
     DEPS = False
@@ -53,17 +56,54 @@ def free_port() -> int:
         return s.getsockname()[1]
 
 
+SAFETY = "/neurobot/safety_state"
+
+
 class FakeRosbridge:
-    """Принимает WebSocket rosbridge v2 и пишет (номер соединения, сообщение); соединения из reject — HTTP 500."""
+    """Принимает WebSocket rosbridge v2 и пишет (номер соединения, сообщение); соединения из reject — HTTP 500;
+    drop_after — закрыть соединение после стольких публикаций в нём (обрыв, рестарт rosbridge).
+    Подписчику /neurobot/safety_state шлёт состояние 10 Гц: safety — шаблон, req — последний толчок агента, если он
+    дошёл до safety_gate (delivered), out — он же, если safety_gate его пропускает (passes), иначе ноль; silent —
+    состояния не шлёт (safety_gate не запущен). На вызов сервиса (/rosapi/topics) отвечает списком тем."""
 
     def __init__(self):
-        self.messages, self.conns, self.reject = [], 0, set()
+        self.messages, self.conns, self.reject, self.drop_after = [], 0, set(), 0
+        self.safety = {"state": "slow", "reasons": ["lidar_blind: перед в слепом секторе лидара"],
+                       "limits": {"v_max": 0.15, "v_rev": 0.05, "w_max": 0.8}, "estop": {"engaged": False}}
+        self.passes, self.delivered, self.silent = True, True, False
         self.loop = asyncio.new_event_loop()
         ready = threading.Event()
 
+        async def state(ws):
+            while True:
+                last = ([m["msg"] for _, m in self.messages if m.get("op") == "publish"] or [None])[-1]
+                req = [last["linear"]["x"], last["angular"]["z"]] if last and self.delivered else [0.0, 0.0]
+                out = req if self.passes else [0.0, 0.0]
+                if not self.silent:
+                    await ws.send(json.dumps({"op": "publish", "topic": SAFETY,
+                                              "msg": {"data": json.dumps(dict(self.safety, req=req, out=out))}}))
+                await asyncio.sleep(0.1)
+
         async def handler(ws):
-            async for raw in ws:
-                self.messages.append((ws.neurobot_no, json.loads(raw)))
+            tasks = []
+            try:
+                async for raw in ws:
+                    msg = json.loads(raw)
+                    self.messages.append((ws.neurobot_no, msg))
+                    if msg.get("op") == "subscribe" and msg.get("topic") == SAFETY:
+                        tasks.append(asyncio.ensure_future(state(ws)))
+                    elif msg.get("op") == "call_service":
+                        await ws.send(json.dumps({"op": "service_response", "id": msg["id"], "result": True,
+                                                  "values": {"topics": ["/cmd_vel_agent", SAFETY]}}))
+                    elif msg.get("op") == "publish" and self.drop_after and sum(
+                            1 for n, m in self.messages if n == ws.neurobot_no and m.get("op") == "publish") \
+                            >= self.drop_after:
+                        await ws.close()
+            except ConnectionClosed:
+                pass
+            finally:
+                for t in tasks:
+                    t.cancel()
 
         def process_request(conn, request):
             self.conns += 1
@@ -115,7 +155,8 @@ class PatchTest(unittest.TestCase):
         self.port = free_port()
         cfg = {"server": {"host": "127.0.0.1", "port": self.port},
                "rosbridge": {"url": "ws://127.0.0.1:{}".format(self.bridge.port), "timeout_s": 3.0},
-               "topics": {"cmd_vel": {"name": "/cmd_vel_agent", "type": "geometry_msgs/msg/Twist", "access": "write"}}}
+               "topics": {"cmd_vel": {"name": "/cmd_vel_agent", "type": "geometry_msgs/msg/Twist", "access": "write"},
+                          "safety_state": {"name": SAFETY, "type": "std_msgs/msg/String", "access": "read"}}}
         with open(os.path.join(self.tmp, "cfg.json"), "w", encoding="utf-8") as f:
             json.dump(cfg, f)
         env = dict(os.environ, PYTHONDONTWRITEBYTECODE="1")
@@ -149,10 +190,66 @@ class PatchTest(unittest.TestCase):
             c.close()
 
     def test_patch_is_small(self):
+        # 17 строк транспорта и автостопа, чтение safety_state для статуса и итога толчка, постоянный издатель
         lines = PATCH.read_text(encoding="utf-8").splitlines()
         added = [ln for ln in lines if ln.startswith("+") and not ln.startswith("+++")]
-        self.assertLessEqual(len(added), 20)
+        self.assertLessEqual(len(added), 125)
         self.assertEqual(self.tools, ["robot_get_status", "robot_stop", "robot_nudge"])
+
+    def result(self, name: str, args: dict) -> dict:
+        res = self.call(name, args)
+        return json.loads("".join(c.get("text", "") for c in res.get("content", [])))
+
+    def test_status_carries_safety_state(self):
+        self.bridge.safety = dict(self.bridge.safety, state="estop", reasons=["shock: удар 9.9 м/с²"],
+                                  estop={"engaged": True})
+        st = self.result("robot_get_status", {})
+        self.assertEqual(st["safety"]["state"], "estop")
+        self.assertEqual((st["safety"]["reasons"], st["safety"]["estop"]), (["shock: удар 9.9 м/с²"], True))
+        self.assertFalse(st["motion_allowed"])
+        subs = [m for _, m in self.bridge.messages if m.get("op") == "subscribe"]
+        self.assertEqual([m["topic"] for m in subs], [SAFETY])  # только чтение состояния, другие темы — нет
+        self.bridge.safety = {"state": "estop", "reasons": ["estop: кнопка"], "limits": {}}  # без поля estop
+        self.assertTrue(self.result("robot_get_status", {})["safety"]["estop"])
+        self.bridge.silent = True  # safety_gate не запущен: состояния нет — двигаться нельзя
+        st = self.result("robot_get_status", {})
+        self.assertEqual((st["safety"]["state"], st["motion_allowed"]), ("unknown", False))
+
+    def test_nudge_refused_by_latch_or_limit_without_motion(self):
+        for state, limits, status in (("estop", {"v_max": 0.0, "v_rev": 0.0, "w_max": 0.0}, "estop"),
+                                      ("blocked", {"v_max": 0.0, "v_rev": 0.05, "w_max": 0.8}, "blocked")):
+            with self.subTest(state=state):
+                self.bridge.safety = dict(self.bridge.safety, state=state, limits=limits,
+                                          reasons=["lidar_nodata: нет данных лидара перед роботом"])
+                before = len(self.bridge.twists())
+                res = self.result("robot_nudge", {"direction": "forward", "duration_ms": 300, "speed": 0.1})
+                self.assertEqual((res["ok"], res["status"]), (False, status))
+                self.assertIn("lidar_nodata", res["reasons"][0])
+                self.assertEqual(len(self.bridge.twists()), before)  # ни одного толчка
+        res = self.result("robot_nudge", {"direction": "turn_left", "duration_ms": 200, "speed": 0.3})
+        self.assertTrue(res["ok"], res)  # поворот при блоке вперёд разрешён
+
+    def test_nudge_cut_by_gate_is_reported(self):
+        self.bridge.passes = False  # толчок дошёл до safety_gate, а его выход остался нулём (срезал по пути)
+        res = self.result("robot_nudge", {"direction": "forward", "duration_ms": 300, "speed": 0.1})
+        self.assertEqual((res["ok"], res["status"]), (False, "blocked"))
+        self.assertEqual(res["error"], "safety_gate не пропустил толчок")
+        self.assertIn("lidar_blind", res["reasons"][0])
+        self.bridge.passes = True
+        res = self.result("robot_nudge", {"direction": "forward", "duration_ms": 300, "speed": 0.1})
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["safety"]["state"], "slow")
+        res = self.result("robot_nudge", {"direction": "backward", "duration_ms": 300, "speed": 0.05})
+        self.assertTrue(res["ok"], res)  # знак оси: назад — отрицательный выход
+
+    def test_nudge_not_seen_by_gate_is_unconfirmed(self):
+        # публикация ушла, но до safety_gate не дошла (M3: новый издатель rosbridge не нашёл подписчика) или
+        # safety_gate молчит — «готово» агент сказать не может
+        for flag in ("delivered", "silent"):
+            with self.subTest(flag=flag):
+                self.bridge.delivered, self.bridge.silent = flag != "delivered", flag == "silent"
+                res = self.result("robot_nudge", {"direction": "forward", "duration_ms": 300, "speed": 0.1})
+                self.assertEqual((res["ok"], res["status"]), (False, "unconfirmed"))
 
     def test_nudge_goes_to_agent_topic_then_zero(self):
         res = self.call("robot_nudge", {"direction": "forward", "duration_ms": 200, "speed": 0.05})
@@ -163,12 +260,27 @@ class PatchTest(unittest.TestCase):
         self.assertEqual([is_zero(t) for t in twists[-5:]], [True] * 5)
         self.assertFalse(any(m.get("topic") == "/cmd_vel" for _, m in self.bridge.messages))
 
-    def test_auto_stop_when_publish_fails_mid_nudge(self):
+    def test_publisher_connection_is_kept(self):
+        # M3: одно соединение с advertise на тему, а не новое на каждую публикацию — издатель rosbridge живёт
         before = self.bridge.conns
-        self.bridge.reject = {before + 2}  # второе соединение толчка отвергнуто — исключение в цикле
+        for _ in range(2):
+            self.call("robot_nudge", {"direction": "turn_left", "duration_ms": 200, "speed": 0.3})
+        pub_conns = {n for n, m in self.bridge.messages if n > before and m.get("op") == "advertise"}
+        self.assertEqual(len(pub_conns), 1)
+        self.assertGreaterEqual(len(self.bridge.twists(after_conn=before)), 2 * (2 + 5))
+
+    def test_auto_stop_when_publish_fails_mid_nudge(self):
+        # соединение издателя оборвано посреди толчка: одно переподключение отвергнуто — толчок едет дальше по
+        # новому; отвергнуты оба — исключение в цикле, автостоп (finally) открывает своё соединение и шлёт пять нулей
+        self.call("robot_stop", {})  # соединение издателя уже открыто
+        self.bridge.drop_after, self.bridge.reject = 7, {self.bridge.conns + 2}  # +1 — подписка на safety_state
         res = self.call("robot_nudge", {"direction": "turn_left", "duration_ms": 500, "speed": 0.3})
+        self.assertFalse(res.get("isError"), res)
+        conn = max(n for n, m in self.bridge.messages if m.get("op") == "advertise")
+        self.bridge.reject = {self.bridge.conns + 2, self.bridge.conns + 3}
+        res = self.call("robot_nudge", {"direction": "turn_left", "duration_ms": 1000, "speed": 0.3})
         self.assertTrue(res.get("isError"), res)
-        after = [t for n, t in self.bridge.twists(after_conn=before + 2)]
+        after = [t for n, t in self.bridge.twists(after_conn=conn)]
         self.assertEqual([is_zero(t) for t in after], [True] * 5)
 
     def test_sigterm_publishes_zero_and_stdout_stays_clean(self):

@@ -33,7 +33,7 @@ LAUNCH_ARGS = (
     ("world", "lab"), ("x_pose", ""), ("y_pose", ""), ("z_pose", ""), ("yaw", ""),
     ("cmd_vel_timeout", "0.5"), ("lidar_hz", "10"), ("color_hz", "15"), ("depth_hz", "15"), ("imu_hz", "200"),
     ("truth_hz", "100"), ("rosbridge", "true"), ("rosbridge_port", "9090"), ("run_dir", "/tmp/twin"),
-    ("gz_verbose", "2"),
+    ("gz_verbose", "2"), ("sensors", "inside"),
 )
 
 # Цепочка движения (как на роботе, R7a N13) и внутренние темы двойника.
@@ -44,6 +44,12 @@ DIFF_CMD = "/diff_cont/cmd_vel"           # только двойник: вхо�
 DIFF_OUT = "/diff_cont/cmd_vel_out"       # что контроллер отдаёт колёсам (publish_limited_velocity)
 SCAN_RAW = "/twin/scan_raw"
 DEPTH_RAW = "/twin/depth_raw"
+# sensors:=outside — камера от моста сырыми темами, их отдаёт узел камеры (sensor.launch.py role camera):
+# выход → (вход, тип)
+CAMERA_RAW = {"/camera/color/image_raw": ("/twin/color/image_raw", "Image"),
+              "/camera/color/camera_info": ("/twin/color/camera_info", "CameraInfo"),
+              "/camera/depth/camera_info": ("/twin/depth/camera_info", "CameraInfo"),
+              "/camera/imu": ("/twin/imu", "Imu")}
 MODELS_TOPIC = "/twin/models"             # логическая камера twin_eye: имена и позы моделей мира → truth.py
 CONTROLLERS = ("diff_cont", "joint_broad")
 

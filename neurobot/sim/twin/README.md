@@ -84,19 +84,36 @@ robot_state_publisher, xacro, rosbridge_server. Наше: модель (`urdf/`)
 - мост камер ленивый: без подписчика в ROS Gazebo камеры не рендерит, и `sensor_model.py` подписывается на глубину,
   только пока у `/camera/depth/image_rect_raw` есть подписчик.
 
+**«Нет отражения» лидара** (`no_return`): NaN (по умолчанию — допущение двойника о urg_node2) или +inf (REP 117).
+Скан робота 02.06 это допущение не подтверждает: его сняли через rosbridge с `non_finite_policy null`, и в 289 лучах
+`null` NaN и ±inf не различить [код скана, `_meta.json`]. От ответа зависит, как робот поедет в помещении больше
+дальности лидара. safety_gate (README `neurobot/safety`, «Решение на каждом шаге», п. 2–3): NaN — «неизвестно»;
+такой участок в коридоре, который камера глубины видит, но свободным не видит, запрещает вперёд, а вне поля камеры —
+вперёд не быстрее 0,15 м/с (`nodata_unseen=slow`, с 18.10). +inf — «свободно до `range_max`». Но скан, где попаданий
+дальше корпуса меньше `fault_min_hits` (10), — пустой при любом из двух, и три пустых подряд — стоп `lidar_fault`
+(с 19.10). Просьба к лаборатории — сырой `ros2 bag` или `ros2 topic echo /scan` (`neurobot/lab/LAB_HANDOUT.md`,
+раздел 4, п. 7).
+
+**Датчики отдельными узлами** (`sensors:=outside`, приёмка 17.10): как у робота, где urg_node2 и realsense2_camera —
+свои юниты `neurobot-driver@`, датчики двойника тоже идут отдельными launch (`launch/sensor.launch.py`): узел
+`/urg_node2` (`role:=lidar`: `/scan`) и узел `/camera/camera` (`role:=camera`: цвет, глубина, `camera_info`,
+`/camera/imu`; мост отдаёт их сырыми `/twin/*`, узел передаёт без разбора, глубину — с шумом). kill -9 или SIGSTOP
+такого узла гасит или замораживает все его темы, как у драйвера робота (madgwick тогда молчит тоже), а Gazebo и база
+живут дальше. `sensors:=inside` (по умолчанию: проверки двойника, стенды) — прежний один узел `twin_sensor_model`.
+
 Частоты меняют флаги `--color-hz`, `--depth-hz`, `--lidar-hz`, `--imu-hz` (§4).
 
 ### 2.3. Граф ROS — как на роботе
 
 | Тема | Тип | Кадр | Гц | Кто пишет |
 |---|---|---|---|---|
-| `/scan` | `sensor_msgs/LaserScan` | `laser_frame` | 10 | `twin_sensor_model` (на роботе `urg_node2`) |
+| `/scan` | `sensor_msgs/LaserScan` | `laser_frame` | 10 | `twin_sensor_model`; при `sensors:=outside` — `/urg_node2` (на роботе `urg_node2`) |
 | `/odom` | `nav_msgs/Odometry` | `odom` → `base_link` | 50 | `diff_cont` |
 | `/tf`, `/tf_static` | `tf2_msgs/TFMessage` | — | — | `diff_cont` (odom → base_link), `robot_state_publisher` |
 | `/joint_states` | `sensor_msgs/JointState` | — | 50 | `joint_broad` |
-| `/camera/color/image_raw`, `/camera/color/camera_info` | `Image`, `CameraInfo` | `camera_color_optical_frame` | 15 | мост (на роботе `realsense2_camera`) |
-| `/camera/depth/image_rect_raw`, `/camera/depth/camera_info` | `Image` (16UC1), `CameraInfo` | `camera_depth_optical_frame` | 15 | `twin_sensor_model`, мост |
-| `/camera/imu` | `sensor_msgs/Imu` | `camera_imu_optical_frame` | 200 | мост |
+| `/camera/color/image_raw`, `/camera/color/camera_info` | `Image`, `CameraInfo` | `camera_color_optical_frame` | 15 | мост; при `sensors:=outside` — `/camera/camera` (на роботе `realsense2_camera`) |
+| `/camera/depth/image_rect_raw`, `/camera/depth/camera_info` | `Image` (16UC1), `CameraInfo` | `camera_depth_optical_frame` | 15 | `twin_sensor_model`, мост; при `sensors:=outside` — `/camera/camera` |
+| `/camera/imu` | `sensor_msgs/Imu` | `camera_imu_optical_frame` | 200 | мост; при `sensors:=outside` — `/camera/camera` |
 | `/imu/data` | `sensor_msgs/Imu` | `camera_imu_optical_frame` | 200 | `imu_filter_madgwick` |
 | `/cmd_vel`, `/cmd_vel_tracker`, `/cmd_vel_joy` | `geometry_msgs/Twist` | — | — | safety_gate; ПК лаборатории |
 | `/diff_cont/cmd_vel_unstamped` | `Twist` | — | — | `twist_mux` |
@@ -301,7 +318,9 @@ neurobot/sim/twin/check.sh                            # полная прове�
 
 | Где | Параметр | По умолчанию | Смысл |
 |---|---|---|---|
-| `sensor_model.py` (ROS) | `self_hit_m` | 0,15 | ближе — попадание в свой корпус → NaN (0,099 м до дальнего угла D435i + 5σ шума) |
+| `sensor_model.py` (ROS) | `role` | all | all — `/scan` и глубина (узел `twin_sensor_model`); lidar — `/scan`; camera — глубина и передача цвета, `camera_info`, IMU |
+| | `no_return_inf` | false | «нет отражения» лидара: false — NaN, true — +inf (REP 117) |
+| | `self_hit_m` | 0,15 | ближе — попадание в свой корпус → NaN (0,099 м до дальнего угла D435i + 5σ шума) |
 | | `depth_hfov` | 1,5184 | поле камеры глубины, рад (как у датчика в модели) |
 | | `depth_subpixel`, `depth_baseline_m` | 0,08; 0,05 | шум глубины σ = z²·subpixel / (f·B); `depth_subpixel 0` — без шума |
 | | `seed` | 0 | зерно шума глубины |
@@ -320,12 +339,13 @@ neurobot/sim/twin/check.sh                            # полная прове�
 |---|---|
 | `twin.sh` | up / ready / down с хоста |
 | `twin_vm.sh` | (в ВМ) запуск launch своей группой процессов, остановка |
-| `launch/twin.launch.py` | Gazebo, мост, ros2_control, twist_mux, cmd_relay, madgwick, sensor_model, truth, rosbridge |
+| `launch/twin.launch.py` | Gazebo, мост, ros2_control, twist_mux, cmd_relay, madgwick, sensor_model (`sensors:=inside`), truth, rosbridge |
+| `launch/sensor.launch.py` | датчики отдельным launch (`sensors:=outside`): `role:=lidar` — узел `/urg_node2`, `role:=camera` — узел `/camera/camera`; `no_return:=nan\|inf` |
 | `urdf/neurochip.urdf.xacro`, `urdf/neurochip.gazebo.xacro` | модель: кинематика и коллизии; датчики, ros2_control, истина |
 | `config/controllers.yaml`, `config/twist_mux.yaml` | diff_cont и joint_broad; входы twist_mux |
 | `worlds/lab.sdf`, `step.sdf`, `ramp.sdf` | миры (§3) |
 | `twin_config.py` | умолчания в одном месте: темы, частоты, миры, геометрия скана и слепой сектор робота |
-| `sensor_model.py` | (в ВМ) `/scan` как у `urg_node2`, глубина как у `realsense2_camera` |
+| `sensor_model.py` | (в ВМ) `/scan` как у `urg_node2` (NaN или +inf на «нет отражения»), глубина и темы камеры как у `realsense2_camera` |
 | `cmd_relay.py` | (в ВМ) `/diff_cont/cmd_vel_unstamped` → `/diff_cont/cmd_vel`; начальный ноль контроллеру |
 | `truth.py` | (в ВМ) истина: поза, скорость, зазор до препятствий, касания, RTF → `/twin/truth`; логическая камера `twin_eye` для launch |
 | `twin_ready.py` | (в ВМ) готовность по темам и связям, JSON |

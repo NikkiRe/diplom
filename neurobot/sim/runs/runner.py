@@ -5,12 +5,14 @@
   sudo python3 -m neurobot.sim.runs.runner a1-teardown
 
 run: подготовка и подъём системы → наблюдатель жестов (neurobot/sim/gestures/observer.py) и сэмплер памяти
-(neurobot/sim/budget/collect.py) → по якорю таймлайна события плана: отказы (kill -9, SIGSTOP; отказы камеры
-вносят подставной pyrealsense2 у A0 и relay.py у A1 сами), реплики пользователя в канал pico PicoClaw → оператор:
+(neurobot/sim/budget/collect.py) → по якорю таймлайна события плана: отказы (kill -9, SIGSTOP процессов по ролям, в
+том числе узлов драйверов датчиков; отказы камеры вносят подставной pyrealsense2 у A0 и relay.py у A1 сами), реплики
+пользователя в канал pico PicoClaw → оператор:
 человек, который через --operator-delay с замечает, что робот глух, процесс умер, агент не ответил, робот застрял
 или стоит на защёлке, и чинит это; каждое действие оператора — вмешательство человека (видимый перезапуск,
 PLAN §1). В --out: run.json (события, TTR, вмешательства, запросы агенту, рестарты), truth.jsonl, safety.jsonl,
-наблюдатель (events.jsonl, summary.json, gestures.jsonl), collect.jsonl, mockllm.jsonl, журналы. Логи — stderr.
+executor.jsonl (события исполнителя A1: отмена задач, отъезд из тупика), наблюдатель (events.jsonl, summary.json,
+gestures.jsonl), collect.jsonl, mockllm.jsonl, журналы. Логи — stderr.
 """
 from __future__ import annotations
 
@@ -32,7 +34,9 @@ from neurobot.sim.runs import stacks
 from neurobot.sim.runs.pico import MockLLM, PicoClient, final_text
 
 PHRASES = {"status": "Какое сейчас состояние робота?", "move": "Проедь немного вперёд."}
-SPAWN = (0.0, 0.0, 0.01, 0.0)
+# драйвер → его тема: «роль снова работает», когда по теме пошли сообщения нового (или проснувшегося) узла
+DRIVER_TOPICS = {"lidar": "/scan", "camera": "/camera/color/image_raw", "base": "/odom"}
+REFUSED = ("blocked", "estop")
 DEAF_S = 10.0
 STUCK_S = 20.0
 CONTACT_GAP_S = 1.0
@@ -92,7 +96,8 @@ class ProbeTail:
 
 
 def tool_outcomes(session_dir: str, text: str) -> List[dict]:
-    """Вызовы инструментов хода, начатого репликой text, по сессиям PicoClaw на диске: [{name, ok, content}]."""
+    """Вызовы инструментов хода, начатого репликой text, по сессиям PicoClaw на диске: [{name, ok, refused,
+    content}]; refused — отказ safety_gate с причиной (status blocked или estop): это ответ, а не ошибка."""
     out: List[dict] = []
     for path in sorted(glob.glob(os.path.join(session_dir, "*.jsonl"))):
         try:
@@ -113,8 +118,28 @@ def tool_outcomes(session_dir: str, text: str) -> List[dict]:
             if r.get("role") == "tool":
                 content = str(r.get("content", ""))
                 out.append({"name": names.get(r.get("tool_call_id", ""), ""), "ok": tool_ok(content),
-                            "content": content[:300]})
+                            "refused": tool_refused(content), "content": content[:300]})
     return out
+
+
+def doctor_root(text: str):
+    """(юнит, код) корневой причины из `neurobot doctor --json`; (None, None) — «ОК» или ответ не разобран."""
+    try:
+        root = json.loads(text).get("root") or {}
+    except (ValueError, AttributeError):
+        return None, None
+    return root.get("unit") or None, root.get("code") or None
+
+
+def tool_refused(content: str) -> Optional[str]:
+    """Отказ безопасности с причиной в ответе инструмента (robot_nudge с патчем neurobot): status blocked | estop."""
+    try:
+        d = json.loads(content)
+    except ValueError:
+        return None
+    if isinstance(d, dict) and d.get("ok") is False and d.get("status") in REFUSED and d.get("reasons") is not None:
+        return d["status"]
+    return None
 
 
 def tool_ok(content: str) -> bool:
@@ -130,8 +155,10 @@ def tool_ok(content: str) -> bool:
 
 class Runner:
     def __init__(self, stack: stacks.Stack, plan: dict, out: str, mock: MockLLM, operator_delay: float,
-                 tail_s: float, collect_interval: float, label: str):
+                 tail_s: float, collect_interval: float, label: str, world: str = "hall"):
         self.stack, self.plan, self.out, self.mock = stack, plan, out, mock
+        self.world_sdf, self.spawn_pose = stacks.WORLDS[world]
+        self.topic_t: Dict[str, float] = {}       # тема драйвера → момент последнего сообщения (mono)
         self.operator_delay, self.tail_s, self.collect_interval, self.label = operator_delay, tail_s, \
             collect_interval, label
         self.lock = threading.Lock()
@@ -169,7 +196,7 @@ class Runner:
         return dict(os.environ, PYTHONPATH=path, PYTHONDONTWRITEBYTECODE="1", **self.ros_env())
 
     def start_observer(self, sched: str) -> None:
-        world = os.path.join(stacks.SRC, "neurobot/sim/runs/worlds/hall.sdf")
+        world = os.path.join(stacks.SRC, self.world_sdf)
         argv = ["python3", "-m", "neurobot.sim.gestures.observer", "--out", os.path.join(self.out, "events.jsonl"),
                 "--truth", os.path.join(sched, "truth.jsonl"), "--anchor", self.stack.anchor_path,
                 "--summary", os.path.join(self.out, "summary.json"),
@@ -211,6 +238,7 @@ class Runner:
         node = rclpy.create_node("runs_runner_" + self.stack.name)
         truth_f = open(os.path.join(self.out, "truth.jsonl"), "a", encoding="utf-8")
         safety_f = open(os.path.join(self.out, "safety.jsonl"), "a", encoding="utf-8")
+        executor_f = open(os.path.join(self.out, "executor.jsonl"), "a", encoding="utf-8")
         last_write = {"truth": 0.0, "safety": 0.0}
 
         def on_truth(msg):
@@ -252,11 +280,26 @@ class Runner:
                                            "reasons": d.get("reasons"), "min_clearance_m": d.get("min_clearance_m")},
                                           ensure_ascii=False) + "\n")
 
+        def on_executor(msg):
+            try:
+                d = json.loads(msg.data)
+            except ValueError:
+                return
+            executor_f.write(json.dumps(dict(d, m=round(mono(), 3), t=round(time.time(), 3)), ensure_ascii=False)
+                             + "\n")
+
         node.create_subscription(String, "/twin/truth", on_truth, 50)
         node.create_subscription(String, "/neurobot/safety_state", on_safety, 50)
+        node.create_subscription(String, "/neurobot/events", on_executor, 50)
+        from nav_msgs.msg import Odometry
+        from rclpy.qos import qos_profile_sensor_data
+        from sensor_msgs.msg import Image, LaserScan
+        for topic, cls in (("/scan", LaserScan), ("/camera/color/image_raw", Image), ("/odom", Odometry)):
+            node.create_subscription(cls, topic, lambda _m, topic=topic: self.topic_t.__setitem__(topic, mono()),
+                                     qos_profile_sensor_data, raw=True)
         self.set_pose_cli = node.create_client(SetEntityPose, "/world/default/set_pose")
         self.node, self.rclpy = node, rclpy
-        self.files = (truth_f, safety_f)
+        self.files = (truth_f, safety_f, executor_f)
 
     def spin(self, seconds: float) -> None:
         end = mono() + seconds
@@ -291,7 +334,7 @@ class Runner:
             self.spawn(self.watch_recovery, rec, "perception", ev["duration_s"])
             return
         if not self.stack.has(role):
-            self.event(kind="fault", fault="%s_%s" % (kind, role), skipped="у системы нет компонента", **base)
+            self.event(kind="fault", fault="%s_%s" % (kind, role), skipped=self.stack.skip_reason(role), **base)
             return
         pid = self.stack.pid(role)
         if pid <= 0:
@@ -322,13 +365,17 @@ class Runner:
 
     def watch_recovery(self, rec: dict, role: str, hold_s: float, killed: int = 0) -> None:
         """TTR: от отказа до «роль снова работает» (perception — детектор снова вызывается после конца отказа;
-        после kill -9 — работает уже новый процесс)."""
+        драйвер — по его теме (DRIVER_TOPICS) снова идут сообщения, от нового процесса или проснувшегося: SIGSTOP
+        дольше паузы до жеста, его снимает сторож или SIGCONT в конце; после kill -9 — работает уже новый процесс)."""
         t0 = rec["m"]
         rec["ttr_s"] = None
         time.sleep(min(hold_s, 1.0))
         while mono() - t0 < TTR_MAX_S and not self.done.is_set():
             self.probe.poll()
-            if role == "perception":
+            if role in DRIVER_TOPICS:
+                got = self.topic_t.get(DRIVER_TOPICS[role])
+                ok = got is not None and got > t0 + 0.3 and self.stack.pid(role) not in (0, killed)
+            elif role == "perception":
                 got = self.probe.progress_since(t0 + hold_s)
                 ok = got is not None
             else:
@@ -364,7 +411,9 @@ class Runner:
         rec["channel_errors"] = [m.get("payload") for m in msgs if m.get("type") == "error"]
         time.sleep(1.0)
         rec["tools"] = tool_outcomes(self.stack.session_dir(), text)
-        rec["ok"] = bool(rec["final"]) and bool(rec["tools"]) and all(t["ok"] for t in rec["tools"])
+        # ответ — финальный текст и инструменты без ошибки; отказ safety_gate с причиной (blocked, estop) — тоже ответ
+        rec["ok"] = bool(rec["final"]) and bool(rec["tools"]) and all(t["ok"] or t["refused"] for t in rec["tools"])
+        rec["refused"] = [t["refused"] for t in rec["tools"] if t["refused"]]
         try:
             self.mock.clear(input_id)
         except OSError:
@@ -404,6 +453,10 @@ class Runner:
                                why="процесс умер" if key == "demo" and demo_dead else
                                "глухой (детектор не вызывается)" if key == "demo" else "агент не ответил или умер")
         else:
+            since = self.flags.get("agent")
+            if since is not None and now - since >= self.operator_delay:
+                self.flags.pop("agent")
+                self.spawn(self.doctor_repair)
             if self.estop_since and now - self.estop_since >= self.operator_delay:
                 reasons = (self.safety_last or {}).get("reasons")
                 res = st.estop_release()
@@ -421,6 +474,15 @@ class Runner:
             else:
                 self.flags.pop("failed", None)
 
+    def doctor_repair(self) -> None:
+        """Агент A1 не ответил: человек запускает `neurobot doctor` и делает, что тот велит, — перезапуск названного
+        юнита (RUNBOOK §4); «ОК» — чинить нечего, но человек понадобился."""
+        r = stacks.sh(["neurobot", "doctor", "--json"], check=False, timeout=120)
+        unit, code = doctor_root(r.stdout)
+        if unit:
+            stacks.sh(["systemctl", "restart", "--no-block", unit], check=False)
+        self.event(kind="operator", action="doctor", what=unit, why=code or "doctor: ОК", rc=r.returncode)
+
     def relocate(self) -> None:
         """Робот застрял в касании: человек переносит его на место старта (у A1 — при выключенном safety_gate:
         перенос — удар для IMU, как harness.relocate наборов)."""
@@ -428,7 +490,7 @@ class Runner:
         contacts = (self.truth_last or {}).get("contacts")
         if a1:
             stacks.sh(["systemctl", "stop", "neurobot-safety"], check=False)
-        ok = self.set_pose(*SPAWN)
+        ok = self.set_pose(*self.spawn_pose)
         self.spin(1.5)
         if a1:
             stacks.sh(["systemctl", "start", "neurobot-safety"], check=False, timeout=60)
@@ -476,6 +538,7 @@ class Runner:
         self.node.destroy_node()
         self.rclpy.try_shutdown()
         return {"system": self.stack.name, "label": self.label, "plan": self.plan, "t_start": t_start,
+                "world": self.world_sdf, "no_return": getattr(self.stack, "no_return", "nan"),
                 "t_end": time.time(), "anchor": self.anchor.__dict__, "events": self.events, "agent": self.agent,
                 "restarts": restarts, "operator_delay_s": self.operator_delay, "units": self.stack.units()}
 
@@ -495,7 +558,7 @@ def main(argv=None) -> int:
     r.add_argument("--system", required=True, choices=("a0", "a1"), help="A0 — стек лаборатории, A1 — пакет 1 + v2")
     r.add_argument("--sched", required=True, help="каталог расписания (schedule.py make) в ВМ")
     r.add_argument("--out", required=True, help="новый каталог прогона в ВМ")
-    r.add_argument("--mockllm", required=True, help="bench/mockllm, напр. http://host.lima.internal:18150")
+    r.add_argument("--mockllm", required=True, help="bench/mockllm в ВМ, напр. http://127.0.0.1:18150")
     r.add_argument("--label", default="main", help="метка прогона в репликах агенту и в run.json")
     r.add_argument("--operator-delay", type=float, default=30.0, help="через сколько с человек чинит замеченное")
     r.add_argument("--tail-s", type=float, default=40.0, help="запись после конца таймлайна, с")
@@ -506,8 +569,12 @@ def main(argv=None) -> int:
     r.add_argument("--mcp-venv", default=os.path.join(stacks.BASE, "mcpvenv"),
                    help="venv с mcp для прокси лаборатории (A0)")
     r.add_argument("--keep", action="store_true", help="не останавливать систему в конце")
+    r.add_argument("--world", default="hall", choices=sorted(stacks.WORLDS),
+                   help="мир двойника A1 (hall — зал 9 × 9 м, lab — комната 5 × 5 м); у A0 — только hall")
+    r.add_argument("--no-return", default="nan", choices=("nan", "inf"),
+                   help="что лидар двойника A1 отдаёт на «нет отражения»: nan (допущение двойника) или +inf (REP 117)")
     i = sub.add_parser("a1-install", help="поставить пакет на двойник (setup_twin.sh + правки прогона)")
-    i.add_argument("--mockllm", required=True, help="bench/mockllm на Mac")
+    i.add_argument("--mockllm", required=True, help="bench/mockllm в ВМ (адрес — в конфиг PicoClaw пакета)")
     sub.add_parser("a1-teardown", help="снять пакет с двойника")
     a = p.parse_args(argv)
     if os.geteuid() != 0:
@@ -531,8 +598,12 @@ def main(argv=None) -> int:
         if not stacks.A1.installed():
             print("runner: пакет A1 не поставлен (a1-install)", file=sys.stderr)
             return 2
-        stack = stacks.A1(a.out, a.sched, a.mockllm)
-    runner = Runner(stack, plan, a.out, MockLLM(a.mockllm), a.operator_delay, a.tail_s, a.collect_interval, a.label)
+        stack = stacks.A1(a.out, a.sched, a.mockllm, a.world, a.no_return)
+    if a.system == "a0" and (a.world, a.no_return) != ("hall", "nan"):
+        print("runner: --world и --no-return — только у A1", file=sys.stderr)
+        return 2
+    runner = Runner(stack, plan, a.out, MockLLM(a.mockllm), a.operator_delay, a.tail_s, a.collect_interval, a.label,
+                    a.world)
     t0 = time.time()
     rc = 0
 

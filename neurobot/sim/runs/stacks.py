@@ -2,8 +2,12 @@
 безопасность v2 (neurobot.target). Общий интерфейс для runner.py: подготовка, подъём, остановка, процесс по роли
 (для отказов), «роль снова работает» (для TTR), действия человека-оператора.
 
-Роли отказов (schedule.FAULT_CYCLE): perception, rosbridge, mcp, agent, executor, safety. У A0 нет исполнителя и
-safety_gate (/cmd_vel пишет демо) — такие отказы пропускаются с пометкой. Пути ВМ — BASE; код — снимок SRC.
+Роли отказов (schedule.FAULT_CYCLE): perception, rosbridge, mcp, agent, executor, safety; драйверы
+(schedule.DRIVER_CYCLE): lidar — узел /urg_node2, camera — узел /camera/camera (юниты neurobot-driver@lidar и @camera,
+как на роботе), base — сервер Gazebo юнита neurobot-driver@twin (в нём gz_ros2_control: controller_manager и
+diff_drive_controller; на роботе на этом месте ros2_control с мостом STM32). У A0 нет исполнителя и safety_gate
+(/cmd_vel пишет демо) — такие отказы пропускаются с пометкой; драйверы A0 — внутри launch двойника, их отказы на нём
+не прогонялись. Пути ВМ — BASE; код — снимок SRC.
 """
 from __future__ import annotations
 
@@ -29,8 +33,16 @@ LAB_SNN = "third_party/neurochip/demo/demo-ros2_feature/models/snn_emnist_small.
 LAB_RP = "third_party/neurochip/robotic_platform/robotic_platform"
 PICO_TOKEN_FILE = "pico_token"
 CAMERA_RELAY_TOPIC = "/runs/camera/color/image_raw"
-# сервер rosbridge внутри ros2 launch (у самого launch в строке — rosbridge_websocket_launch.xml): отказ «упал узел»
-ROSBRIDGE_NODE = "lib/rosbridge_server/rosbridge_websocket"
+# узлы внутри ros2 launch — регулярные выражения по командной строке (re.search). Сервер rosbridge (у самого launch в
+# строке — rosbridge_websocket_launch.xml): отказ «упал узел»
+ROSBRIDGE_NODE = r"lib/rosbridge_server/rosbridge_websocket"
+# узел датчиков двойника в launch драйвера (sensor.launch.py): отказ «упал или завис узел»
+SENSOR_NODE = r"sensor_model\.py"
+# сервер Gazebo базы двойника; его обёртка «/bin/sh -c ruby … gz sim» — не он
+BASE_NODE = r"^gz sim "
+# миры прогона: файл (путь в снимке) и поза спавна — та, куда оператор переносит застрявшего робота
+WORLDS = {"hall": ("neurobot/sim/runs/worlds/hall.sdf", (0.0, 0.0, 0.01, 0.0)),
+          "lab": ("neurobot/sim/twin/worlds/lab.sdf", (-1.5, 0.0, 0.01, 0.0))}
 
 
 def log(msg: str) -> None:
@@ -72,9 +84,9 @@ def cmdline(pid: int) -> str:
 
 
 def find_pid(unit: str, pattern: str) -> int:
-    """PID процесса юнита, в командной строке которого есть pattern; 0 — нет такого."""
-    for pid in cgroup_pids(unit):
-        if pattern in cmdline(pid):
+    """PID процесса юнита, командная строка которого подходит под pattern (re.search); 0 — нет такого."""
+    for pid in sorted(cgroup_pids(unit)):
+        if re.search(pattern, cmdline(pid)):
             return pid
     return 0
 
@@ -184,6 +196,9 @@ class Stack:
     def has(self, role: str) -> bool:
         return True
 
+    def skip_reason(self, role: str) -> str:
+        return "у системы нет компонента"
+
     def up(self, role: str) -> bool:
         raise NotImplementedError
 
@@ -224,8 +239,8 @@ class A0(Stack):
                    "move": [{"name": "robot_nudge_forward", "args": {"duration_ms": 300, "speed": 0.8}}]}
     UNITS = {"twin": "a0-twin", "rosbridge": "a0-rosbridge", "worker": "a0-worker", "demo": "a0-demo",
              "picoclaw": "a0-picoclaw"}
-    ROLE = {"perception": ("demo", "a0_demo.py"), "rosbridge": ("rosbridge", ROSBRIDGE_NODE),
-            "mcp": ("picoclaw", "robot_vision_mcp_proxy.py"), "agent": ("picoclaw", "picoclaw")}
+    ROLE = {"perception": ("demo", r"a0_demo\.py"), "rosbridge": ("rosbridge", ROSBRIDGE_NODE),
+            "mcp": ("picoclaw", r"robot_vision_mcp_proxy\.py"), "agent": ("picoclaw", "picoclaw")}
 
     def __init__(self, run_dir: str, sched: str, mockllm: str, ml_python: str, picoclaw: str, mcp_venv: str):
         super().__init__(run_dir, sched, mockllm)
@@ -242,6 +257,11 @@ class A0(Stack):
 
     def has(self, role: str) -> bool:
         return role in self.ROLE
+
+    def skip_reason(self, role: str) -> str:
+        if role in ("lidar", "camera", "base"):
+            return "драйверы A0 — внутри launch двойника (как одним launch у лаборатории): отказ драйвера не прогонялся"
+        return "у системы нет компонента"
 
     def session_dir(self) -> str:
         return os.path.join(self.home, "workspace", "sessions")
@@ -385,19 +405,25 @@ class A1(Stack):
                    "move": [{"name": "robot_nudge", "args": {"direction": "forward", "duration_ms": 1000,
                                                              "speed": 0.15}}]}
     UNITS = {"perception": "neurobot-perception", "rosbridge": "neurobot-rosbridge", "mcp": "neurobot-mcp",
-             "agent": "neurobot-picoclaw", "executor": "neurobot-executor", "safety": "neurobot-safety"}
+             "agent": "neurobot-picoclaw", "executor": "neurobot-executor", "safety": "neurobot-safety",
+             "lidar": "neurobot-driver@lidar", "camera": "neurobot-driver@camera", "base": "neurobot-driver@twin"}
+    DRIVERS = ("lidar", "camera", "base")
     RELAY = "runs-camrelay"
 
-    def __init__(self, run_dir: str, sched: str, mockllm: str):
+    def __init__(self, run_dir: str, sched: str, mockllm: str, world: str = "hall", no_return: str = "nan"):
         super().__init__(run_dir, sched, mockllm)
+        self.world, self.no_return = world, no_return
         self.anchor_path = os.path.join(TW, "gestures", "anchor.json")
         self.probe_path = os.path.join(TW, "gestures", "probe.jsonl")
         self.observer_extra = ["--extra-cmd", "/neurobot/cmd_vel_req", "--extra-cmd", "/diff_cont/cmd_vel_unstamped",
                                "--probe", self.probe_path]
 
     def units(self) -> Dict[str, str]:
-        out = dict(self.UNITS, watchdog="neurobot-watchdog")
-        out["twin_driver"] = "neurobot-driver@twin"
+        """Юниты пакета; драйверы двойника (Gazebo и база, узлы лидара и камеры) — с суффиксом _driver: на роботе там
+        urg_node2, realsense2_camera и мост STM32, их память и рестарты к пакету не относятся."""
+        out = {k: u for k, u in self.UNITS.items() if k not in self.DRIVERS}
+        out.update(watchdog="neurobot-watchdog", twin_driver=self.UNITS["base"], lidar_driver=self.UNITS["lidar"],
+                   camera_driver=self.UNITS["camera"])
         return out
 
     def session_dir(self) -> str:
@@ -419,10 +445,12 @@ class A1(Stack):
         return os.path.exists(ENV_FILE)
 
     @staticmethod
-    def env_edit(text: str, world: str, probe: str) -> str:
-        """Правки env-файла пакета для прогона (README §2.2), повторное применение ничего не меняет: мир hall и цвет
-        10 к/с у драйвера двойника, кадры распознавания — с узла отказов, журнал подставных модулей (det_calls
-        FakeYolo); прокси лаборатории убран из чужих MCP — в той же ВМ он работает у A0 (другой домен DDS и шлюз)."""
+    def env_edit(text: str, world: str, spawn: tuple, probe: str, no_return: str = "nan") -> str:
+        """Правки env-файла пакета для прогона (README §2.2), повторное применение ничего не меняет: мир (hall, lab),
+        поза спавна (x, y, z, курс; мир путём к .sdf launch двойника ставит в начало координат, а в мире lab там низкий
+        ящик) и цвет 10 к/с у драйвера двойника, «нет отражения» у лидара (no_return), кадры распознавания — с узла
+        отказов, журнал подставных модулей (det_calls FakeYolo); прокси лаборатории убран из чужих MCP — в той же ВМ
+        он работает у A0 (другой домен DDS и шлюз)."""
         def sub(key: str, fn) -> None:
             nonlocal text
             m = re.search(r'^%s="(.*)"$' % key, text, re.M)
@@ -430,8 +458,10 @@ class A1(Stack):
                 raise ValueError("в env-файле нет %s" % key)
             text = text[:m.start(1)] + fn(m.group(1)) + text[m.end(1):]
         remap = "-r /camera/color/image_raw:=%s" % CAMERA_RELAY_TOPIC
-        sub("NEUROBOT_DRIVER_twin_CMD",
-            lambda v: re.sub(r"world:=\S+", "world:=%s color_hz:=10" % world, re.sub(r" color_hz:=\S+", "", v)))
+        pose = " ".join("%s:=%g" % kv for kv in zip(("x_pose", "y_pose", "z_pose", "yaw"), spawn))
+        sub("NEUROBOT_DRIVER_twin_CMD", lambda v: re.sub(r"world:=\S+", "world:=%s %s color_hz:=10" % (world, pose),
+                                                         re.sub(r" (color_hz|x_pose|y_pose|z_pose|yaw):=\S+", "", v)))
+        sub("NEUROBOT_DRIVER_lidar_CMD", lambda v: re.sub(r"no_return:=\S+", "no_return:=" + no_return, v))
         sub("NEUROBOT_PERCEPTION_CMD",
             lambda v: v if remap in v else v.replace("--ros-args", "--ros-args " + remap, 1))
         sub("NEUROBOT_FOREIGN_MCP", lambda v: " ".join(w for w in v.split() if w != "robot_vision_mcp_proxy.py"))
@@ -439,16 +469,16 @@ class A1(Stack):
         return text.rstrip("\n") + "\nNEUROBOT_FAKES_PROBE=%s\n" % probe
 
     def apply_env(self) -> None:
-        world = os.path.join(TW, "src", "neurobot", "sim", "runs", "worlds", "hall.sdf")
+        world, spawn = WORLDS[self.world]
         with open(ENV_FILE, encoding="utf-8") as f:
             text = f.read()
-        new = self.env_edit(text, world, self.probe_path)
+        new = self.env_edit(text, os.path.join(TW, "src", world), spawn, self.probe_path, self.no_return)
         if new != text:
             with open(ENV_FILE, "w", encoding="utf-8") as f:
                 f.write(new)
 
     def install(self) -> None:
-        """setup_twin.sh снимка, затем правки прогона: env-файл, конфиг PicoClaw с каналом pico и mockllm на Mac."""
+        """setup_twin.sh снимка, затем правки прогона: env-файл, конфиг PicoClaw с каналом pico и mockllm."""
         if self.installed():
             raise RuntimeError("пакет уже установлен (%s): сначала teardown" % ENV_FILE)
         sh(["bash", os.path.join(SRC, "neurobot/sim/suites/setup_twin.sh"), "--domain", str(self.domain)],
@@ -471,11 +501,27 @@ class A1(Stack):
         sh(["systemctl", "stop", A1.RELAY], check=False)
         sh(["bash", os.path.join(SRC, "neurobot/sim/suites/setup_twin.sh"), "--teardown"], check=False, timeout=600)
 
+    def point_llm(self) -> None:
+        """Конфиг PicoClaw пакета — на mockllm этого прогона (адрес мог смениться после install), с merge оверлея."""
+        path = os.path.join(TW, "picoclaw", "config.json")
+        with open(path, encoding="utf-8") as f:
+            cfg = json.load(f)
+        new = pico_config(cfg, port=self.gateway_port, api_base=self.mockllm + "/v1")
+        if new == cfg:
+            return
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(new, f, ensure_ascii=False, indent=2)
+        sh(["chown", "neurobot:neurobot", path])
+        sh(["chmod", "600", path])
+        sh(["neurobot", "picoclaw-config", "merge"])
+
     def prepare(self) -> None:
-        """Пакет остановлен; таймлайн прогона на место таймлайна пакета, новый якорь и журнал probe; узел отказов
-        камеры."""
+        """Пакет остановлен; PicoClaw — на mockllm прогона (если задан); таймлайн прогона на место таймлайна пакета,
+        новый якорь и журнал probe; узел отказов камеры."""
         self.stop()
         self.apply_env()
+        if self.mockllm:
+            self.point_llm()
         gdir = os.path.join(TW, "gestures")
         for name in ("timeline.jsonl", "truth.jsonl"):
             shutil.copy(os.path.join(self.sched, name), os.path.join(gdir, name))
@@ -510,6 +556,10 @@ class A1(Stack):
         unit = self.UNITS[role]
         if role == "rosbridge":
             return find_pid(unit, ROSBRIDGE_NODE)
+        if role in ("lidar", "camera"):
+            return find_pid(unit, SENSOR_NODE)
+        if role == "base":
+            return find_pid(unit, BASE_NODE)
         pid = int(unit_prop(unit, "MainPID") or 0)
         return pid if pid > 0 else 0
 

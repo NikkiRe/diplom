@@ -20,7 +20,7 @@ from typing import Callable, Dict, List, Optional
 
 sys.path.insert(0, "/opt/neurobot/lib")
 
-from neurobot_deploy.config import load  # noqa: E402
+from neurobot_deploy.config import load, quote  # noqa: E402
 from neurobot_deploy.probes import McpClient  # noqa: E402
 
 log = logging.getLogger("suites")
@@ -36,8 +36,9 @@ from std_msgs.msg import String  # noqa: E402
 
 HZ = 20.0
 WORLD = "/world/default/"
-UNITS = ("neurobot-driver@twin", "neurobot-safety", "neurobot-executor", "neurobot-perception", "neurobot-rosbridge",
-         "neurobot-mcp", "neurobot-picoclaw", "neurobot-watchdog")
+UNITS = ("neurobot-driver@twin", "neurobot-driver@lidar", "neurobot-driver@camera", "neurobot-safety",
+         "neurobot-executor", "neurobot-perception", "neurobot-rosbridge", "neurobot-mcp", "neurobot-picoclaw",
+         "neurobot-watchdog")
 JSON_TOPICS = {"truth": "/twin/truth", "state": "/neurobot/safety_state", "motion": "/neurobot/motion_state",
                "events": "/neurobot/events", "gesture": "/neurobot/gesture", "health": "/neurobot/perception_health",
                "estop": CFG.get("NEUROBOT_ESTOP_TOPIC")}
@@ -240,6 +241,27 @@ class Twin:
             raise RuntimeError("safety_gate не взвёлся после переноса: {}".format(
                 (self.last("state") or {}).get("reasons")))
 
+    def safety_args(self, extra: str = "", arm: bool = True) -> None:
+        """Параметры safety_gate на время сценария («-p имя:=значение …»): drop-in юнита в /run — второй
+        EnvironmentFile= перекрывает команду из env-файла пакета (как twin_world.sh у драйвера); "" — снять подмену.
+        Перезапуск safety_gate и (arm) ожидание взвода."""
+        drop, envf = "/run/systemd/system/neurobot-safety.service.d", "/run/neurobot-suite-safety.env"
+        for path in (os.path.join(drop, "suite.conf"), envf):
+            if os.path.exists(path):
+                os.remove(path)
+        if extra:
+            os.makedirs(drop, exist_ok=True)
+            with open(envf, "w", encoding="utf-8") as f:
+                cmd = CFG.get("NEUROBOT_SAFETY_CMD") + " --ros-args " + extra
+                f.write("NEUROBOT_SAFETY_CMD={}\n".format(quote(cmd)))
+            with open(os.path.join(drop, "suite.conf"), "w", encoding="utf-8") as f:
+                f.write("[Service]\nEnvironmentFile={}\n".format(envf))
+        self.systemctl("daemon-reload")
+        self.systemctl("restart", "neurobot-safety")
+        if arm and not self.armed():
+            raise RuntimeError("safety_gate не взвёлся с параметрами {!r}: {}".format(
+                extra, (self.last("state") or {}).get("reasons")))
+
     def unit_pid(self, unit: str, pattern: str) -> int:
         """PID процесса юнита, в командной строке которого есть pattern (ВМ общая: чужие двойники не в счёт)."""
         cgroup = self.systemctl("show", "-p", "ControlGroup", "--value", unit)
@@ -251,15 +273,16 @@ class Twin:
         raise RuntimeError("в {} нет процесса {}".format(unit, pattern))
 
     @staticmethod
-    def cli(*args: str, answer: Optional[str] = None, timeout: float = 60.0) -> dict:
-        """CLI neurobot; answer — ответ человека в псевдотерминале (stdin — терминал), иначе stdin не терминал."""
+    def cli(*args: str, answer: Optional[str] = None, timeout: float = 60.0, user: str = "") -> dict:
+        """CLI neurobot; answer — ответ человека в псевдотерминале (stdin — терминал), иначе stdin не терминал;
+        user — от этого пользователя (sudo -u), а не от root."""
+        argv = (["sudo", "-u", user] if user else []) + ["neurobot", *args]
         if answer is None:
-            out = subprocess.run(["neurobot", *args], capture_output=True, text=True, timeout=timeout,
-                                 stdin=subprocess.DEVNULL)
+            out = subprocess.run(argv, capture_output=True, text=True, timeout=timeout, stdin=subprocess.DEVNULL)
             return {"rc": out.returncode, "out": out.stdout + out.stderr}
         pid, fd = pty.fork()
         if pid == 0:
-            os.execvp("neurobot", ["neurobot", *args])
+            os.execvp(argv[0], argv)
         text, sent, end = b"", False, time.monotonic() + timeout
         while time.monotonic() < end:
             if not select.select([fd], [], [], 0.2)[0]:
@@ -276,6 +299,9 @@ class Twin:
                 sent = True
         _, status = os.waitpid(pid, 0)
         return {"rc": os.waitstatus_to_exitcode(status), "out": text.decode("utf-8", "replace")}
+
+    def cli_as(self, user: str, *args: str, answer: Optional[str] = None, timeout: float = 60.0) -> dict:
+        return self.cli(*args, answer=answer, timeout=timeout, user=user)
 
     @staticmethod
     def journal_text(units, since_wall: float) -> str:
