@@ -101,7 +101,8 @@ class UnitsTest(unittest.TestCase):
             with self.subTest(unit=name):
                 self.assertEqual(one(u, "Unit", "PartOf"), "neurobot.target")
                 self.assertEqual(one(u, "Install", "WantedBy"), "neurobot.target")
-                self.assertEqual(one(u, "Unit", "StartLimitIntervalSec"), "0")  # [Unit] с v230
+                if name != "neurobot-ui.service":      # пульт роботу не нужен: он сдаётся (test_operator_console_unit)
+                    self.assertEqual(one(u, "Unit", "StartLimitIntervalSec"), "0")  # [Unit] с v230
                 self.assertEqual(one(u, "Service", "EnvironmentFile"), "/etc/neurobot/neurobot.env")
 
     def after(self, units: dict, name: str) -> set:
@@ -121,6 +122,8 @@ class UnitsTest(unittest.TestCase):
             "neurobot-picoclaw.service": {"neurobot-rosbridge.service", "neurobot-mcp.service"},
             # сторож — вместе с драйверами: зависший драйвер не даёт подняться остальным, а перезапускает его он
             "neurobot-watchdog.service": set(),
+            # пульт — после safety_gate и ни от кого не зависит: робот работает и без него
+            "neurobot-ui.service": {"neurobot-safety.service"},
         }
         self.assertEqual(set(want), set(self.units) - {"neurobot.target"})
         for name, after in want.items():
@@ -149,7 +152,8 @@ class UnitsTest(unittest.TestCase):
                  "neurobot-rosbridge.service": ("rosbridge", "wait-port rosbridge"),
                  "neurobot-mcp.service": ("mcp", "wait-mcp"),
                  "neurobot-picoclaw.service": ("picoclaw", "+wait-agent"),
-                 "neurobot-labworker@.service": ("labworker@%i", "wait-http labworker@%i")}
+                 "neurobot-labworker@.service": ("labworker@%i", "wait-http labworker@%i"),
+                 "neurobot-ui.service": ("ui", "wait-graph ui")}
         for name, (comp, post) in cases.items():
             u = self.units[name]
             with self.subTest(unit=name):
@@ -179,9 +183,43 @@ class UnitsTest(unittest.TestCase):
                   if dict(u.get("Service", [])).get("StateDirectory")}
         self.assertEqual(states, {"neurobot-safety.service": "neurobot/safety",
                                   "neurobot-executor.service": "neurobot/executor",
-                                  "neurobot-perception.service": "neurobot/perception"})
+                                  "neurobot-perception.service": "neurobot/perception",
+                                  "neurobot-ui.service": "neurobot/ui"})
         # --camera rs, камеру держит другой процесс: код 6 — без рестарта по кругу (каждый грузил бы модель заново)
         self.assertEqual(one(self.units["neurobot-perception.service"], "Service", "RestartPreventExitStatus"), "6")
+
+    def test_operator_console_unit(self):
+        # пульт: свой пользователь (агент не читает токен), токен в StateDirectory 0700, свой предел памяти и slice,
+        # без Requires= и без ExecStopPost (ноль шлёт только safety_gate); WATCHDOG — от тика узла
+        u = self.units["neurobot-ui.service"]
+        self.assertEqual(one(u, "Service", "User"), "neurobot-ui")
+        self.assertNotEqual(one(u, "Service", "User"), self.cfg.get("NEUROBOT_USER"))
+        self.assertEqual(one(u, "Service", "StateDirectoryMode"), "0700")
+        self.assertEqual(one(u, "Service", "MemoryMax"), "128M")      # шлюз ≈43 МиБ + doctor по кнопке ≈40 (soak)
+        self.assertTrue(one(u, "Service", "Slice").endswith(".slice"))
+        self.assertEqual((one(u, "Service", "Type"), one(u, "Service", "NotifyAccess"), one(u, "Service", "Restart")),
+                         ("notify", "main", "always"))
+        # постоянный отказ пульта не должен съедать ядро: код 2 (env, порт, vendor) — без рестарта, рестарт через 3 с,
+        # 5 неудачных запусков за 5 мин — сдаётся (doctor — предупреждение); под нагрузкой уступает perception
+        self.assertEqual((one(u, "Service", "RestartSec"), one(u, "Service", "RestartPreventExitStatus")), ("3", "2"))
+        self.assertEqual((one(u, "Unit", "StartLimitIntervalSec"), one(u, "Unit", "StartLimitBurst")), ("300", "5"))
+        self.assertEqual((one(u, "Service", "CPUWeight"), one(u, "Service", "Nice")), ("20", "10"))
+        # арены glibc потоков HTTP: две и порог trim/mmap — память возвращается после переподключений
+        self.assertIn("MALLOC_ARENA_MAX=2 MALLOC_TRIM_THRESHOLD_=131072",
+                      [v for k, v in u["Service"] if k == "Environment"])
+        self.assertEqual(one(u, "Service", "NoNewPrivileges"), "yes")
+        self.assertIn("PYTHONPATH=/opt/neurobot/src", [v for k, v in u["Service"] if k == "Environment"])
+        self.assertEqual(one(u, "Service", "ExecStart"), "/opt/neurobot/bin/neurobot-run --ros --var NEUROBOT_UI_CMD")
+        with self.assertRaisesRegex(Exception, "свой пользователь"):
+            render.values(Config(dict(self.cfg.values, NEUROBOT_UI_USER="jetson"), self.cfg.path))
+        with self.assertRaisesRegex(Exception, "не root"):
+            render.values(Config(dict(self.cfg.values, NEUROBOT_UI_USER="root"), self.cfg.path))
+        # в составе по умолчанию пульта нет: ставится по согласию лаборатории
+        self.assertNotIn("ui", DEFAULTS["NEUROBOT_COMPONENTS"].split())
+        self.assertNotIn("neurobot-ui.service", render.enable_list(self.cfg))
+        cfg = Config(dict(self.cfg.values, NEUROBOT_COMPONENTS=self.cfg.get("NEUROBOT_COMPONENTS") + " ui"),
+                     self.cfg.path)
+        self.assertEqual(render.enable_list(cfg)[-2:], ["neurobot-ui.service", "neurobot-watchdog.service"])
 
     def test_rendered_values(self):
         ex = self.units["neurobot-safety.service"]

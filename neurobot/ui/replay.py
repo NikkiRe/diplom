@@ -161,7 +161,12 @@ class Builder:
             if prev_t is not None:
                 self.alarms(t, "link", [], off_delay=0.0)
             state, reasons = row["state"], [fmt.reason(r) for r in row.get("reasons") or []]
-            msg = {"k": "safety", "t": t, "state": state, "reasons": reasons, "level": A.level(state, reasons)}
+            # warnings в записях наблюдателя нет; если есть — та же политика, что у живого шлюза (alarms.loud)
+            warnings = [fmt.reason(w) for w in row.get("warnings") or [] if isinstance(w, str)]
+            msg = {"k": "safety", "t": t, "state": state, "reasons": reasons,
+                   "level": A.level(state, reasons, warnings)}
+            if "warnings" in row:
+                msg["warnings"] = warnings
             if row.get("min_clearance_m") is not None:
                 msg["min_clearance_m"] = row["min_clearance_m"]
             if state == "estop":
@@ -171,7 +176,7 @@ class Builder:
             else:
                 since = None
             self.add(msg)
-            self.alarms(t, "safety", A.safety_alarms(state, reasons))
+            self.alarms(t, "safety", A.safety_alarms(state, reasons, warnings))
             prev_t = t
 
     # скорости: /neurobot/cmd_vel_req и /cmd_vel по сериям наблюдателя

@@ -4,7 +4,8 @@ rclpy импортируется только здесь и только при 
 каждый вызов, чтобы не задевать глобальное состояние (у сторожа — один постоянный, TopicWatch). Используются только
 API, которые есть в Foxy:
 get_publishers_info_by_topic, get_subscriptions_info_by_topic, get_topic_names_and_types, get_node_names,
-count_subscribers, create_subscription(raw=True), SingleThreadedExecutor(context=).
+get_publisher_names_and_types_by_node, count_subscribers, create_subscription(raw=True),
+SingleThreadedExecutor(context=).
 """
 from __future__ import annotations
 
@@ -120,6 +121,35 @@ def wait_node(cfg: Config, name: str, topics: List[str], timeout: float) -> Opti
         return _settle(node, topics, cfg.num("NEUROBOT_WRITER_CHECK_S"))
 
 
+def _node_pubs(node, name: str, seconds: float) -> Optional[List[str]]:
+    """Темы, в которые пишет узел name (корневое пространство имён): объединение снимков за seconds с — конечные точки
+    приходят в граф не сразу; None — узла нет."""
+    if name not in node.get_node_names():
+        return None
+    pubs: set = set()
+    end = time.monotonic() + seconds
+    while True:
+        try:
+            pubs |= {t for t, _ in node.get_publisher_names_and_types_by_node(name, "/")}
+        except Exception:  # noqa: BLE001 — узел ушёл из графа между вызовами (NodeNameNonExistentError)
+            pass
+        if time.monotonic() >= end:
+            return sorted(pubs)
+        time.sleep(0.25)
+
+
+def node_publishers(cfg: Config, name: str, timeout: float) -> Optional[List[str]]:
+    """wait-graph ui: ждать узел name до timeout с, затем собрать его издателей (NEUROBOT_WRITER_CHECK_S); None — узел
+    не появился."""
+    with session(cfg, "wait") as node:
+        end = time.monotonic() + timeout
+        while name not in node.get_node_names():
+            if time.monotonic() >= end:
+                return None
+            time.sleep(0.2)
+        return _node_pubs(node, name, max(0.5, cfg.num("NEUROBOT_WRITER_CHECK_S")))
+
+
 def _scan_stats(stats: dict, msg) -> None:
     """Копит по лучам долю негодных значений (NaN, inf, вне [range_min, range_max] — коды ошибок URG, N14)."""
     lo, hi = msg.range_min, msg.range_max
@@ -189,6 +219,9 @@ def observe(cfg: Config, seconds: float) -> Dict[str, dict]:
             out[key] = dict(ends[topic], topic=topic, types=types.get(topic, []))
         for key, topics in inputs.items():
             out[key] = {t: ends[t] for t in topics}
+        if "ui" in cfg.components():
+            out["ui"] = {"node": cfg.get("NEUROBOT_UI_NODE"),
+                         "pubs": _node_pubs(node, cfg.get("NEUROBOT_UI_NODE"), 0.0)}
     return out
 
 

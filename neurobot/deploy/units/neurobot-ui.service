@@ -1,0 +1,59 @@
+# Пульт оператора (neurobot/ui; docs/ui/PLAN.md §0а, §3): живой шлюз — узел rclpy и HTTP на 127.0.0.1:NEUROBOT_UI_PORT,
+# вход — SSH-туннель и одноразовая ссылка «sudo neurobot ui-url». Окно, а не руль: граф читает сам (rosbridge и глобы
+# агента не трогает), пишет только /neurobot/stop_now и /neurobot/estop {engage} — список в коде; после READY его
+# сверяет wait-graph ui (узел не пишет больше никуда, иначе отказ и systemd снимает процесс), во время работы — doctor.
+# Снять защёлку из пульта нельзя: только sudo neurobot estop release у робота.
+# Свой пользователь @UI_USER@: токен входа — в $STATE_DIRECTORY (/var/lib/neurobot/ui, 0700), агенту (@USER@) его не
+# прочитать. Робот без пульта работает: After=neurobot-safety без Requires=, отказ пульта doctor считает
+# предупреждением. Поэтому и супервизия мягче, чем у цепочки движения: рестарт через 3 с, код 2 (env, порт, vendor —
+# сам не пройдёт) без рестарта, 5 неудачных запусков за 5 мин — пульт сдаётся (один цикл precheck → шлюз →
+# wait-graph — ≈1,2 с CPU на двойнике, на Nano кратно больше: постоянный отказ съел бы ядро у perception). CPUWeight
+# и Nice — под нагрузкой пульт уступает perception (K1 — ключевая метрика).
+# MemoryMax и свой Slice=: утечка пульта упирается в свой предел, а не роняет по OOM распознавание и safety_gate.
+# Предел — на шлюз и doctor по кнопке (его подпроцесс в той же cgroup). MALLOC_*: потоки HTTP — свои арены glibc, а
+# крупные буферы начала потока оседали в них (рост с каждым переподключением [замер ревью]); две арены и порог
+# trim/mmap 128 КиБ (явный порог выключает его рост) возвращают память. 20 мин с переподключениями и doctor раз в
+# 60 с: шлюз ≈43 МиБ anon, пик cgroup 86 МиБ — поэтому 128M, а не ≈100M плана (README пульта) [замер, двойник].
+# WATCHDOG — от тика узла.
+[Unit]
+Description=neurobot: пульт оператора (наблюдение, СТОП и защёлка)
+Documentation=file:@PREFIX@/share/RUNBOOK.md
+PartOf=neurobot.target
+After=neurobot-safety.service
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=notify
+NotifyAccess=main
+User=@UI_USER@
+Group=@UI_USER@
+EnvironmentFile=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1 ROS_LOG_DIR=/run/neurobot/%N
+Environment=PYTHONPATH=@PREFIX@/src
+Environment=MALLOC_ARENA_MAX=2 MALLOC_TRIM_THRESHOLD_=131072
+# журналы rcl — в tmpfs: у системного пользователя нет $HOME, а всё нужное и так в journald
+RuntimeDirectory=neurobot/%N
+StateDirectory=neurobot/ui
+StateDirectoryMode=0700
+ExecStartPre=@PREFIX@/bin/neurobot precheck ui
+ExecStart=@PREFIX@/bin/neurobot-run --ros --var NEUROBOT_UI_CMD
+ExecStartPost=@PREFIX@/bin/neurobot wait-graph ui
+WatchdogSec=10
+Restart=always
+RestartSec=3
+RestartPreventExitStatus=2
+TimeoutStartSec=60
+TimeoutStopSec=10
+MemoryMax=128M
+Slice=neurobot-ui.slice
+CPUWeight=20
+Nice=10
+NoNewPrivileges=yes
+ProtectSystem=full
+LimitCORE=0
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=500
+
+[Install]
+WantedBy=neurobot.target

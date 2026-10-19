@@ -19,8 +19,10 @@ from urllib.parse import urlsplit
 ENV_PATH = "/etc/neurobot/neurobot.env"
 # Порядок запуска по готовности (PLAN §5.4, §13.3): драйверы (лидар, база с twist_mux) → safety_gate (единственный
 # писатель /cmd_vel) → исполнитель (пишет /neurobot/cmd_vel_req) → распознавание → rosbridge → воркеры лаборатории
-# (прокси лаборатории ходит в них по HTTP) → MCP-сервер → агент.
-ORDER = ("safety", "executor", "perception", "rosbridge", "mcp", "picoclaw")
+# (прокси лаборатории ходит в них по HTTP) → MCP-сервер → агент → пульт оператора.
+ORDER = ("safety", "executor", "perception", "rosbridge", "mcp", "picoclaw", "ui")
+# не в составе по умолчанию: пульт ставится по согласию лаборатории (свой пользователь, порт на 127.0.0.1)
+OPTIONAL = ("ui",)
 ROS_KEYS = ("ROS_DOMAIN_ID", "ROS_LOCALHOST_ONLY", "ROS_AUTOMATIC_DISCOVERY_RANGE", "RMW_IMPLEMENTATION",
             "CYCLONEDDS_URI", "FASTRTPS_DEFAULT_PROFILES_FILE")
 DEFAULTS = {
@@ -28,7 +30,7 @@ DEFAULTS = {
     "NEUROBOT_GROUP": "jetson",
     "NEUROBOT_SUPPLEMENTARY_GROUPS": "",
     "NEUROBOT_PREFIX": "/opt/neurobot",
-    "NEUROBOT_COMPONENTS": " ".join(ORDER),
+    "NEUROBOT_COMPONENTS": " ".join(c for c in ORDER if c not in OPTIONAL),
     "NEUROBOT_DRIVERS": "",
     "NEUROBOT_LABWORKERS": "",
     "NEUROBOT_ROS_SETUP": "/opt/ros/foxy/setup.bash",
@@ -104,6 +106,22 @@ DEFAULTS = {
     "NEUROBOT_FOREIGN_MCP": "ros_mcp_server.py start_robot_mcp.sh robot_vision_mcp_proxy.py yolo_mcp_server.py "
                             "run_yolo_mcp_stack.sh yolo_hand_worker.py",
     "NEUROBOT_WATCHDOG_PROBE_TOOL": "",
+    # пульт оператора (neurobot/ui, docs/ui/PLAN.md §0а): свой пользователь — агент (NEUROBOT_USER) токен входа не
+    # прочитает; узел не neurobot_* (так CLI зовёт свои служебные узлы — проверки писателей их пропускают)
+    "NEUROBOT_UI_CMD": "",
+    "NEUROBOT_UI_USER": "neurobot-ui",
+    "NEUROBOT_UI_NODE": "ui_gateway",
+    "NEUROBOT_UI_PORT": "18120",
+    "NEUROBOT_UI_MODULES": "rclpy",
+    # подпись источника на каждом экране: робот | двойник (числа стенда не должны сойти за числа робота)
+    "NEUROBOT_UI_SOURCE": "робот",
+    "NEUROBOT_UI_STATE_DIR": "/var/lib/neurobot/ui",
+    # бандл «Записи» рядом с живым режимом (переключатель «Живой» / «Запись»); пусто — только живой
+    "NEUROBOT_UI_BUNDLE": "",
+    # doctor по кнопке пульта не чаще раза в столько секунд; 0 — выключен (во время замеров)
+    "NEUROBOT_UI_DOCTOR_S": "60",
+    # компоненты не робота (у двойника — Gazebo в driver@twin): в память стека против бюджета не идут
+    "NEUROBOT_UI_NOT_ROBOT": "",
 }
 _LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)")
 _SENSOR = re.compile(r"(/[\w/]+):(\w+/msg/\w+)(?::([0-9.]+))?")

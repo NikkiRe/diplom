@@ -2,10 +2,10 @@
 
 systemd не раскрывает переменные окружения в User=, Group=, путях и зависимостях, поэтому эти значения
 подставляются при установке; в Exec*-строках юниты читают тот же env-файл сами (EnvironmentFile=).
-Подстановки: @USER@ @GROUP@ @SUPPLEMENTARY_GROUPS@ @PREFIX@ @ETC@ @PICOCLAW_HOME@; строка, целиком равная
+Подстановки: @USER@ @GROUP@ @SUPPLEMENTARY_GROUPS@ @PREFIX@ @ETC@ @PICOCLAW_HOME@ @UI_USER@; строка, целиком равная
 @AFTER_DRIVERS@ или @AFTER_LABWORKERS@, заменяется на After= с юнитами драйверов (воркеров) или удаляется.
 Здесь же — статические проверки состава: камеру не открывают и распознавание, и воркер лаборатории (N12);
-исполнитель не бывает без safety_gate.
+исполнитель не бывает без safety_gate; пульт — не от пользователя компонентов (агента) и не от root.
 """
 from __future__ import annotations
 
@@ -20,12 +20,17 @@ _NAME = re.compile(r"[a-z_][a-z0-9_-]*")
 
 
 def values(cfg: Config) -> Dict[str, str]:
-    v = {"USER": cfg.get("NEUROBOT_USER"), "GROUP": cfg.get("NEUROBOT_GROUP"),
+    v = {"USER": cfg.get("NEUROBOT_USER"), "GROUP": cfg.get("NEUROBOT_GROUP"), "UI_USER": cfg.get("NEUROBOT_UI_USER"),
          "SUPPLEMENTARY_GROUPS": " ".join(cfg.get("NEUROBOT_SUPPLEMENTARY_GROUPS").split()),
          "PREFIX": cfg.get("NEUROBOT_PREFIX").rstrip("/"), "ETC": os.path.dirname(os.path.abspath(cfg.path))}
-    for key in ("USER", "GROUP"):
+    for key in ("USER", "GROUP", "UI_USER"):
         if not _NAME.fullmatch(v[key]):
             raise EnvError("NEUROBOT_{}: ожидалось имя пользователя/группы, получено {!r}".format(key, v[key]))
+    if v["UI_USER"] == "root":
+        raise EnvError("NEUROBOT_UI_USER=root: пульт — не root (каталог снятия защёлки /run/neurobot-estop — root)")
+    if v["UI_USER"] == v["USER"]:
+        raise EnvError("NEUROBOT_UI_USER={}: пульту нужен свой пользователь — от пользователя компонентов токен входа "
+                       "в пульт прочитал бы агент (docs/ui/PLAN.md §3.3)".format(v["UI_USER"]))
     bad = [g for g in v["SUPPLEMENTARY_GROUPS"].split() if not _NAME.fullmatch(g)]
     if bad:
         raise EnvError("NEUROBOT_SUPPLEMENTARY_GROUPS: недопустимые имена {}".format(bad))

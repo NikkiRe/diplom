@@ -1,5 +1,6 @@
 // Мини-лидар «Обзора» — Canvas 2D, вид сверху, курс вверх, робот в центре. Скана в прошлых записях нет, поэтому
-// рисуется сводка safety_state (PLAN §7, П1): поле лидара ±119,9° (сзади датчика нет), маска корпуса камеры,
+// рисуется сводка safety_state (PLAN §7, П1); в живом режиме поверх — точки скана шлюза (бины 1° пеленга в базе
+// робота, ближайшее попадание от центра корпуса): поле лидара ±119,9° (сзади датчика нет), маска корпуса камеры,
 // клин глубины 87°, корпус Ø0,39 м и коридор, зазор min_clearance_m (пунктир) и тормозной путь d_stop(v) при скорости
 // /cmd_vel (черта поперёк коридора). У A0 safety_gate нет — только корпус и подпись: защиты, которой нет, не рисуем.
 // Пеленг θ — в базе робота, «+» влево (ROS): экран x = cx − r·sin θ, y = cy − r·cos θ.
@@ -22,8 +23,16 @@ export function sectors(reasons) {
   return out;
 }
 
-// out — /cmd_vel не старше 2 с (иначе null: тормозной путь не рисуется)
-export function drawLidar(canvas, { geo, safety, out, pal, hasSafety, level }) {
+// точки скана: [x, y] экрана по бинам {a0, da, r} — пеленг середины бина, дальность от центра корпуса
+export function scanPoints(scan, pt) {
+  const out = [];
+  if (!scan || !scan.r) return out;
+  scan.r.forEach((r, i) => { if (r != null) out.push(pt(r, scan.a0 + (i + 0.5) * scan.da)); });
+  return out;
+}
+
+// out — /cmd_vel не старше 2 с (иначе null: тормозной путь не рисуется); scan — скан не старше 1 с или null
+export function drawLidar(canvas, { geo, safety, out, scan, pal, hasSafety, level }) {
   const dpr = window.devicePixelRatio || 1;
   const w = canvas.clientWidth || 360;
   const hgt = canvas.clientHeight || w;
@@ -101,6 +110,10 @@ export function drawLidar(canvas, { geo, safety, out, pal, hasSafety, level }) {
       wedge(s.a, s.b, R + 0.02, VIEW_M); ctx.stroke(); ctx.lineWidth = 1;
     }
   }
+
+  // скан: попадания — точками; где попаданий нет («нет данных», «свободно»), точек нет
+  ctx.fillStyle = pal.text;
+  for (const [x, y] of scanPoints(scan, pt)) ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
 
   // корпус и курс
   ctx.fillStyle = pal.panel2; ctx.strokeStyle = pal.text; ctx.lineWidth = 1.5;

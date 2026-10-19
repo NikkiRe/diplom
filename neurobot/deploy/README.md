@@ -14,9 +14,9 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 
 | Путь | Что |
 |---|---|
-| `units/` | шаблоны юнитов: `neurobot.target`, `neurobot-driver@.service`, `-safety`, `-executor`, `-perception`, `-rosbridge`, `neurobot-labworker@.service`, `-mcp`, `-picoclaw`, `-watchdog` |
+| `units/` | шаблоны юнитов: `neurobot.target`, `neurobot-driver@.service`, `-safety`, `-executor`, `-perception`, `-rosbridge`, `neurobot-labworker@.service`, `-mcp`, `-picoclaw`, `-watchdog`, `-ui` (пульт оператора, по согласию лаборатории) |
 | `neurobot.env.example` | единый env-файл робота (Foxy) → `/etc/neurobot/neurobot.env` |
-| `install.sh` | установка / удаление: юниты из env-файла, CLI, исполнитель и safety_gate (`../executor`, `../safety`), drop-in journald, logrotate; `--no-journald` — без drop-in journald и без перезапуска journald (стенд), `--no-enable` — юниты поставить, но не включать в автозапуск; `--help` |
+| `install.sh` | установка / удаление: юниты из env-файла, CLI, исполнитель, safety_gate и пульт (`../executor`, `../safety`, `../ui`; с компонентом `ui` — и пользователь пульта), drop-in journald, logrotate; `--no-journald` — без drop-in journald и без перезапуска journald (стенд), `--no-enable` — юниты поставить, но не включать в автозапуск; `--help` |
 | `bin/neurobot` | CLI (Python 3.8, только stdlib; rclpy — лениво) |
 | `bin/neurobot-run` | обёртка ExecStart: окружение ROS 2 и команда из переменной env-файла, `exec` без смены PID |
 | `launchfiles/supervised.launch.py` | обёртка `ros2 launch` для драйверов и rosbridge: смерть любого узла гасит launch, юнит перезапускает systemd (`install.sh` ставит в `<prefix>/share/launchfiles/`) |
@@ -95,6 +95,7 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 | 7 | `neurobot-mcp` | exec | initialize + tools/list (`wait-mcp`) | — | always / 1 | порт свободен; конфиг MCP (HTTP на 127.0.0.1, `/cmd_vel_agent`, пределы L3) или env прокси; нет второго MCP-сервера или воркера вне юнитов; Python ≥ 3.10, `mcp` ≥ 1.8 | без ROS-окружения |
 | 8 | `neurobot-picoclaw` | exec | «MCP server initialization complete» в журнале запуска (`wait-agent`, `+` — root) | — | always / 2 | порт шлюза свободен; конфиг PicoClaw по схеме установленной версии | «All MCP servers failed» → отказ и рестарт (PC5) |
 | 9 | `neurobot-watchdog` | exec | — | — | always / 5 | — | root; окружение ROS (узел rclpy для свежести тем драйверов); без `After=` — стартует вместе с драйверами: иначе ждал бы весь агентский путь, а зависший драйвер камеры (из-за него не поднимается распознавание) некому было бы перезапустить [опыт, ВМ] |
+| 10 | `neurobot-ui` (компонент `ui`, по умолчанию не в составе) | notify | READY после узла и порта, затем `wait-graph ui` | 10 | always / 3, код 2 — без рестарта; 5 запусков за 300 с — сдаётся | команда; темы стопа и защёлки (`NEUROBOT_STOP_TOPIC`, `NEUROBOT_ESTOP_TOPIC`) — те, что в коде пульта; свой пользователь (`NEUROBOT_UI_USER` ≠ `NEUROBOT_USER`, не root); узел не `neurobot_*`; порт свободен и не чужой; `StateDirectory` 0700; источник — робот или двойник; rclpy | только `After=neurobot-safety`; отказ и «сдался» — предупреждение doctor; `StateDirectory=neurobot/ui` (токен, коды входа, сессии, аудит), `MemoryMax=128M` (шлюз и doctor по кнопке в одной cgroup — числа в README пульта [замер, двойник]), `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=131072`, `Slice=neurobot-ui.slice`, `CPUWeight=20`, `Nice=10`, `NoNewPrivileges`, `ProtectSystem=full` |
 
 Общее для всех: `PartOf=neurobot.target` (stop/restart цели — для всех), `StartLimitIntervalSec=0` (непрерывный
 режим: не сдаваться), `LogRateLimitIntervalSec/Burst` (шумный компонент не глушит журнал остальных),
@@ -215,6 +216,16 @@ launch 0.10.10 ветки foxy, Python 3.8, тест `test_deploy_launch.py`; н
 | `NEUROBOT_FOREIGN_PERCEPTION` | predict_live.py live_stream_yolo.py realsense-viewer realsense2_camera_node yolo_hand_worker.py run_yolo_mcp_stack.sh | чужие владельцы камеры и CUDA: имя программы или файла-аргумента вне cgroup юнита (ручной запуск демо, узел камеры вне наших юнитов, YOLO-воркер вне юнита — второй контекст CUDA ≈1 ГиБ, N12). При `--camera ros` узел камеры в `neurobot-driver@` — свой, при `--camera rs` — чужой и там |
 | `NEUROBOT_FOREIGN_MCP` | ros_mcp_server.py start_robot_mcp.sh robot_vision_mcp_proxy.py yolo_mcp_server.py run_yolo_mcp_stack.sh yolo_hand_worker.py | то же для MCP-серверов и воркеров (stdio-запуск из PicoClaw, `nohup`); воркеры в юнитах `neurobot-labworker@` не в счёт. Имя процесса воркера 8766 добавить, когда лаборатория пришлёт код |
 | `NEUROBOT_ENV` | /etc/neurobot/neurobot.env | путь env-файла для CLI (юниты задают его сами) |
+| `NEUROBOT_UI_CMD` | — | пульт оператора: `/usr/bin/python3 -m neurobot.ui live` (аргументы ROS пульт не принимает) |
+| `NEUROBOT_UI_USER` | neurobot-ui | пользователь пульта (создаёт install.sh): не `NEUROBOT_USER` и не root — агент не прочитает токен входа |
+| `NEUROBOT_UI_NODE` | ui_gateway | имя узла пульта (не `neurobot_*`: так зовутся служебные узлы CLI, их проверки писателей пропускают) |
+| `NEUROBOT_UI_PORT` | 18120 | порт пульта на 127.0.0.1 (вне EdgeCtx 18080–18089, MCP 18110–18119, PicoClaw 18790) |
+| `NEUROBOT_UI_MODULES` | rclpy | что должно находиться в интерпретаторе пульта |
+| `NEUROBOT_UI_SOURCE` | робот | подпись источника на каждом экране: робот \| двойник |
+| `NEUROBOT_UI_STATE_DIR` | /var/lib/neurobot/ui | каталог токена, кодов входа и аудита (= `StateDirectory` юнита); его читает `neurobot ui-url` |
+| `NEUROBOT_UI_BUNDLE` | — | бандл «Записи» рядом с живым режимом (переключатель в пульте); пусто — только живой |
+| `NEUROBOT_UI_DOCTOR_S` | 60 | doctor по кнопке пульта не чаще раза в столько секунд; 0 — выключен (замеры) |
+| `NEUROBOT_UI_NOT_ROBOT` | — | компоненты не робота (двойник: `driver@twin`) — в память стека против бюджета не идут |
 
 Прокси лаборатории (вариант Б агентского пути) читает свои ключи из того же файла: `ROBOT_VISION_MCP_PORT` (должен
 совпадать с портом `NEUROBOT_MCP_URL`), `ROBOT_VISION_MAX_DURATION_S` (не больше `NEUROBOT_AGENT_MAX_DURATION_S`),
@@ -228,6 +239,8 @@ neurobot estop engage|release [--reason ТЕКСТ]     аварийная за�
 neurobot precheck <компонент>                      ExecStartPre; safety | executor | perception | rosbridge | mcp | picoclaw | driver@<имя> | labworker@<имя>
 neurobot wait-port rosbridge | wait-mcp | wait-agent | wait-topic driver@<имя> | wait-http labworker@<имя>   ExecStartPost-пробы
 neurobot wait-graph executor|perception            ExecStartPost: узел в графе и не пишет в /cmd_vel и прочие входы цепочки
+neurobot wait-graph ui                             ExecStartPost пульта: узел в графе и пишет только /neurobot/stop_now и /neurobot/estop
+neurobot ui-url [--ttl S]                          одноразовая ссылка входа в пульт (root; 120 с)
 neurobot zero                                      явный ноль в /cmd_vel (ExecStopPost safety_gate): код 1, если нет подписчика
 neurobot watchdog [--once]                         сторож: драйверы и rosbridge (часто), MCP и PicoClaw (период); --once — один проход MCP и PicoClaw
 neurobot start-test --cycles N --out КАТАЛОГ [--broken a,b] [--ready-timeout 180] [--stop-timeout 60] [--gesture-cmd КОМАНДА] [--deviation ТЕКСТ]
@@ -263,7 +276,9 @@ doctor проверяет:
 - соединения: WebSocket rosbridge, воркеры лаборатории (GET → 200), MCP (`initialize` + `tools/list` + один вызов
   состояния: видит ли сервер rosbridge или воркер; инструменты движения в разных единицах длительности — дубли
   прокси, N1, N2), PicoClaw (журнал запуска: «Connected to MCP server», нет «зомби», обрыва MCP, оглохшего канала,
-  вызова > 60 с). Строки журнала с ключами (`key=`, `access_token=`, `eyJ…`) показываются с `<REDACTED>`.
+  вызова > 60 с). Строки журнала с ключами (`key=`, `access_token=`, `eyJ…`) показываются с `<REDACTED>`;
+- пульт оператора (если в составе): `/healthz` на 127.0.0.1 и издатели его узла по графу — только стоп и защёлка
+  (`ui_publisher` — ошибка); не отвечает или запускается — предупреждение `ui_down`: робот работает и без пульта.
 
 Граф DDS собирается со временем, и имя только что запущенного узла приходит позже его конечных точек
 (`_NODE_NAME_UNKNOWN_`): precheck и doctor досматривают такой снимок до 2 с, иначе свой узел сошёл бы за чужого
@@ -523,6 +538,35 @@ picoclaw_versions.*`): конфиг робота (0.2.8) — 5 отказов и
 complete»); без MCP-сервера оба пишут «All MCP servers failed to connect» — это «зомби», которого узнают `wait-agent`
 и сторож.
 
+## Пульт оператора (компонент `ui`)
+
+Живой шлюз пульта — `neurobot/ui` (README там же): узел rclpy и HTTP на 127.0.0.1, вход — SSH-туннель и одноразовая
+ссылка `sudo neurobot ui-url`. Что держит инварианты, кроме кода пульта:
+- **у `/cmd_vel` один писатель.** Узел пульта пишет только `/neurobot/stop_now` и `/neurobot/estop {engage}`: после
+  READY это сверяет `wait-graph ui` (лишняя тема — отказ, systemd снимает процесс), во время работы — doctor
+  (`ui_publisher`), а писателя `/cmd_vel` поймали бы ещё precheck safety_gate и его защёлка `foreign_writer`: имя узла
+  пульта не `neurobot_*`, проверки писателей его видят;
+- **агент новых прав не получает.** rosbridge агента, его глобы, MCP и PicoClaw пульт не трогает; пульт — отдельный
+  пользователь, токен входа — в его `StateDirectory` 0700; ссылку входа выдаёт только root (граница — та же, что у
+  снятия защёлки);
+- **снять защёлку из пульта нельзя:** маршрута нет, команда в коде одна — engage; карточка показывает причины и
+  `sudo neurobot estop release`;
+- **робот без пульта работает:** `After=neurobot-safety` без `Requires=`, отказ — предупреждение doctor, свой
+  `MemoryMax` и `Slice=`; рестарт мягче, чем у цепочки движения (через 3 с; код 2 — без рестарта; 5 неудачных запусков
+  за 5 мин — сдаётся), `CPUWeight=20` и `Nice=10`: постоянный отказ пульта не съедает ядро у perception;
+- **пульт пишет туда, где слушает safety_gate:** `precheck ui` отказывает, если `NEUROBOT_STOP_TOPIC` или
+  `NEUROBOT_ESTOP_TOPIC` — не те темы, что в коде пульта (иначе СТОП и защёлка ушли бы в тему без safety_gate, а
+  проверки издателей остались бы зелёными); подтверждение стопа — счётчик safety_gate, а не «есть подписчик»;
+- **DDS между пользователями:** пульт и граф работают от разных пользователей; у Fast DDS (по умолчанию в Foxy и
+  Jazzy) общая память между ними данных не пропускает — обнаружение есть, данных нет [замер, ВМ, Jazzy:
+  `neurobot/ui/tests/foxy_smoke.sh`]; поэтому шлюз берёт профиль «только UDP» (`neurobot/ui/fastdds_udp.xml`), если
+  env-файл своего `FASTRTPS_DEFAULT_PROFILES_FILE` не задал. Свой профиль лаборатории с общей памятью — пульт данных
+  не увидит.
+
+Граф ROS робота открыт сети лаборатории (`ROS_LOCALHOST_ONLY` выключен, RS11): стоп и защёлку любой ПК сети может
+прислать и без пульта. Это ограничение робота, а не пульта; закрывается `ROS_LOCALHOST_ONLY=1` или SROS2 — вопрос к
+лаборатории.
+
 ## Проверка
 
 На Mac (Python проекта и 3.8, как на роботе):
@@ -560,7 +604,13 @@ twin|wait` (столб сервисом мира двойника или пре�
 (`/cmd_vel_gesture`), `--pause-unit` (`neurobot-perception`: он пишет в этот вход, пока стоит — пишет сценарий),
 `--reset-unit` (`neurobot-safety`: рестарт после каждого замера scan — память глубины держит убранный вплотную столб),
 `--speed` (0,15) и `--scan-speed` (0,08) м/с, `--drive-s` (1,5), `--near` (0,35 м) и `--sector` (5,25 градусов) —
-где в скане искать препятствие. `agent_truth.py`: `--runs N` (5) вызовов на условие, `--conditions` (`free` —
+где в скане искать препятствие; `--cases ui` — СТОП пульта (компонент `ui`, `docs/ui/PLAN.md` §7 U2): робот едет так же,
+как в mcp, стоп — `POST /api/stop` шлюза с CSRF и `issued_at`, как у кнопки; `--ui-trigger local` — запрос с этого
+хоста (вход по `neurobot ui-url`, root; `--ui-url`, по умолчанию `127.0.0.1:NEUROBOT_UI_PORT`), `stdin` — запрос
+делает ноутбук через SSH-туннель (`neurobot/ui/tests/accept_p3.py stop`: строка готовности в stdout, моменты запроса
+и ответа — строкой в stdin по часам хоста); метки — стоп в `/neurobot/stop_now` (копии с одним id), сообщение собрано
+шлюзом, ноль в `/neurobot/cmd_vel_req` и `/cmd_vel`, «поехал после нуля» (сценарий ещё 2 с просит ехать).
+`agent_truth.py`: `--runs N` (5) вызовов на условие, `--conditions` (`free` —
 свободно, толчки вперёд и назад; `blocked` — столб вплотную, только двойник; `estop` — защёлка, снимает сценарий как
 человек: `sudo neurobot estop release` в псевдотерминале; `nogate` — safety_gate остановлен), `--moved` (0,01 м) —
 порог сдвига по `/odom`, `--pause-unit`, `--gate-unit` (`neurobot-safety`). Итог всех трёх — JSON (существующий файл

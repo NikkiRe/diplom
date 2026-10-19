@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Установка пакета запуска neurobot: юниты systemd, CLI neurobot, исполнитель и safety_gate (код рядом с deploy),
-# лимиты journald, ротация журнала PicoClaw (README.md, RUNBOOK.md §1).
+# Установка пакета запуска neurobot: юниты systemd, CLI neurobot, исполнитель, safety_gate и пульт оператора (код
+# рядом с deploy), лимиты journald, ротация журнала PicoClaw (README.md, RUNBOOK.md §1). С компонентом ui — ещё
+# системный пользователь пульта (NEUROBOT_UI_USER, без входа и без домашнего каталога).
 #   sudo ./install.sh --env ФАЙЛ [--no-journald] [--no-enable]   установить; ФАЙЛ копируется в /etc/neurobot/neurobot.env
 #   sudo ./install.sh [--no-journald] [--no-enable]               переустановить с уже лежащим /etc/neurobot/neurobot.env
 #   sudo ./install.sh --uninstall                                 остановить, выключить и убрать юниты и CLI
@@ -8,7 +9,7 @@
 #   --no-enable — не включать юниты в автозапуск (systemctl enable), только поставить.
 # Прежние юниты, env-файл, drop-in journald и правило logrotate перед заменой или удалением переносятся в
 # /var/backups/neurobot/<время>/ (откат — RUNBOOK.md §8). Конфиги в /etc/neurobot и состояние в /var/lib/neurobot
-# (аварийная защёлка safety_gate, метки wait-graph) при удалении остаются.
+# (аварийная защёлка safety_gate, метки wait-graph, токен пульта) и пользователь пульта при удалении остаются.
 # Запуск после установки — вручную: sudo systemctl start neurobot.target.
 # Коды: 0 — успех, 2 — ошибка аргументов или окружения.
 set -euo pipefail
@@ -46,7 +47,7 @@ installed_units() {
 }
 
 do_install() {
-  local env_src=$1 journald=$2 enable=$3 prefix units comps pkg moved=""
+  local env_src=$1 journald=$2 enable=$3 prefix units comps pkg ui_user moved=""
   TMP=$(mktemp -d)
   trap 'rm -rf "$TMP"' EXIT
   if [[ -n $env_src ]]; then
@@ -67,19 +68,25 @@ do_install() {
     moved=", прежние — в $BACKUP"
   fi
   rm -rf "$prefix/lib/neurobot_deploy" "$prefix/lib/fakes" "$prefix/lib/picoclaw" "$prefix/src/neurobot/executor" \
-    "$prefix/src/neurobot/safety"
+    "$prefix/src/neurobot/safety" "$prefix/src/neurobot/ui"
   install -d -m 0755 "$prefix/bin" "$prefix/lib" "$prefix/share" "$prefix/src/neurobot"
   cp -R "$SRC/neurobot_deploy" "$SRC/fakes" "$SRC/picoclaw" "$prefix/lib/"
-  # исполнитель и safety_gate (neurobot/executor, neurobot/safety рядом с пакетом): python3 -m neurobot.<имя> с
-  # PYTHONPATH=$prefix/src; без кода компонент не стартует — предупредить сразу
-  for pkg in executor safety; do
+  # исполнитель, safety_gate и пульт (neurobot/executor, neurobot/safety, neurobot/ui рядом с пакетом): python3 -m
+  # neurobot.<имя> с PYTHONPATH=$prefix/src; без кода компонент не стартует — предупредить сразу
+  for pkg in executor safety ui; do
     if [[ -d $SRC/../$pkg ]]; then
       cp -R "$SRC/../$pkg" "$prefix/src/neurobot/"
     elif [[ $comps == *" $pkg "* ]]; then
       echo "install: нет $SRC/../$pkg — $pkg запустится, только если NEUROBOT_${pkg^^}_CMD указывает на код" >&2
     fi
   done
+  rm -rf "$prefix/src/neurobot/ui/tests"
   find "$prefix/lib" "$prefix/src" -name __pycache__ -prune -exec rm -rf {} +
+  if [[ $comps == *" ui "* ]]; then
+    # пульт — от своего пользователя: токен входа в его StateDirectory (0700) агенту не прочитать
+    ui_user=$(nb "$ENV_DST" env-get NEUROBOT_UI_USER)
+    id "$ui_user" &>/dev/null || useradd --system --no-create-home --shell /usr/sbin/nologin "$ui_user"
+  fi
   install -m 0755 "$SRC/bin/neurobot" "$SRC/bin/neurobot-run" "$prefix/bin/"
   install -m 0644 "$SRC/README.md" "$SRC/RUNBOOK.md" "$prefix/share/"
   install -D -m 0644 "$SRC/launchfiles/supervised.launch.py" "$prefix/share/launchfiles/supervised.launch.py"
@@ -112,7 +119,8 @@ do_uninstall() {
   stash "${old[@]}" "$JOURNALD_CONF" "$LOGROTATE"
   rm -f "$LINK"
   rm -rf "$prefix/bin/neurobot" "$prefix/bin/neurobot-run" "$prefix/lib/neurobot_deploy" "$prefix/lib/fakes" \
-    "$prefix/lib/picoclaw" "$prefix/src/neurobot/executor" "$prefix/src/neurobot/safety" "$prefix/share/README.md" \
+    "$prefix/lib/picoclaw" "$prefix/src/neurobot/executor" "$prefix/src/neurobot/safety" "$prefix/src/neurobot/ui" \
+    "$prefix/share/README.md" \
     "$prefix/share/RUNBOOK.md" "$prefix/share/launchfiles"
   if [[ -d $prefix ]]; then find "$prefix" -depth -type d -empty -delete; fi
   systemctl daemon-reload

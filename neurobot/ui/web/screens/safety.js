@@ -1,7 +1,9 @@
 // «Безопасность и жесты» (L2): что с безопасностью и почему, и что стало с жестами.
 // Состояние и причины кодом и текстом; цепочка скорости req → out; зазор против тормозного пути; полоса
-// состояний и лента жестов за 10 мин. Защёлку из пульта снять нельзя — только человек у робота (sudo, TTY).
-import { useMemo } from 'preact/hooks';
+// состояний и лента жестов за 10 мин. В живом режиме — «Поставить защёлку» с подтверждением; снять защёлку из
+// пульта нельзя — только человек у робота (sudo, TTY): кнопки «снять» нет.
+import { useEffect, useMemo, useState } from 'preact/hooks';
+import { command } from '../lib/live.js';
 import { html, Sign, V, Age, Info, fresh, safetySegments, stateWord, OUTCOMES } from '../lib/ui.js';
 import { Chart, Key } from '../lib/charts.js';
 import { num, unit, int, dur, clock, nbsp, DASH } from '../lib/fmt.js';
@@ -17,7 +19,45 @@ function reasonPrio(dict, code, state) {
   return c.prio;
 }
 
-function StatePanel({ run, safety, sAge, dict, T }) {
+const CONFIRM_MS = 5000;
+
+// итог «Поставить защёлку»: подтвердил safety_gate, нет ответа за 2 с (брошен браузером), устарела в пути (шлюз не
+// исполнил), прочее — причина шлюза
+function estopHint(res) {
+  if (res.ok) return `защёлка стоит · safety_gate подтвердил за ${num(1000 * res.confirmed_s, 0)} мс`;
+  if (res.timeout) return 'нет ответа за 2 с: поставлена ли — смотрите состояние; ставьте у робота';
+  if (res.status === 409) return `не поставлена: команда шла ${num(res.age_s, 1)} с — связь плохая, ставьте у робота`;
+  return `не поставлена: ${res.error || 'HTTP ' + res.status}`;
+}
+
+// «Поставить защёлку»: /neurobot/estop {engage} — только в сторону безопасности, но снимает её только человек у робота,
+// поэтому — с подтверждением (U4 §6); итог — по safety_state, его ждёт шлюз
+function EstopButton({ meta, state }) {
+  const [phase, setPhase] = useState('idle');
+  const [res, setRes] = useState(null);
+  useEffect(() => {
+    if (phase !== 'confirm') return undefined;
+    const id = setTimeout(() => setPhase('idle'), CONFIRM_MS);
+    return () => clearTimeout(id);
+  }, [phase]);
+  const engage = async () => {
+    setPhase('busy');
+    const r = await command('api/estop', meta.csrf, { reason: 'кнопка пульта' });
+    setRes(r);
+    setPhase('idle');
+  };
+  const done = res ? estopHint(res) : '';
+  if (state === 'estop') return html`<div class="estopbox" data-testid="estop-box"><span class="muted">${done || 'защёлка стоит'}</span></div>`;
+  return html`<div class="estopbox" data-testid="estop-box">
+    ${phase === 'confirm' ? html`<span>Робот встанет до снятия человеком у робота.</span>
+        <button class="latchbtn on" data-testid="estop-confirm" onClick=${engage}>Да, поставить</button>
+        <button class="plain" onClick=${() => setPhase('idle')}>отмена</button>`
+      : html`<button class="latchbtn" data-testid="estop" disabled=${phase === 'busy'} onClick=${() => setPhase('confirm')}>${phase === 'busy' ? 'ставлю…' : 'Поставить защёлку'}</button>
+        <span class=${'muted' + (res && !res.ok ? ' bad' : '')} data-testid="estop-result" title=${res && res.error ? res.error : ''}>${done || 'снять из пульта нельзя: только sudo у робота'}</span>`}
+  </div>`;
+}
+
+function StatePanel({ run, safety, sAge, dict, T, meta }) {
   if (!run.has_safety) {
     return html`<section class="panel" data-testid="state"><h2><span>Состояние safety_gate</span><${Info} text="У A0 (стек лаборатории) safety_gate нет: демо пишет /cmd_vel прямо в twist_mux. Касания этого прогона — по истине стенда (экраны «Обзор», «Агент и тренды»)." /></h2>
       <div class="big muted">${DASH}</div><div class="sub">safety_gate нет</div></section>`;
@@ -37,11 +77,16 @@ function StatePanel({ run, safety, sAge, dict, T }) {
         return html`<li><${Sign} prio=${p} /><span><code>${code}</code> <span class=${p ? '' : 'muted'}>${nbsp(text || (dict[code] || {}).text || '')}</span></span></li>`;
       }) : html`<li class="muted">причин нет</li>`}
     </ul>
-    ${safety && safety.warnings && safety.warnings.length ? html`<div class="sub muted">предупреждения: ${safety.warnings.join('; ')}</div>` : ''}
+    ${safety && safety.warnings && safety.warnings.length ? html`<div class="sub muted" data-testid="warnings">предупреждения (тихо, кроме отмеченных знаком): ${safety.warnings.map((w, i) => {
+        const c = dict[String(w).split(':')[0].trim()];
+        return html`${i ? '; ' : ''}${c && c.warn ? html`<${Sign} prio=${c.prio} /> ` : ''}${w}`;
+      })}</div>` : ''}
     ${est ? html`<div class="latch" data-testid="latch">
       <div><b>Защёлка</b> с ${clock(est.since)} · стоит ${dur(T - est.since)} · ${est.reasons.join(', ')}</div>
       <div class="sub">Снимает только человек у робота: <code>sudo neurobot estop release</code> <button onClick=${() => { try { navigator.clipboard.writeText('sudo neurobot estop release'); } catch (e) { /* нет буфера */ } }}>копировать</button></div>
+      ${run.live ? html`<div class="sub">Устранить причину, убедиться, что вокруг свободно, затем снять в терминале робота: команда спросит слово <code>release</code>. После снятия — <code>unarmed</code>: движение только с нулевого запроса.</div>` : ''}
     </div>` : ''}
+    ${run.live && meta && meta.mode === 'live' ? html`<${EstopButton} meta=${meta} state=${safety ? safety.state : null} />` : ''}
   </section>`;
 }
 
@@ -84,7 +129,7 @@ function ClearancePanel({ safety, out, geo }) {
   const MAX = 1.5;
   const P = (v) => `${(Math.min(MAX, Math.max(0, v)) / MAX) * 100}%`;
   const spare = c != null && d != null ? c - d : null;
-  const info = `Зазор — до ближайшей опасности в любую сторону, от края корпуса (min_clearance_m). d_stop(v) = v·${num(geo.t_lat, 2)} + v²/(2·${num(geo.a_brake, 1)}) + ${num(geo.margin, 2)} — умолчания safety_gate, допущение до замера на роботе. Путь вперёд (front_m) в записи не сохранялся. Шкала 0…1,5 м.`;
+  const info = `Зазор — до ближайшей опасности в любую сторону, от края корпуса (min_clearance_m). d_stop(v) = v·${num(geo.t_lat, 2)} + v²/(2·${num(geo.a_brake, 1)}) + ${num(geo.margin, 2)} — умолчания safety_gate, допущение до замера на роботе. Путь вперёд (front_m) — в живом режиме; в записи не сохранялся. Шкала 0…1,5 м.`;
   return html`<section class="panel" data-testid="clearance">
     <h2><span>Зазор против тормозного пути</span><${Info} text=${info} /></h2>
     <div class="pair">
@@ -92,6 +137,7 @@ function ClearancePanel({ safety, out, geo }) {
       <div><div class="mid"><${V} v=${num(d, 2)} u="м" /></div><div class="sub">d_stop${out ? ` при ${unit(Math.max(0, out.v), 2, 'м/с')}` : ''}</div></div>
       <div><div class="mid"><${V} v=${num(spare, 2)} u="м" /></div><div class="sub">запас</div></div>
     </div>
+    ${safety && safety.front_m !== undefined ? html`<div class="sub num">путь вперёд в коридоре ${unit(safety.front_m, 2, 'м')}${safety.tilt_deg != null ? ` · наклон ${unit(safety.tilt_deg, 1, '°')}` : ''}</div>` : ''}
     <div class="bar" title="0…1,5 м от края корпуса: полоса — зазор, черта — d_stop">
       ${c != null ? html`<i style=${{ width: P(c) }}></i>` : ''}
       ${d != null ? html`<b style=${{ left: P(d) }}></b>` : ''}
@@ -99,7 +145,7 @@ function ClearancePanel({ safety, out, geo }) {
   </section>`;
 }
 
-export function SafetyScreen({ run, tl, T, t0, geo, theme, bundle }) {
+export function SafetyScreen({ run, tl, T, t0, geo, theme, bundle, meta }) {
   const safety = tl.at('safety', T);
   const sAge = safety ? T - safety.t : null;
   const reqM = tl.atWhere('cmd', T, (m) => m.topic === 'req');
@@ -145,7 +191,7 @@ export function SafetyScreen({ run, tl, T, t0, geo, theme, bundle }) {
   const recNone = done.filter((g) => g.outcome && (g.name === 'unknown' || g.name === 'none' || g.cls === -1)).length;
   return html`<div class="grid">
     <div class="grid sg">
-      <${StatePanel} run=${run} safety=${safety} sAge=${sAge} dict=${bundle.alarms} T=${T} />
+      <${StatePanel} run=${run} safety=${safety} sAge=${sAge} dict=${bundle.alarms} T=${T} meta=${meta} />
       <${ChainPanel} run=${run} safety=${safety} req=${req} out=${out} rAge=${reqM ? T - reqM.t : null} oAge=${outM ? T - outM.t : null} geo=${geo} />
       <${ClearancePanel} safety=${safety} out=${out} geo=${geo} />
     </div>
@@ -164,11 +210,11 @@ export function SafetyScreen({ run, tl, T, t0, geo, theme, bundle }) {
         <span>нет реакции <b>${int(cnt('none'))}</b></span><span>оборвано <b>${int(cnt('cut'))}</b></span><span>остановила защита <b>${int(bySafety)}</b></span>
         <span>«не распознано» <b>${int(recNone)}</b></span>
         <span>движений без жеста <b>${int(gestures.filter((g) => g.outcome === 'false_action').length)}</b></span>
-        <span class="sp"></span><span>LLM на жест <b>${stats ? int(stats.llm.gesture) : DASH}</b></span>
+        <span class="sp"></span><span>LLM на жест <b>${stats && stats.llm ? int(stats.llm.gesture) : DASH}</b></span>
       </div>
     </section>
     <section class="panel" data-testid="gesture-table">
-      <h2><span>Жесты · последние 8</span><${Info} text="Δрасп = t_rec − t_end (perception: конец жеста → распознан). Δкоманда = t0 → первая ненулевая /cmd_vel (t0 — истина двойника). «ранний» — реакция раньше t0, в K1 не входит." /></h2>
+      <h2><span>Жесты · последние 8</span><${Info} text=${run.live ? 'Δрасп = t_rec − t_end (perception: конец жеста → распознан). Δкоманда = t_end → первая ненулевая /cmd_vel: истины t0 на роботе нет; меряется, только если в t_end робот стоял. Ожидаемого жеста в живом режиме нет.' : 'Δрасп = t_rec − t_end (perception: конец жеста → распознан). Δкоманда = t0 → первая ненулевая /cmd_vel (t0 — истина двойника). «ранний» — реакция раньше t0, в K1 не входит.'} /></h2>
       <table>
         <thead><tr><th>T</th><th></th><th>ожидался</th><th>распознан</th><th class="n">conf</th><th class="n">Δрасп, с</th><th class="n">Δкоманда, с</th><th>манёвр</th><th>исход</th></tr></thead>
         <tbody>${shown.map((g) => html`<tr>

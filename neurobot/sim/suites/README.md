@@ -43,6 +43,7 @@ rosbridge → mcp → picoclaw, сторож; LLM для PicoClaw — bench/mock
 | окружение | Foxy, Python 3.8 | Jazzy, Python 3.12; программный рендеринг; `HOME` и `PYTHONPATH` системного пользователя | `PYTHONPATH` env-файла перекрывает `Environment=` юнитов, поэтому включает и `/opt/neurobot/src` |
 | порты и домен | 9090, 18110, 18790, домен 0 | 9123, 18123, 18793, домен 23 (`--domain`) | общая ВМ |
 | MCP | `ros_mcp.json.example` (0,08 м/с, 500 мс) | `ros_mcp.json`: 0,15 м/с, 1000 мс | равно пределам L3 (`NEUROBOT_AGENT_MAX_*`), precheck mcp их сверяет |
+| пульт оператора (`ui`) | не в составе (по согласию лаборатории), источник «робот» | в составе: `NEUROBOT_UI_SOURCE=двойник`, `NEUROBOT_UI_NOT_ROBOT=driver@twin` (Gazebo не в памяти стека), демо-бандл «Записи» рядом с живым режимом | пульт на двойнике — стенд для П2–П3 (`neurobot/ui/README.md`); с Mac — `ssh -F ~/.lima/sim/ssh.config -L <порт>:127.0.0.1:18120 lima-sim` и ссылка `sudo neurobot ui-url` |
 
 Всё остальное — юниты, порядок, precheck, `wait-graph`, doctor, защёлка, сторож — как на роботе.
 

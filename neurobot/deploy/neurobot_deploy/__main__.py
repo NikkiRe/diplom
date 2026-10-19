@@ -9,7 +9,9 @@
     neurobot wait-agent                          ExecStartPost (+, root): PicoClaw подключил MCP (журнал запуска)
     neurobot wait-topic driver@<имя>             ExecStartPost: первое сообщение NEUROBOT_DRIVER_<имя>_TOPIC
     neurobot wait-http labworker@<имя>           ExecStartPost: GET NEUROBOT_LABWORKER_<имя>_URL отвечает 200
-    neurobot wait-graph executor|perception      ExecStartPost: узел компонента в графе и не пишет в /cmd_vel
+    neurobot wait-graph executor|perception|ui   ExecStartPost: узел компонента в графе и не пишет в /cmd_vel
+                                                 (ui — пишет только в стоп и защёлку)
+    neurobot ui-url [--ttl S]                    ссылка входа в пульт оператора (root; одноразовая)
     neurobot zero                                ExecStopPost safety_gate: явный ноль в /cmd_vel
     neurobot watchdog [--once]                   сторож: драйверы и rosbridge (часто), MCP и PicoClaw (период)
     neurobot start-test --cycles N --out КАТАЛОГ холодные старты и «сломанные» старты (root)
@@ -28,7 +30,7 @@ import signal
 import sys
 import time
 
-from . import checks, doctor, estop, picoclaw_cfg, render, start_test, watchdog
+from . import checks, doctor, estop, picoclaw_cfg, render, start_test, uiurl, watchdog
 from .config import Config, EnvError, load
 from .picolog import analyze
 from .probes import ProbeError, http_get, probe_mcp, ws_handshake
@@ -206,7 +208,28 @@ def cmd_wait_http(cfg: Config, args) -> int:
     return 0
 
 
+def cmd_wait_graph_ui(cfg: Config, args) -> int:
+    """Пульт после READY: его узел в графе и пишет только в стоп и защёлку (checks.UI_PUBLISHERS)."""
+    from .rosgraph import RosUnavailable, node_publishers
+    name = cfg.get("NEUROBOT_UI_NODE")
+    try:
+        pubs = node_publishers(cfg, name, cfg.num("NEUROBOT_WAIT_S"))
+    except (RosUnavailable, RuntimeError) as e:
+        emit("wait", "ui", "ros_unavailable", str(e))
+        return 1
+    problems = checks.ui_problems(cfg, pubs)
+    for p in problems:
+        emit("wait", "ui", p.code, p.text)
+    if problems:
+        return 1
+    emit("wait", "ui", "ready", "узел {} пишет только в {}".format(
+        name, ", ".join(t for t in pubs if t not in checks.ROS_INFRA) or "никуда"), "info")
+    return 0
+
+
 def cmd_wait_graph(cfg: Config, args) -> int:
+    if args.component == "ui":
+        return cmd_wait_graph_ui(cfg, args)
     from .rosgraph import RosUnavailable, wait_node
     name = cfg.get("NEUROBOT_{}_NODE".format(args.component.upper()))
     try:
@@ -332,6 +355,10 @@ def cmd_render(cfg: Config, args) -> int:
     return 0
 
 
+def cmd_ui_url(cfg: Config, args) -> int:
+    return uiurl.run(cfg, args.ttl, os.geteuid())
+
+
 def cmd_env_get(cfg: Config, args) -> int:
     for key in args.keys:
         print(cfg.get(key))
@@ -352,7 +379,10 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--reason", default="", help="причина (уходит в команду защёлки)")
     for name in ("precheck", "wait-port", "wait-topic", "wait-http"):
         sub.add_parser(name).add_argument("component")
-    sub.add_parser("wait-graph").add_argument("component", choices=("executor", "perception"))
+    sub.add_parser("wait-graph").add_argument("component", choices=("executor", "perception", "ui"))
+    s = sub.add_parser("ui-url", help="одноразовая ссылка входа в пульт оператора (root)")
+    s.add_argument("--ttl", type=float, default=uiurl.TTL_S, help="сколько секунд ссылка действует (по умолчанию "
+                                                                    "%(default)g)")
     for name in ("wait-mcp", "wait-agent", "zero"):
         sub.add_parser(name)
     s = sub.add_parser("watchdog", help="сторож: свежесть тем драйверов и ping rosbridge (NEUROBOT_WATCHDOG_FAST_S), "
@@ -386,7 +416,7 @@ def build_parser() -> argparse.ArgumentParser:
 HANDLERS = {"doctor": cmd_doctor, "estop": cmd_estop, "precheck": cmd_precheck, "wait-port": cmd_wait_port,
             "wait-mcp": cmd_wait_mcp, "wait-agent": cmd_wait_agent, "wait-topic": cmd_wait_topic,
             "wait-http": cmd_wait_http, "wait-graph": cmd_wait_graph, "zero": cmd_zero, "watchdog": cmd_watchdog,
-            "start-test": cmd_start_test,
+            "start-test": cmd_start_test, "ui-url": cmd_ui_url,
             "picoclaw-config": cmd_picoclaw_config, "render": cmd_render, "env-get": cmd_env_get}
 
 

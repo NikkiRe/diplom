@@ -66,6 +66,15 @@ button, select, input { font: inherit; color: inherit; }
   justify-content: center; line-height: 1.15;
 }
 .stopbtn .hint { font-size: 11px; font-weight: 400; letter-spacing: 0; }
+/* живой шлюз: кнопка действует — тёмная и крупная (цвет тревог у неё не берём: это действие, а не тревога) */
+.stopbtn.on { background: var(--text); color: var(--panel); border-color: var(--text); cursor: pointer; min-width: 168px; }
+.stopbtn.on .hint { color: var(--panel); opacity: 0.85; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+.stopbtn.on:hover { box-shadow: inset 0 0 0 2px var(--panel); }
+.stopbtn.on:active { transform: translateY(1px); }
+/* запрос идёт (≤ 2 с): кнопка заблокирована, но остаётся тёмной — видно, что команда в пути */
+.stopbtn.on:disabled { cursor: progress; box-shadow: none; transform: none; opacity: 0.8; }
+.stopbtn.bad .hint, .bad { color: var(--p2); opacity: 1; font-weight: 600; }
+.badge.live { letter-spacing: 0.06em; }
 
 /* навигация и тревоги */
 .nav { grid-row: 2 / 3; background: var(--panel); border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
@@ -101,6 +110,9 @@ button, select, input { font: inherit; color: inherit; }
 .scrub canvas { position: absolute; inset: 6px 0 auto 0; width: 100%; height: 18px; border: 1px solid var(--line); pointer-events: none; }
 .scrub .head { position: absolute; top: 2px; bottom: 2px; width: 2px; background: var(--text); box-shadow: 0 0 0 1px var(--bg); pointer-events: none; }
 .player .time { min-width: 150px; text-align: right; }
+.player > .seg + label, .player > .seg + .badge { margin-left: 4px; }
+.livebar { gap: 14px; }
+.livebar .badge { font-size: 13px; }
 
 /* панели */
 .panel { background: var(--panel); border: 1px solid var(--line); padding: 10px 12px; min-width: 0; position: relative; }
@@ -213,6 +225,14 @@ td.n, th.n { text-align: right; }
 .pair { display: grid; grid-template-columns: repeat(3, auto); justify-content: space-between; gap: 10px; }
 .latch { border: 2px solid var(--p1); padding: 8px 10px; margin-top: 10px; }
 .latch button { background: var(--panel2); border: 1px solid var(--line); padding: 1px 8px; cursor: pointer; margin-left: 6px; }
+.estopbox { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--faint); font-size: 12px; }
+.latchbtn { background: var(--panel2); border: 2px solid var(--text); padding: 3px 10px; font-weight: 600; cursor: pointer; }
+.latchbtn.on { background: var(--text); color: var(--panel); }
+.latchbtn:disabled { cursor: wait; color: var(--muted); border-color: var(--line); }
+button.plain { background: none; border: 1px solid var(--line); padding: 2px 8px; cursor: pointer; }
+.login { max-width: 760px; margin: 48px auto; padding: 0 16px; }
+.login p { line-height: 1.6; }
+.login code { font-weight: 600; }
 .counts { display: flex; gap: 6px 16px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 4px; }
 .counts b { color: var(--text); font-weight: 600; }
 

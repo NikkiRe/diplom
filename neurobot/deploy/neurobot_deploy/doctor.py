@@ -10,7 +10,9 @@
 - исполнитель: /neurobot/motion_state приходит, в /neurobot/cmd_vel_req пишет только он;
 - распознавание: /neurobot/perception_health;
 - rosbridge — WebSocket, воркеры лаборатории — HTTP GET, MCP — initialize + tools/list + один вызов состояния,
-  PicoClaw — журнал запуска.
+  PicoClaw — журнал запуска;
+- пульт оператора — /healthz на 127.0.0.1 и издатели его узла по графу (только стоп и защёлка). Робот без пульта
+  работает: отказ пульта — предупреждение, а не корневая причина; лишний издатель пульта — ошибка ui_publisher.
 Пока какой-нибудь юнит ещё поднимается, молчащий или пропавший датчик — «ещё поднимается», а не ошибка: глубину и
 камеру драйвер может отдавать позже (а у двойника — только при подписчике), и ошибка датчика заслонила бы настоящую
 первую причину (safety_gate не стал готов и т. п.).
@@ -229,6 +231,32 @@ def _check_labworker(cfg: Config, component: str, get: Callable = http_get) -> F
     return Finding(component, "", OK, "", "{} отвечает 200".format(url))
 
 
+def _check_ui(cfg: Config, obs: Optional[Dict[str, dict]], get: Callable = http_get) -> Finding:
+    ui = (obs or {}).get("ui")
+    if ui is not None:
+        problems = checks.ui_problems(cfg, ui["pubs"])
+        if problems and problems[0].code == "ui_publisher":
+            return Finding("ui", "", FAIL, problems[0].code, problems[0].text)
+    url = "http://127.0.0.1:{}/healthz".format(cfg.port("NEUROBOT_UI_PORT"))
+    try:
+        code, body = get(url, 3.0)
+    except ProbeError as e:
+        return Finding("ui", "", WARN, "ui_down", "пульт не отвечает: {}".format(e))
+    if code != 200:
+        return Finding("ui", "", WARN, "ui_down", "{}: HTTP {}".format(url, code))
+    pubs = "пишет только в " + ", ".join(checks.UI_PUBLISHERS) if ui is not None and ui["pubs"] is not None else \
+        "издатели не проверены (граф не снят)"
+    return Finding("ui", "", OK, "", "{} отвечает; {}".format(url.rsplit("/", 1)[0], pubs))
+
+
+def _optional(f: Finding) -> Finding:
+    """Пульт: робот работает и без него — отказ и запуск пульта не корневая причина, а предупреждение (кроме лишнего
+    издателя: это уже не пульт, а писатель в граф робота)."""
+    if f.component == "ui" and f.level in (FAIL, STARTING) and f.code != "ui_publisher":
+        return f._replace(level=WARN, text="пульт (роботу не нужен): " + f.text)
+    return f
+
+
 def blind_sectors(scan: dict) -> List[Tuple[float, float]]:
     """Сплошные участки переднего сектора (±FRONT_DEG), где луч почти всегда негоден: закрыт корпусом или камерой
     (RS3) — либо там пусто дальше дальности лидара. Градусы: 0 — вперёд, плюс — влево; сканы ±120° и 0…360°."""
@@ -424,11 +452,13 @@ def diagnose(cfg: Config, sd: Systemd, observe: Optional[Callable[[Config, float
                 live = _check_mcp(cfg, probe)
             elif s.component == "picoclaw":
                 live = _check_agent(sd, props.get(s.unit, {}), now_real)
+            elif s.component == "ui":
+                live = _check_ui(cfg, obs, get)
             elif obs is not None and s.component in live_ros:
                 live = live_ros[s.component]()
             elif obs is not None and s.component == scan_owner:
                 live = _late(_check_scan(s.component, cfg, obs), starting)
-        findings.append(_merge(s, live) if live else s)
+        findings.append(_optional(_merge(s, live) if live else s))
     at = sum(1 for c, _ in plan if c.startswith("driver@"))
     if obs is not None:
         # датчики — после драйверов, до safety_gate: без них он не пустит робота, и причина — в них

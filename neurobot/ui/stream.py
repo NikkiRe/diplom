@@ -1,8 +1,9 @@
 """Формат потока пульта `neurobot-ui/1` — один для «Записи» и живого шлюза (README, «Формат потока»).
 
 Сообщение — объект JSON `{"k": вид, "t": стенные часы робота, с, ...}`; виды, поля и их типы — KINDS. «Запись» кладёт
-в бандл список сообщений прогона, отсортированный по t. Живой шлюз (П2) шлёт их по SSE (`id: <номер>`,
-`data: <json>`, одно событие на сообщение, `hb` раз в 1 с) и держит кольцевой буфер последних BUFFER_S секунд.
+в бандл список сообщений прогона, отсортированный по t. Живой шлюз (gateway.py) шлёт их по SSE
+(`id: <запуск шлюза>.<номер>`, `data: <json>`, одно событие на сообщение; `hb` раз в 0,5 с и последний `scan` — без
+номера и мимо буфера, на своём месте по t) и держит кольцевой буфер последних BUFFER_S секунд (live.Hub).
 Подключение (connect):
   1. `hello` — формат, источник и `active`: тревоги, стоящие в момент hello;
   2. без Last-Event-ID (или с номером, которого в буфере уже нет) — снимок State на начало буфера: последнее
@@ -41,8 +42,11 @@ KINDS: Dict[str, Tuple[Dict[str, Any], Dict[str, Any]]] = {
     # заголовок соединения (живой режим); в бандле его роль играют meta прогона и заголовок бандла
     "hello": ({"format": (FORMAT,), "source": SOURCES},
               {"run": STR, "mode": ("replay", "live"), "geometry": DICT, "alarms": DICT, "active": "[dict]",
-               "resume": BOOL}),
+               "resume": BOOL, "boot": STR, "started": NUM, "node": STR, "publishers": "[str]", "ref": REFS}),
     "hb": ({}, {}),
+    # скан лидара (живой режим): бины пеленга в базе робота от a0 через da градусов, в каждом — ближайшее
+    # попадание от центра корпуса, м; null — попаданий нет (нет данных, «свободно» или лучей нет); не в буфере
+    "scan": ({"a0": NUM, "da": NUM, "r": "[num?]"}, {"frame": STR, "range_max": NUM}),
     # /neurobot/safety_state (подмножество в записи) + уровень тревоги шлюза (0 — норма, 1, 2)
     "safety": ({"state": STATES, "reasons": "[str]", "level": (0, 1, 2)},
                {"warnings": "[str]", "min_clearance_m": "num?", "front_m": "num?", "limits": DICT, "req": DICT,
@@ -59,18 +63,19 @@ KINDS: Dict[str, Tuple[Dict[str, Any], Dict[str, Any]]] = {
                  "margin": "num?", "n_boxes": "int?", "side": "str?", "t_end": NUM, "t_rec": NUM, "expected": "str?",
                  "d_rec_s": NUM, "d_cmd_s": NUM, "t_cmd": NUM, "ref": REFS, "early": BOOL, "rtf_ok": BOOL,
                  "maneuver": "str?", "outcome": OUTCOMES, "stopped_by": "[str]", "neg": "str?"}),
-    # задержка «жест → команда»: последние window жестов и весь прогон (квантили metrics.quantiles)
-    "k1": ({"last": DICT, "run": DICT}, {"window": INT, "ref": REFS}),
+    # задержка «жест → команда»: последние window жестов и весь прогон (квантили metrics.quantiles); у живого шлюза
+    # run — по последним run_window жестам (кольцо: шлюз работает неделями)
+    "k1": ({"last": DICT, "run": DICT}, {"window": INT, "ref": REFS, "run_window": INT}),
     # вызов LLM: kind — request (реплика человека), service (служебный вызов хода), gesture (вне реплик, K4)
     "llm": ({"kind": ("request", "service", "gesture")},
             {"model": STR, "prompt_tokens": INT, "completion_tokens": INT, "cached_tokens": INT, "rub_fact": NUM,
              "rub_est": NUM, "latency_ms": NUM}),
     # реплика человека агенту и её итог
     "agent": ({"n": INT, "request": STR, "ok": BOOL}, {"latency_s": "num?", "llm_calls": INT, "outcome": STR}),
-    # память и CPU компонентов робота (без драйверов двойника)
-    "mem": ({"total_mib": NUM}, {"units": DICT, "cpu_pct": NUM, "budget_mib": NUM}),
-    # юниты (процессы у A0): в работе из всего
-    "units": ({"up": INT, "total": INT}, {"down": "[str]", "restarts": DICT}),
+    # память и CPU компонентов робота (без драйверов двойника); metric — PSS (сэмплер стенда) или RSS (/proc шлюза)
+    "mem": ({"total_mib": NUM}, {"units": DICT, "cpu_pct": NUM, "budget_mib": NUM, "metric": ("pss", "rss")}),
+    # юниты (процессы у A0): в работе из всего; list — по юниту (живой режим: systemctl show)
+    "units": ({"up": INT, "total": INT}, {"down": "[str]", "restarts": DICT, "list": "[dict]"}),
     # события стенда и человека
     "fault": ({"fault": STR}, {"role": STR, "ttr_s": "num?", "path": STR}),
     "operator": ({"action": STR}, {"what": STR, "why": STR}),
@@ -83,7 +88,10 @@ KINDS: Dict[str, Tuple[Dict[str, Any], Dict[str, Any]]] = {
     "end": ({}, {"reason": STR}),
 }
 # виды состояния: новому клиенту — последнее сообщение (cmd — по каждому topic)
-STATE_KINDS = ("safety", "health", "k1", "stats", "mem", "units", "touch")
+STATE_KINDS = ("safety", "health", "k1", "stats", "mem", "units", "touch", "scan")
+# не в кольцевой буфер шлюза и без номера: hb — у каждого соединения свой, scan — только последний (5 Гц × 15 мин
+# скана — десятки МиБ шлюзу и браузеру ради картинки, которой нужен один кадр)
+TRANSIENT = ("hb", "scan")
 
 
 class FormatError(ValueError):
@@ -230,9 +238,10 @@ def check_connect(seq: Sequence[dict]) -> int:
     return 1 + check_stream(seq[1:])
 
 
-def sse(msg: dict, seq: Optional[int] = None) -> bytes:
-    """Кадр SSE живого шлюза: одно событие на сообщение; id — номер в кольцевом буфере (у hello номера нет)."""
-    head = "id: %d\n" % seq if seq is not None else ""
+def sse(msg: dict, seq: Optional[Any] = None) -> bytes:
+    """Кадр SSE живого шлюза: одно событие на сообщение; id — номер в кольцевом буфере (у hello, hb и scan номера
+    нет; шлюз пишет «запуск.номер», чтобы номер прежнего запуска не сошёл за свой)."""
+    head = "id: %s\n" % seq if seq is not None else ""
     return (head + "data: " + dumps(msg) + "\n\n").encode("utf-8")
 
 

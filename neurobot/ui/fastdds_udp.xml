@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Fast DDS для шлюза пульта: только UDPv4, без общей памяти (SHM). Шлюз работает от своего пользователя
+     (neurobot-ui), граф — от другого (jetson): сегменты /dev/shm Fast DDS создаёт с правами своего пользователя, и
+     между разными пользователями обнаружение проходит (wait-graph видит узел), а данных нет [замер: ВМ sim, Jazzy,
+     Fast DDS по умолчанию — tests/foxy_smoke.sh]. Узлам графа ничего менять не нужно: шлюз объявляет только
+     UDP-адреса, и они шлют ему по UDP. Формат — с Fast-RTPS 1.x (Foxy — Fast DDS 2.1). node.py ставит его в
+     FASTRTPS_DEFAULT_PROFILES_FILE, если RMW — Fast DDS и env-файл своего профиля не задал. -->
+<profiles xmlns="http://www.eprosima.com/XMLSchemas/fastRTPS_Profiles">
+  <transport_descriptors>
+    <transport_descriptor>
+      <transport_id>nb_ui_udp</transport_id>
+      <type>UDPv4</type>
+    </transport_descriptor>
+  </transport_descriptors>
+  <participant profile_name="neurobot_ui_udp_only" is_default_profile="true">
+    <rtps>
+      <userTransports>
+        <transport_id>nb_ui_udp</transport_id>
+      </userTransports>
+      <useBuiltinTransports>false</useBuiltinTransports>
+    </rtps>
+  </participant>
+</profiles>

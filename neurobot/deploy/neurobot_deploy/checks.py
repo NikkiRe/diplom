@@ -36,6 +36,11 @@ PICOCLAW_DEFAULT_OFF = ("send_tts", "spawn_status", "spi", "serial", "i2c")
 PICOCLAW_LOG_OK = ("info", "debug")
 # Метка wait-graph в StateDirectory исполнителя и распознавания: узел писал мимо safety_gate (check_writer_mark).
 WRITER_MARK = "cmd_vel_writer.json"
+# Пульт оператора: всё, во что пишет его узел (зеркало neurobot/ui/live.PUBLISHERS — тест сверяет), и издатели,
+# которые rclpy заводит сам (rosout пульт выключает, parameter_events — у любого узла).
+UI_PUBLISHERS = ("/neurobot/stop_now", "/neurobot/estop")
+ROS_INFRA = ("/parameter_events", "/rosout")
+UI_SOURCES = ("робот", "двойник")
 _PYTHON = re.compile(r"python[0-9.]*")
 _REQ = re.compile(r"([A-Za-z_][\w.]*)(?:(<|>=)([0-9][0-9.]*))?")
 # Выполняется целевым интерпретатором (Python 3.8+): find_spec без импорта; версия — только у модулей с условием.
@@ -488,6 +493,77 @@ def own_problems(component: str, cfg: Config, graph: Dict[str, Dict[str, List[st
         out.append(Problem("config_invalid", "узел {} не пишет в {}: жесты и команды агента не дойдут до safety_gate "
                            "({})".format(node, req, key)))
     return out
+
+
+def ui_problems(cfg: Config, pubs: Optional[Sequence[str]]) -> List[Problem]:
+    """Издатели узла пульта (wait-graph ui после READY, doctor во время работы) против списка в коде: пульт пишет
+    только стоп и защёлку; любая другая тема — отказ (ремап, чужая версия кода). None — узла нет в графе."""
+    node = cfg.get("NEUROBOT_UI_NODE")
+    if pubs is None:
+        return [Problem("node_missing", "узла {} нет в графе ROS: издателей пульта не проверить (NEUROBOT_UI_NODE, "
+                        "ROS_DOMAIN_ID)".format(node))]
+    extra = sorted(set(pubs) - set(UI_PUBLISHERS) - set(ROS_INFRA))
+    if extra:
+        return [Problem("ui_publisher", "узел {} пишет в {} — пульт пишет только в {} (список в коде): это не "
+                        "пульт neurobot или его ремапнули".format(node, ", ".join(extra), ", ".join(UI_PUBLISHERS)))]
+    return []
+
+
+def check_ui(cfg: Config, proc: str = "/proc", state: str = "") -> List[Problem]:
+    """Пульт оператора: пишет туда же, где слушает safety_gate (темы стопа и защёлки в env — те, что в коде пульта),
+    свой пользователь (не агента и не root), узел не neurobot_* (служебные узлы CLI проверки писателей пропускают),
+    порт свободен и не занят другими компонентами, каталог токена закрыт от группы и прочих, источник подписан (робот |
+    двойник), бандл «Записи» на месте, rclpy в интерпретаторе."""
+    out = check_env(cfg, ["NEUROBOT_UI_CMD"])
+    if out:
+        return out
+    topics = (cfg.get("NEUROBOT_STOP_TOPIC"), cfg.get("NEUROBOT_ESTOP_TOPIC"))
+    if topics != UI_PUBLISHERS:
+        # список в коде пульта — инвариант (его сверяют wait-graph и doctor); переименовали тему у safety_gate — СТОП и
+        # защёлка пульта молча ушли бы в тему, которую никто не слушает
+        out.append(Problem("config_invalid", "NEUROBOT_STOP_TOPIC={!r}, NEUROBOT_ESTOP_TOPIC={!r}: пульт пишет стоп и "
+                           "защёлку только в {} (список в коде) — с другими темами safety_gate его команд не услышит"
+                           .format(topics[0], topics[1], ", ".join(UI_PUBLISHERS))))
+    node, user = cfg.get("NEUROBOT_UI_NODE"), cfg.get("NEUROBOT_UI_USER")
+    chain = {cfg.get("NEUROBOT_{}_NODE".format(c)) for c in ("SAFETY", "EXECUTOR", "PERCEPTION", "MUX")}
+    if node.startswith("neurobot_") or node in chain:
+        out.append(Problem("config_invalid", "NEUROBOT_UI_NODE={}: имя узла пульта не должно начинаться с neurobot_ и "
+                           "совпадать с узлами цепочки — иначе проверки писателей /cmd_vel его не увидят".format(node)))
+    if user in (cfg.get("NEUROBOT_USER"), "root"):
+        out.append(Problem("config_invalid", "NEUROBOT_UI_USER={}: пульту нужен свой пользователь — токен входа не "
+                           "должен быть доступен агенту".format(user)))
+    try:
+        import pwd
+        agent = pwd.getpwnam(cfg.get("NEUROBOT_USER")).pw_uid
+    except (KeyError, ImportError):
+        agent = None
+    if agent is not None and os.geteuid() == agent:
+        out.append(Problem("config_invalid", "пульт запущен от пользователя компонентов {}: агент прочитал бы токен "
+                           "входа".format(cfg.get("NEUROBOT_USER"))))
+    if cfg.get("NEUROBOT_UI_SOURCE") not in UI_SOURCES:
+        out.append(Problem("config_invalid", "NEUROBOT_UI_SOURCE={!r}: подпись источника — робот или двойник (числа "
+                           "стенда не должны сойти за числа робота)".format(cfg.get("NEUROBOT_UI_SOURCE"))))
+    bundle = cfg.get("NEUROBOT_UI_BUNDLE")
+    if bundle and not os.path.isfile(bundle):
+        out.append(Problem("config_invalid", "NEUROBOT_UI_BUNDLE: нет файла {}".format(bundle)))
+    port = cfg.port("NEUROBOT_UI_PORT")
+    taken = {"NEUROBOT_ROSBRIDGE_PORT": cfg.port("NEUROBOT_ROSBRIDGE_PORT"),
+             "NEUROBOT_PICOCLAW_PORT": cfg.port("NEUROBOT_PICOCLAW_PORT"),
+             "NEUROBOT_MCP_URL": cfg.mcp_endpoint()[1]}
+    clash = [k for k, v in taken.items() if v == port]
+    if clash:
+        out.append(Problem("config_invalid", "NEUROBOT_UI_PORT={} занят компонентом ({})".format(
+            port, ", ".join(clash))))
+    cmd = cfg.get("NEUROBOT_UI_CMD")
+    if "--ros-args" in cmd.split():
+        out.append(Problem("config_invalid", "NEUROBOT_UI_CMD: аргументы ROS пульт не принимает (ремап превратил бы "
+                           "издателя стопа в писателя скорости) — они не действуют", fatal=False))
+    if state and os.path.isdir(state) and os.stat(state).st_mode & 0o077:
+        out.append(Problem("config_invalid", "каталог {} открыт группе или прочим: токен входа в пульт виден не только "
+                           "пульту (StateDirectoryMode=0700)".format(state)))
+    if any(p.fatal for p in out):
+        return out
+    return out + check_port_free(port, proc) + check_python(cmd, "NEUROBOT_UI_MODULES", cfg)
 
 
 def _cmd_sha256(component: str, cfg: Config) -> str:
@@ -977,6 +1053,8 @@ def precheck(component: str, cfg: Config, proc: str = "/proc",
         if component == "picoclaw":
             return (check_env(cfg, ["NEUROBOT_PICOCLAW_CMD"])
                     + check_port_free(cfg.port("NEUROBOT_PICOCLAW_PORT"), proc) + check_picoclaw_config(cfg))
+        if component == "ui":
+            return check_ui(cfg, proc, state)
     except EnvError as e:
         return [Problem("env_invalid", str(e))]
     return [Problem("env_invalid", "неизвестный компонент {!r}".format(component))]

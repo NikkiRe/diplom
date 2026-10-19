@@ -13,6 +13,13 @@
 Причины «препятствия» (obstacle, cliff, approach, lidar_nodata, touch) — P2 только при `blocked` или `estop`: при
 `slow` safety_gate лишь сбавляет скорость, действий человека это не требует.
 
+Предупреждения safety_state (`warnings`) — тихо, серым (PLAN §4: «`warnings` тихо»): они не ограничивают движение,
+а их последствие, если оно есть, приходит причиной в `reasons`. Тревогу поднимают только коды с `warn` — те, что
+требуют взгляда человека и сами по себе: `override` (есть издатель главнее safety_gate), `override_active` (команда
+не доходит до базы), `scan_foreign`, `scan_publishers` (чужой /scan). `mask_outside` safety_gate держит в warnings всё
+время процесса, а запрет вперёд по тем же лучам и так приходит причиной `lidar_nodata` — вечная плашка P2 приучила
+бы не замечать тревоги. Политика одна для «Записи» и живого шлюза (`level`, `safety_alarms`; тест).
+
 Тревогу ведёт шлюз (живой режим) или сборщик записи — одним кодом (AlarmTracker), браузер только рисует: повтор
 причины — счётчик той же строки, а не новая строка; снятие — после OFF_DELAY_S без причины (запись safety_state —
 1 Гц, причина мерцает); скрытия тревог нет.
@@ -29,6 +36,7 @@ class Code(NamedTuple):
     prio: int                # уровень, если условие есть
     text: str                # короткий текст для оператора
     only_stopped: bool = False   # тревога только при blocked / estop; при slow — норма
+    warn: bool = False       # тревога и тогда, когда код пришёл в warnings; без флага warnings — тихо
 
 
 # Коды причин safety_state — README safety, «/neurobot/safety_state»; свои коды пульта — с префиксом ui_.
@@ -47,10 +55,10 @@ CODES: Dict[str, Code] = {
     "stale_imu": Code(P2, "IMU (ориентация) устарел"),
     "stale_accel": Code(P2, "IMU (ускорение) устарел"),
     "stale_depth": Code(P2, "глубина устарела"),
-    "scan_foreign": Code(P2, "/scan публикует не драйвер"),
-    "scan_publishers": Code(P2, "у /scan второй издатель"),
+    "scan_foreign": Code(P2, "/scan публикует не драйвер", warn=True),
+    "scan_publishers": Code(P2, "у /scan второй издатель", warn=True),
     "motion_time": Code(P2, "движение дольше предела — стоп"),
-    "override_active": Code(P2, "команда не доходит до базы"),
+    "override_active": Code(P2, "команда не доходит до базы", warn=True),
     "ui_unit_down": Code(P2, "компонент не работает"),
     "ui_camera_lost": Code(P2, "нет кадров камеры"),
     # P2 — робот стоит или ограничен: нужен взгляд человека
@@ -61,7 +69,7 @@ CODES: Dict[str, Code] = {
     "touch": Code(P2, "поворот на месте заденет", True),
     "geofence": Code(P2, "геозабор"),
     "reverse_limit": Code(P2, "задний ход исчерпан"),
-    "override": Code(P2, "есть издатель главнее safety_gate (геймпад)"),
+    "override": Code(P2, "есть издатель главнее safety_gate (геймпад)", warn=True),
     "mask_outside": Code(P2, "«нет данных» вне маски корпуса"),
     "ui_perception_recovering": Code(P2, "perception восстанавливает камеру"),
     "ui_llm_open": Code(P2, "канал LLM закрыт"),
@@ -89,10 +97,15 @@ def prio(code: str, state: Optional[str] = None) -> int:
     return c.prio
 
 
+def loud(warnings: Iterable[str]) -> List[str]:
+    """Предупреждения, которые поднимают тревогу (код с warn); остальные — тихо."""
+    return [w for w in warnings if CODES.get(code_of(w), UNKNOWN).warn]
+
+
 def level(state: Optional[str], reasons: Iterable[str] = (), warnings: Iterable[str] = ()) -> int:
-    """Уровень состояния safety_state: наивысший (меньший номер) среди причин и предупреждений; estop — не ниже P1.
-    0 — норма (в том числе slow с lidar_blind / lidar_unseen)."""
-    levels = [prio(code_of(r), state) for r in list(reasons) + list(warnings)]
+    """Уровень состояния safety_state: наивысший (меньший номер) среди причин и громких предупреждений (loud);
+    estop — не ниже P1. 0 — норма (в том числе slow с lidar_blind / lidar_unseen)."""
+    levels = [prio(code_of(r), state) for r in list(reasons) + loud(warnings)]
     if state == "estop":
         levels.append(P1)
     active = [x for x in levels if x > NORM]
@@ -101,7 +114,8 @@ def level(state: Optional[str], reasons: Iterable[str] = (), warnings: Iterable[
 
 def dictionary() -> Dict[str, dict]:
     """Словарь для клиента (заголовок потока и бандла)."""
-    return {k: {"prio": c.prio, "text": c.text, "only_stopped": c.only_stopped} for k, c in CODES.items()}
+    return {k: {"prio": c.prio, "text": c.text, "only_stopped": c.only_stopped, "warn": c.warn}
+            for k, c in CODES.items()}
 
 
 class Alarm(NamedTuple):
@@ -154,9 +168,10 @@ class AlarmTracker:
 
 
 def safety_alarms(state: Optional[str], reasons: Iterable[str], warnings: Iterable[str] = ()) -> List[Alarm]:
-    """Тревоги из одного safety_state: причины с уровнем > 0; estop без причины-кода P1 — сам `estop`."""
+    """Тревоги из одного safety_state: причины и громкие предупреждения (loud) с уровнем > 0; estop без причины-кода
+    P1 — сам `estop`."""
     out: Dict[str, Alarm] = {}
-    for r in list(reasons) + list(warnings):
+    for r in list(reasons) + loud(warnings):
         code = code_of(r)
         p = prio(code, state)
         if p > NORM:

@@ -1,5 +1,6 @@
-"""Пульт: философия тревог (alarms.py) — два уровня (PLAN §0а п. 2), норма серым, словарь против контракта README
-safety, отслеживание (повтор — счётчик, снятие с задержкой, эскалация). Только stdlib, Python 3.8+."""
+"""Пульт: философия тревог (alarms.py) — два уровня (PLAN §0а п. 2), норма серым, warnings — тихо, кроме кодов с warn
+(PLAN §4), одна политика у «Записи» и живого шлюза (одно safety_state — одни уровень и тревоги), словарь против
+контракта README safety, отслеживание (повтор — счётчик, снятие с задержкой, эскалация). Только stdlib, Python 3.8+."""
 from __future__ import annotations
 
 import re
@@ -11,6 +12,7 @@ ROOT = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(ROOT))
 
 from neurobot.ui import alarms as A  # noqa: E402
+from neurobot.ui import live, replay  # noqa: E402
 
 BLIND = "lidar_blind: перед в слепом секторе лидара — только глубина, ≤ 0.15 м/с"
 UNSEEN = "lidar_unseen: нет данных лидара 36.6…43.9° у корпуса, вне поля глубины — как слепой сектор, ≤ 0.15 м/с"
@@ -40,6 +42,49 @@ class LevelTest(unittest.TestCase):
         self.assertEqual(A.level("slow", ["reverse_limit: назад уже 0.26 м", BLIND]), A.P2)
         self.assertEqual(A.level("slow", [BLIND], warnings=["override: есть издатель /cmd_vel_joy"]), A.P2)
         self.assertEqual(A.level("slow", ["new_code: неизвестное"]), A.P2)   # новый код без словаря не прячется
+
+    def test_warnings_are_quiet_unless_flagged(self):
+        # PLAN §4: warnings тихо; тревогу поднимают только те, что требуют взгляда человека и сами по себе
+        loud = sorted(k for k, c in A.CODES.items() if c.warn)
+        self.assertEqual(loud, ["override", "override_active", "scan_foreign", "scan_publishers"])
+        self.assertEqual(A.level("slow", [BLIND], warnings=["mask_outside: лучи -40…-30°"]), A.NORM)
+        self.assertEqual(A.level("slow", [BLIND], warnings=["lidar_unknown: 12…14°", "new_warning: x"]), A.NORM)
+        self.assertEqual(A.level("slow", [BLIND], warnings=["override_active: команда не доходит до базы"]), A.P2)
+        self.assertEqual(A.safety_alarms("slow", [BLIND], ["mask_outside: x"]), [])
+        # тот же код в reasons — по своему уровню, как раньше
+        self.assertEqual(A.level("blocked", ["mask_outside: x"]), A.P2)
+        self.assertTrue(A.dictionary()["override"]["warn"])
+
+    def test_same_safety_state_same_alarms_in_live_and_replay(self):
+        rows = [{"t": 100.0 + i, "state": st, "reasons": rs, "warnings": ws, "min_clearance_m": 0.5}
+                for i, (st, rs, ws) in enumerate([
+                    ("slow", [BLIND], ["mask_outside: лучи -40…-30°"]),
+                    ("slow", [BLIND], ["override: есть издатели /cmd_vel_joy", "mask_outside: x"]),
+                    ("blocked", ["obstacle: путь 0.06 м", BLIND], ["mask_outside: x"]),
+                    ("estop", ["estop: защёлка (shock: удар 7.2 м/с²)"], []),
+                    ("slow", [BLIND], ["lidar_unknown: 12…14°"])])]
+        b = replay.Builder(type("R", (), {"safety": rows})())
+        b.safety()
+
+        class Sink(live.Hub):
+            def __init__(self):
+                super().__init__()
+                self.msgs = []
+
+            def publish(self, msg):
+                self.msgs.append(dict(super().publish(msg)))
+                return msg
+        hub = Sink()
+        lv = live.Live(hub, clock=lambda: 100.0)
+        for r in rows:
+            lv.on_safety(dict(r), r["t"])
+
+        def view(msgs):
+            return ([(m["t"], m["level"]) for m in msgs if m["k"] == "safety"],
+                    [(m["t"], m["key"], m["prio"], m["on"]) for m in msgs if m["k"] == "alarm"])
+        self.assertEqual(view(b.msgs), view(hub.msgs))
+        levels = [lv_ for _, lv_ in view(b.msgs)[0]]
+        self.assertEqual(levels, [0, 2, 2, 1, 0])
 
     def test_dictionary_covers_safety_contract(self):
         # все коды reasons и warnings из README safety («/neurobot/safety_state») — в словаре пульта

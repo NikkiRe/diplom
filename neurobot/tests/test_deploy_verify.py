@@ -1,11 +1,13 @@
 """Замеры neurobot/deploy/verify (k6.py, recovery.py, agent_truth.py): разбор записей без rclpy — задержки стопа через
-MCP и по скану, квантили, ближайшая дальность в секторе, выбор узла в юните, случаи из env-файла, кто перезапустил,
-честность ответа толчка против сдвига. Сами замеры (rclpy, systemd, Gazebo) — на двойнике, артефакты
-experiments/results/neurobot_20261018_deploy_fix. Python 3.8+."""
+MCP, по скану и кнопкой пульта (копии, поле t шлюза, «поехал после нуля»), квантили, ближайшая дальность в секторе,
+выбор узла в юните, случаи из env-файла, кто перезапустил, честность ответа толчка против сдвига. Сами замеры (rclpy,
+systemd, Gazebo) — на двойнике, артефакты experiments/results/neurobot_20261018_deploy_fix и (СТОП пульта)
+ui_20261019_live/p3. Python 3.8+."""
 from __future__ import annotations
 
 import math
 import sys
+import time
 import types
 import unittest
 from pathlib import Path
@@ -79,9 +81,36 @@ class K6Test(unittest.TestCase):
         s = k6.summary(rows, "x", 0.1)
         self.assertEqual((s["n"], s["within"], s["limit_s"]), (2, 1, 0.1))
 
+    def test_ui_run_marks_from_post(self):
+        # стоп пульта: 5 копий с одним id, поле t — стенные часы шлюза (стенные = монотонные + 1000)
+        stops = [(9.0, {"id": "old", "by": "ui:operator", "t": 1009.0}), (10.003, {"id": "agent1", "by": "agent"})] + \
+            [(10.004 + i * 1e-4, {"id": "u1", "by": "ui:operator", "t": 1010.002}) for i in range(5)]
+        req = [(10.0, 0.15, 0.0), (10.006, 0.0, 0.0)]
+        cmd = [(10.0, 0.15, 0.0), (10.005, 0.0, 0.0), (10.5, 0.0, 0.0), (11.9, 0.0, 0.0)]
+        r = k6.ui_run(10.0, 10.2, stops, req, cmd, 0.15, 1000.0)
+        self.assertEqual((r["gateway_s"], r["stop_s"], r["copies"], r["req_zero_s"], r["zero_s"], r["call_s"]),
+                         (0.002, 0.004, 5, 0.006, 0.005, 0.2))
+        self.assertFalse(r["moved_after_zero"])
+        self.assertEqual(r["after_s"], 1.895)
+        # после нуля снова поехал — провал; нуля нет — тоже «поехал»
+        moved = cmd[:2] + [(10.8, 0.05, 0.0)]
+        self.assertTrue(k6.ui_run(10.0, 10.2, stops, req, moved, 0.15, 1000.0)["moved_after_zero"])
+        none = k6.ui_run(10.0, None, [], [], cmd[:1], 0.15, 1000.0)
+        self.assertEqual((none["zero_s"], none["moved_after_zero"], none["stop_s"], none["gateway_s"], none["copies"]),
+                         (None, True, None, None, 0))
+
+    def test_wall_to_mono(self):
+        self.assertEqual(k6.wall_to_mono(1010.5, 1000.0), 10.5)
+        self.assertIsNone(k6.wall_to_mono(None, 1000.0))
+        off = k6.wall_offset()
+        self.assertLess(abs(time.time() - time.monotonic() - off), 0.01)
+
     def test_args(self):
         a = k6.parse(["--out", "f.json", "--sector", "5,30", "--runs", "3"])
         self.assertEqual((a.sector, a.runs, a.obstacle, a.drive_topic), ((5.0, 30.0), 3, "twin", "/cmd_vel_gesture"))
+        self.assertEqual((a.ui_trigger, a.ui_url), ("local", ""))
+        a = k6.parse(["--out", "f.json", "--cases", "ui", "--ui-trigger", "stdin"])
+        self.assertEqual((a.cases, a.ui_trigger), ("ui", "stdin"))
 
 
 class RecoveryTest(unittest.TestCase):

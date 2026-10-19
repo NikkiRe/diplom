@@ -70,6 +70,13 @@ CODES = {
     "estop_engaged": ("4.14", "устранить причину и снять защёлку человеком: sudo neurobot estop release"),
     "estop_failed": ("4.14", "safety_gate не ответил: sudo neurobot doctor; остановить робот — кнопкой"),
     "estop_denied": ("4.14", "снимать защёлку — в терминале, человеком, через sudo"),
+    "ui_down": ("4.15", "пульт не отвечает (роботу не мешает): journalctl -u neurobot-ui; sudo systemctl restart "
+                        "neurobot-ui"),
+    "ui_publisher": ("4.15", "узел пульта пишет не только стоп и защёлку: sudo systemctl stop neurobot-ui, проверить "
+                             "код пульта и NEUROBOT_UI_CMD"),
+    "ui_denied": ("4.15", "ссылку входа в пульт выдаёт только root: sudo neurobot ui-url"),
+    "ui_codes_unsafe": ("4.15", "каталог кодов пульта подменён (ссылка или чужой владелец): sudo systemctl stop "
+                                "neurobot-ui, проверить /var/lib/neurobot/ui"),
     "watchdog": ("5", "процесс завис (нет WATCHDOG): systemd перезапустил его; стек — в журнале"),
     "crashed": ("5", "процесс упал: journalctl -u <юнит> -n 50"),
     "start_timeout": ("5", "не стал готов за TimeoutStartSec: journalctl -u <юнит>"),

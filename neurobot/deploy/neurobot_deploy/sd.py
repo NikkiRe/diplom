@@ -91,8 +91,16 @@ class Systemd:
             args += ["-u", unit]
         if invocation:
             args += ["_SYSTEMD_INVOCATION_ID=" + invocation, "+", "INVOCATION_ID=" + invocation]
+        try:
+            text = self._out(args)
+        except SystemdError as e:
+            # не root и не в группе adm/systemd-journal: journalctl systemd ≥ 25x выходит с кодом 1 «insufficient
+            # permissions» (раньше — код 0 и пусто); журнал недоступен — это не отказ проверки (doctor предупреждает)
+            if "insufficient permissions" in str(e):
+                return []
+            raise
         out = []
-        for line in self._out(args).splitlines():
+        for line in text.splitlines():
             try:
                 e = json.loads(line)
             except ValueError:

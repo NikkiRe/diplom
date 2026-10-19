@@ -2,7 +2,7 @@
 
   python -m neurobot.ui serve --bundle FILE [--port 18120]
 
-Проверки — те же, что потом у живого шлюза (PLAN §3.3): Host — локальный адрес с любым портом (туннель SSH может
+Проверки — те же, что у живого шлюза (gateway.py, PLAN §3.3): Host — локальный адрес с любым портом (туннель SSH может
 прийти на любой локальный порт), Origin, если есть, — тоже локальный; иначе 403 (DNS rebinding). Файлы vendor/
 сверяются с SHA256SUMS при старте: не сошлось — пульт не стартует. Ничего не публикует и ничем не управляет.
 """
@@ -80,27 +80,16 @@ def origin_ok(value: Optional[str]) -> bool:
     return parts.scheme == "http" and host_ok(parts.netloc)
 
 
-class App:
-    """Состояние сервера: бандл (байты как есть и gzip), страница, CSP."""
+class Static:
+    """Статика пульта (web/) и CSP страницы — общие у «Записи» и живого шлюза."""
 
-    def __init__(self, bundle_path: str, web: str = WEB):
+    def __init__(self, web: str = WEB):
         self.web = os.path.realpath(web)
-        doc = stream.read_bundle(bundle_path)
-        stream.check_bundle(doc)
-        self.runs = [{"id": r["id"], "label": r["label"]} for r in doc["runs"]]
-        raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
-        self.bundle_gz = gzip.compress(raw, 6)
-        self.bundle_raw = raw
-        self.bundle_name = os.path.basename(bundle_path)
         with open(os.path.join(self.web, "index.html"), encoding="utf-8") as f:
             html = f.read()
         self.csp = ("default-src 'none'; script-src 'self' %s; style-src 'self'; img-src 'self' data:; "
                     "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; "
                     "frame-ancestors 'none'" % importmap_hash(html))
-
-    def meta(self) -> bytes:
-        return json.dumps({"mode": "replay", "source": "запись", "format": stream.FORMAT,
-                           "bundle": self.bundle_name, "runs": self.runs}, ensure_ascii=False).encode("utf-8")
 
     def static(self, path: str) -> Optional[Tuple[bytes, str]]:
         rel = unquote(path).lstrip("/") or "index.html"
@@ -112,6 +101,30 @@ class App:
             return None
         with open(full, "rb") as f:
             return f.read(), ctype
+
+
+class Bundle:
+    """Бандл «Записи»: байты как есть и gzip, список прогонов."""
+
+    def __init__(self, path: str):
+        doc = stream.read_bundle(path)
+        stream.check_bundle(doc)
+        self.runs = [{"id": r["id"], "label": r["label"]} for r in doc["runs"]]
+        self.raw = json.dumps(doc, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self.gz = gzip.compress(self.raw, 6)
+        self.name = os.path.basename(path)
+
+
+class App(Static):
+    """Раздача «Записи»: статика и бандл."""
+
+    def __init__(self, bundle_path: str, web: str = WEB):
+        super().__init__(web)
+        self.bundle = Bundle(bundle_path)
+
+    def meta(self) -> bytes:
+        return json.dumps({"mode": "replay", "modes": ["replay"], "source": "запись", "format": stream.FORMAT,
+                           "bundle": self.bundle.name, "runs": self.bundle.runs}, ensure_ascii=False).encode("utf-8")
 
 
 def handler(app: App):
@@ -148,8 +161,8 @@ def handler(app: App):
                 return self.send(200, app.meta(), "application/json")
             if path == "/api/bundle":
                 if "gzip" in (self.headers.get("Accept-Encoding") or ""):
-                    return self.send(200, app.bundle_gz, "application/json", {"Content-Encoding": "gzip"})
-                return self.send(200, app.bundle_raw, "application/json")
+                    return self.send(200, app.bundle.gz, "application/json", {"Content-Encoding": "gzip"})
+                return self.send(200, app.bundle.raw, "application/json")
             got = app.static(path)
             if got is None:
                 return self.deny(404, "нет такого файла")
@@ -164,15 +177,22 @@ def handler(app: App):
     return Handler
 
 
+class Server(ThreadingHTTPServer):
+    # очередь соединений: браузер открывает ≈25 модулей страницы разом, у socketserver по умолчанию 5 — лишние SYN
+    # теряются и страница минутами висит на «Загрузке пульта» [опыт e2e]
+    request_queue_size = 128
+    daemon_threads = True
+
+
 def make_server(bundle: str, port: int, host: str = "127.0.0.1", web: str = WEB) -> ThreadingHTTPServer:
     if host not in LOOPBACK:
         raise ValueError("пульт слушает только 127.0.0.1 или ::1, не %r: доступ снаружи — через SSH-туннель" % host)
     app = App(bundle, web)
-    cls = ThreadingHTTPServer
+    cls = Server
     if ":" in host:
         import socket
 
-        class V6(ThreadingHTTPServer):
+        class V6(Server):
             address_family = socket.AF_INET6
         cls = V6
     srv = cls((host, port), handler(app))
