@@ -14,8 +14,12 @@ import { TrendsScreen } from './screens/trends.js';
 import { Icon } from './lib/icons.js';
 import { Equipment } from './screens/equipment.js';
 import { LabScreen } from './screens/lab.js';
+import { ConnectScreen, GlassToggle } from './screens/connect.js';
+import { AssistantScreen } from './screens/assistant.js';
 
 const SCREENS = [
+  { id: 'connect', key: '6', title: 'Подключения', desc: 'Устройство, его возможности и связь с рабочим пространством.', C: ConnectScreen },
+  { id: 'assistant', key: '7', title: 'Ассистент', desc: 'Модель, диалог и общая память агента.', C: AssistantScreen },
   { id: 'lab', key: '5', title: 'Лаборатория агента', desc: 'Наблюдать. Понять решение. Проверить другую гипотезу.', C: LabScreen },
   { id: 'equipment', key: '4', title: 'Атлас сигналов', desc: 'Оборудование, контекст и каждый сигнал между ними.', C: Equipment },
   { id: 'overview', key: '1', title: 'Обзор', desc: 'Вся система. В одном поле зрения.', C: Overview },
@@ -38,7 +42,7 @@ function params() {
   const hash = location.hash.replace(/^#\/?/, '');
   return {
     run: q.get('run'), t: q.has('t') ? Number(q.get('t')) : null, speed: Number(q.get('speed')) || 10,
-    play: q.get('play') === '1', screen: SCREENS.some((s) => s.id === hash) ? hash : (q.get('screen') || 'lab'),
+    play: q.get('play') === '1', screen: SCREENS.some((s) => s.id === hash) ? hash : (q.get('screen') || 'connect'),
     theme: q.get('theme'), mode: q.get('mode'), demo: q.get('demo') === '1',
   };
 }
@@ -71,6 +75,7 @@ function useTheme(p0) {
 function useScreen(p0) {
   const [screen, setScreen] = useState(p0.screen);
   useEffect(() => { if (location.hash !== '#/' + screen) history.replaceState(null, '', location.pathname + location.search + '#/' + screen); }, [screen]);
+  useEffect(() => { document.querySelector('.nav a[aria-current="page"]')?.scrollIntoView({block:'nearest',inline:'nearest'}); }, [screen]);
   useEffect(() => {
     const onHash = () => { const id = location.hash.replace(/^#\/?/, ''); if (SCREENS.some((s) => s.id === id)) setScreen(id); };
     window.addEventListener('hashchange', onHash);
@@ -135,10 +140,10 @@ function CatalogApp({ meta, p0, theme }) {
   const [T, setT] = useState(() => Date.now() / 1000);
   const [acked, setAcked] = useState(() => new Set());
   const started = useRef(T);
-  const [screen, go] = useScreen({ ...p0, screen: ['lab', 'equipment'].includes(p0.screen) ? p0.screen : 'lab' });
+  const [screen, go] = useScreen({ ...p0, screen: ['connect', 'assistant', 'lab', 'equipment'].includes(p0.screen) ? p0.screen : 'connect' });
   useBlurOnClick();
   useEffect(() => {
-    const onKey = e => { if (!typing(e) && ['4', '5'].includes(e.key)) screenKey(e, go); };
+    const onKey = e => { if (!typing(e) && ['4', '5', '6', '7'].includes(e.key)) screenKey(e, go); };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
@@ -146,7 +151,7 @@ function CatalogApp({ meta, p0, theme }) {
   const run = { catalog: true, demo: p0.demo, id: 'catalog', system: 'mcp', run: 'MCP', origin: 'MCP', has_safety: false, date: '' };
   const ctx = { meta, run, tl, T, t0: started.current, live: null, theme: theme.themeKey };
   return html`<${Frame} ctx=${ctx} screen=${screen} go=${go} acked=${acked} setAcked=${setAcked} theme=${theme} silence=${0}
-    footer=${html`<footer class="player livebar"><span class="badge live">LOCAL</span><span>EdgeLab · исследовательская среда</span><span class="muted">Оборудование MCP · локальные эксперименты · без платных запросов</span><span class="sp"></span><span class="num muted">${clock(T)}</span></footer>`} />`;
+    footer=${html`<footer class="player livebar"><span class="badge live">LOCAL</span><span>EdgeLab · рабочее пространство</span><span class="muted">Устройства · агент · контекст · эксперименты</span><span class="sp"></span><span class="num muted">${clock(T)}</span></footer>`} />`;
 }
 
 function ModeSwitch({ modes, mode, setMode }) {
@@ -329,7 +334,7 @@ function Frame({ ctx, screen, go, acked, setAcked, theme, silence, silenceText, 
     <${Nav} ...${ctx} screen=${screen} go=${go} acked=${acked} setAcked=${setAcked} themeMode=${theme.themeMode} setThemeMode=${theme.setThemeMode} showHelp=${() => setHelp(true)} />
     <main class=${'main' + (stale ? ' nolink' : '')} id="main" aria-label=${cur.title} data-screen=${cur.id}>
       ${stale ? html`<div class="nolinkbar" role="status" data-testid="nolink">${silenceText} ${Number.isFinite(silence) ? fmtAge(silence) : ''} — показанное больше не правда</div>` : ''}
-      ${screen!=='lab'?html`<div class="pagehead"><div><div class="eyebrow">ЦЕНТР НАБЛЮДЕНИЯ <span>/ ${cur.key.padStart(2, '0')}</span></div>
+      ${!['lab','connect','assistant'].includes(screen)?html`<div class="pagehead"><div><div class="eyebrow">ЦЕНТР НАБЛЮДЕНИЯ <span>/ ${cur.key.padStart(2, '0')}</span></div>
         <h1>${cur.title}</h1><p>${cur.desc}</p></div>
         <div class="session-label"><span class=${'signal-dot' + (stale ? ' offline' : '')}></span>
           ${ctx.run.catalog ? 'Оборудование' : ctx.live ? 'Живой поток' : 'Просмотр записи'}<span class="session-detail">${ctx.run.catalog ? 'MCP' : ctx.live ? ctx.run.origin : ctx.run.system.toUpperCase() + ' · ' + ctx.run.date}</span></div></div>`:''}
@@ -347,7 +352,7 @@ function Shortcuts({ close }) {
   return html`<dialog class="shortcuts" ref=${ref} onCancel=${close} aria-labelledby="help-title">
     <div class="dialog-head"><div><div class="eyebrow">БЫСТРЫЙ ДОСТУП</div><h2 id="help-title">Горячие клавиши</h2></div>
       <button class="icon-button" onClick=${close} aria-label="Закрыть"><${Icon} name="close" /></button></div>
-    <dl><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>5</kbd></dt><dd>Переключить экран</dd>
+    <dl><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>5</kbd> <kbd>6</kbd> <kbd>7</kbd></dt><dd>Переключить экран</dd>
       <dt><kbd>Esc</kbd></dt><dd>Вернуться к обзору</dd><dt><kbd>Пробел</kbd></dt><dd>Проиграть / пауза записи</dd>
       <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Перемотать на 10 секунд</dd><dt><kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd></dt><dd>Перемотать на минуту</dd></dl>
     <p class="muted">Клавиши проигрывателя действуют в режиме записи. Команды роботу доступны только через кнопки пульта.</p>
@@ -459,7 +464,7 @@ function Nav({ tl, T, t0, run, screen, go, acked, setAcked, themeMode, setThemeM
   return html`<nav class="nav" aria-label="экраны и тревоги">
     <div class="nav-brand"><div class="brand-mark"><${Icon} name="lab" size=${27} /></div><div><b>edge<span>/</span>lab</b><small>EXPERIMENTAL OBSERVATORY</small></div></div>
     <div class="nav-section-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
-    <div class="nav-links">${SCREENS.filter(s => !run.catalog || ['equipment','lab'].includes(s.id)).map((s) => html`<a href=${'#/' + s.id} aria-label=${s.title} title=${s.title} aria-current=${screen === s.id ? 'page' : undefined}
+    <div class="nav-links">${SCREENS.filter(s => !run.catalog || ['connect','assistant','equipment','lab'].includes(s.id)).map((s) => html`<a href=${'#/' + s.id} aria-label=${s.title} title=${s.title} aria-current=${screen === s.id ? 'page' : undefined}
         onClick=${(e) => { e.preventDefault(); go(s.id); }}>
       <${Icon} name=${s.id} /><span>${s.title}</span><kbd>${s.key}</kbd></a>`)}</div>
     <div class="alarmlist" data-testid="alarms">
@@ -469,7 +474,7 @@ function Nav({ tl, T, t0, run, screen, go, acked, setAcked, themeMode, setThemeM
         ${shownOff.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
         ${off.length > CLEARED_SHOWN ? html`<button class="more" onClick=${() => setMore(!more)}>${more ? 'свернуть' : `ещё ${off.length - CLEARED_SHOWN}`}</button>` : ''}` : ''}
     </div>
-    <div class="navfoot"><button class="theme-toggle" onClick=${() => setThemeMode(nextTheme[themeMode] || 'dark')} aria-label="Переключить тему"><${Icon} name=${themeMode === 'light' ? 'sun' : 'moon'} size=${17} /><span>${themeName[themeMode]}</span></button>
+    <div class="navfoot"><${GlassToggle}/><button class="theme-toggle" onClick=${() => setThemeMode(nextTheme[themeMode] || 'dark')} aria-label="Переключить тему"><${Icon} name=${themeMode === 'light' ? 'sun' : 'moon'} size=${17} /><span>${themeName[themeMode]}</span></button>
       <button class="help-toggle" onClick=${showHelp} aria-label="Горячие клавиши"><${Icon} name="keyboard" size=${18} /></button></div>
     <div class="nav-project"><span class="signal-dot"></span><div>Edge AI Research<small>ИТМО · Дипломный проект</small></div><span class="version">01</span></div>
   </nav>`;

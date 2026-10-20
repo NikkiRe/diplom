@@ -412,7 +412,8 @@ class CatalogHTTPTest(unittest.TestCase):
         from neurobot.ui import __main__ as cli
         with mock.patch.object(server, "serve", return_value=0) as launch:
             self.assertEqual(cli.main(["catalog", "--port", "18126", "--source", self.fake.url]), 0)
-            launch.assert_called_once_with(None, 18126, "127.0.0.1", sources=[self.fake.url], traces=[])
+            launch.assert_called_once_with(None, 18126, "127.0.0.1", sources=[self.fake.url], traces=[],
+                                           state_dir=server.default_state_dir(), assistant_binary=None)
 
     def test_replay_source_configuration_and_same_origin_guard(self):
         code, doc = self.request(self.replay, "GET", "/api/catalog")

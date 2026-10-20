@@ -1,6 +1,8 @@
 import { html } from './ui.js';
 
 const paths = {
+  connect: 'M7 7h10v10H7zM10 10h4v4h-4zM9 3v4M15 3v4M9 17v4M15 17v4M3 9h4M3 15h4M17 9h4M17 15h4',
+  assistant: 'M21 11a8 8 0 0 1-8 8H6l-4 3V11a9 9 0 0 1 19 0M7 10h10M7 14h6',
   lab: 'M9 3h6M10 3v6l-6 10a1.3 1.3 0 0 0 1 2h14a1.3 1.3 0 0 0 1-2L14 9V3M8 14h8M10 17h.01M14 18h.01',
   equipment: 'M4 5h5v5H4zM15 4h5v5h-5zM8 16h6v5H8zM9 7h6M6.5 10v3h4.5v3M17.5 9v4H11',
   network: 'M4 5h5v5H4zM15 4h5v5h-5zM8 16h6v5H8zM9 7h6M6.5 10v3h4.5v3M17.5 9v4H11',

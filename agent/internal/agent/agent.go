@@ -76,6 +76,8 @@ type Agent struct {
 
 	idMu sync.Mutex
 	ids  map[string]int
+	// memoryMu keeps explicit memory edits between complete agent turns.
+	memoryMu sync.RWMutex
 
 	mu          sync.Mutex
 	toolDefs    []llm.Tool
@@ -282,11 +284,15 @@ func goRuntime() map[string]any {
 // syncHardware читает инвентарь всех серверов, подписывается на их ресурсы
 // состояния и читает начальное состояние (без порождения событий).
 func (a *Agent) syncHardware(ctx context.Context) error {
+	return a.syncHardwareMode(ctx, false)
+}
+
+func (a *Agent) syncHardwareMode(ctx context.Context, refreshKnown bool) error {
 	if len(a.host.Servers()) == 0 {
 		return nil
 	}
 	var errs []string
-	if err := a.reloadInventory(ctx); err != nil {
+	if err := a.reloadInventoryMode(ctx, refreshKnown); err != nil {
 		errs = append(errs, err.Error())
 	}
 	for _, s := range a.host.Servers() {
@@ -348,6 +354,10 @@ func (a *Agent) syncServer(ctx context.Context, s mcphost.ServerInfo) (map[strin
 
 // reloadInventory перечитывает инвентарь всех серверов в L0.
 func (a *Agent) reloadInventory(ctx context.Context) error {
+	return a.reloadInventoryMode(ctx, false)
+}
+
+func (a *Agent) reloadInventoryMode(ctx context.Context, refreshKnown bool) error {
 	raw, err := a.host.Inventory(ctx)
 	var parts []hwctx.Inventory
 	values := map[string]map[string]any{}
@@ -363,7 +373,7 @@ func (a *Agent) reloadInventory(ctx context.Context) error {
 	a.hw.SetInventory(hwctx.Merge(parts...))
 	knownState := a.hw.State()
 	for _, dev := range sortedKeys(values) {
-		if _, known := knownState[dev]; !known {
+		if _, known := knownState[dev]; refreshKnown || !known {
 			a.hw.Seed(a.now(), dev, values[dev])
 		}
 	}

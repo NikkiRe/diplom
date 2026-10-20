@@ -248,9 +248,8 @@ func (a *Agent) scheduleConsolidation() {
 }
 
 func (a *Agent) consolidateProfile() {
-	text := a.store.ProfileText()
 	a.mu.Lock()
-	a.profileText = text
+	a.profileText = a.store.ProfileText()
 	a.mu.Unlock()
 	a.m.inc("profile.consolidations")
 }

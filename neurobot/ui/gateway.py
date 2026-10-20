@@ -43,7 +43,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import parse_qs, unquote, urlsplit
 
 from neurobot.ui import alarms as A
-from neurobot.ui import cam_snapshot, catalog, lab, live, robot, server, stream
+from neurobot.ui import assistant, boards, cam_snapshot, catalog, lab, live, robot, server, stream
 
 log = logging.getLogger("neurobot-ui")
 
@@ -320,6 +320,8 @@ class Gateway(server.Static):
         self.stopping = threading.Event()
         self.catalog = catalog.Registry()
         self.lab = lab.LabStore(allow_experiments=False)
+        self.boards = boards.BoardRegistry()
+        self.assistant = assistant.AssistantStore(runtime_enabled=False)
 
     def head(self) -> dict:
         """Поля hello живого потока (Hub добавит k, t, format, active, boot)."""
@@ -480,6 +482,9 @@ def handler(gw: Gateway):
             if path.startswith("/api/"):
                 if not self.authed():
                     return self.json(401, {"error": "нужен вход: на роботе — sudo neurobot ui-url"})
+                workspace = server.workspace_get(gw, path)
+                if workspace is not None:
+                    return self.send(*workspace)
                 if path == "/api/catalog":
                     return self.json(200, gw.catalog.snapshot())
                 if path == "/api/lab":
@@ -514,6 +519,10 @@ def handler(gw: Gateway):
         def do_POST(self):   # noqa: N802
             path = urlsplit(self.path).path
             body_limit = 8 * 1024 * 1024 if path == "/api/lab/import" else MAX_BODY
+            if path.startswith("/api/boards/"):
+                body_limit = 1024 * 1024
+            elif path.startswith("/api/assistant/"):
+                body_limit = 128 * 1024
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
@@ -535,6 +544,10 @@ def handler(gw: Gateway):
             if not isinstance(body, dict):
                 return self.json(400, {"error": "тело — объект JSON"})
             path = urlsplit(self.path).path
+            if path.startswith("/api/boards/"):
+                return self.json(*boards.mutate(gw.boards, path, body))
+            if path.startswith("/api/assistant/"):
+                return self.json(*assistant.mutate(gw.assistant, path, body))
             if path in ("/api/lab/import", "/api/lab/experiments", "/api/lab/cancel"):
                 return self.json(*lab.mutate(gw.lab, path, body))
             if path == "/api/catalog/frame":
@@ -622,6 +635,8 @@ class Server(ThreadingHTTPServer):
     daemon_threads = True
 
     def shutdown(self):
+        if hasattr(self, "assistant"):
+            self.assistant.close()
         if hasattr(self, "catalog"):
             self.catalog.close()
         if hasattr(self, "lab"):
@@ -629,6 +644,8 @@ class Server(ThreadingHTTPServer):
         super().shutdown()
 
     def server_close(self):
+        if hasattr(self, "assistant"):
+            self.assistant.close()
         if hasattr(self, "catalog"):
             self.catalog.close()
         if hasattr(self, "lab"):
@@ -648,6 +665,8 @@ def make_server(gw: Gateway, port: int, host: str = "127.0.0.1") -> ThreadingHTT
     srv.daemon_threads = True
     srv.catalog = gw.catalog
     srv.lab = gw.lab
+    srv.boards = gw.boards
+    srv.assistant = gw.assistant
     return srv
 
 

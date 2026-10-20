@@ -155,6 +155,8 @@ type turnState struct {
 // runTurn исполняет один ход: промпт → LLM → инструменты (до max_steps). Пока
 // модель недоступна, ход не начинается, а откладывается.
 func (a *Agent) runTurn(ctx context.Context, w *wake) {
+	a.memoryMu.RLock()
+	defer a.memoryMu.RUnlock()
 	a.heartbeatDequeued(w)
 	if a.deferWake(w, 0) {
 		return

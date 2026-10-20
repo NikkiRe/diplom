@@ -67,6 +67,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     c.add_argument("--host", default="127.0.0.1", help="127.0.0.1 или ::1")
     c.add_argument("--source", action="append", default=[], metavar="URL", help="локальный MCP URL; можно повторить")
     c.add_argument("--trace", action="append", default=[], metavar="FILE", help="живая JSONL-трасса EdgeCtx; путь задаётся только при запуске")
+    for entry in (s, c):
+        entry.add_argument("--state-dir", help="приватное состояние вне Git; по умолчанию $XDG_STATE_HOME/edgelab или ~/.local/state/edgelab")
+        entry.add_argument("--agent-binary", help="доверенный бинарник EdgeCtx; без флага — локальная сборка Go в приватном каталоге")
     sub.add_parser("live", help="живой шлюз: узел rclpy и HTTP на 127.0.0.1 (юнит neurobot-ui)")
     a = p.parse_args(argv)
     if a.cmd == "replay":
@@ -79,10 +82,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     if a.cmd == "catalog":
         from neurobot.ui import server
-        return server.serve(None, a.port, a.host, sources=a.source, traces=a.trace)
+        return server.serve(None, a.port, a.host, sources=a.source, traces=a.trace,
+                            state_dir=a.state_dir or server.default_state_dir(), assistant_binary=a.agent_binary)
     if a.cmd == "serve":
         from neurobot.ui import server
-        return server.serve(a.bundle, a.port, a.host)
+        return server.serve(a.bundle, a.port, a.host, state_dir=a.state_dir or server.default_state_dir(),
+                            assistant_binary=a.agent_binary)
     p.print_help()
     return 2
 

@@ -59,6 +59,7 @@ def main():
     parser.add_argument("--agent-binary", type=Path, help="готовый бинарник EdgeCtx; без флага — локальная сборка Go")
     parser.add_argument("--cam-mcp", type=Path, help="готовый cam-mcp для синтетической камеры EdgeLab")
     parser.add_argument("--cam-port", type=int, help="порт синтетической камеры; по умолчанию порт интерфейса + 2")
+    parser.add_argument("--state-dir", type=Path, help="приватный каталог паспортов и ассистента вне Git")
     args = parser.parse_args()
     mcp_port = args.mcp_port if args.mcp_port is not None else args.port + 1
     cam_port = args.cam_port if args.cam_port is not None else args.port + 2
@@ -127,7 +128,8 @@ def main():
                     time.sleep(.1)
                 if not (state / "cam.url").exists():
                     raise RuntimeError("cam-mcp не сообщил о готовности")
-            srv = server.make_server(None, args.port)
+            srv = server.make_server(None, args.port, state_dir=str(args.state_dir or Path(server.default_state_dir()) / "demo"),
+                                     assistant_binary=str(args.agent_binary.resolve()) if args.agent_binary else None)
             if args.lab_python:
                 # Keep the venv executable path: resolving its symlink selects
                 # the base interpreter and loses the environment's packages.
@@ -139,9 +141,11 @@ def main():
             srv.catalog.connect((state / "hw.url").read_text().strip(), "Симулятор датчиков · hw-mcp")
             if args.lab:
                 srv.catalog.connect((state / "cam.url").read_text().strip(), "Синтетическая камера · cam-mcp")
+                srv.source_state.save(srv.catalog.snapshot())
                 threading.Thread(target=seed_lab, args=(srv.lab,), daemon=True).start()
+                threading.Thread(target=srv.boards.local, name="edgelab-host-passport", daemon=True).start()
             print("EdgeLab · СИМУЛЯТОР SYSFS · без физического оборудования", flush=True)
-            print("http://127.0.0.1:%d/?demo=1#/%s" % (srv.server_address[1], "lab" if args.lab else "equipment"), flush=True)
+            print("http://127.0.0.1:%d/?demo=1#/%s" % (srv.server_address[1], "connect" if args.lab else "equipment"), flush=True)
             print("Ctrl+C — остановить атлас, hw-mcp и симулятор", flush=True)
             srv.serve_forever()
         except KeyboardInterrupt:
