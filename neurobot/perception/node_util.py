@@ -1,7 +1,8 @@
-"""Мелкие части узла predict_live v2 без torch и rclpy: sd_notify, сектор лидара, ящик «последняя побеждает»,
-разбор /neurobot/motion_state исполнителя и /neurobot/safety_state safety_gate.
+"""Мелкие части узла predict_live v2 без torch (rclpy — только внутри Spinner): sd_notify, постоянный исполнитель,
+сектор лидара, ящик «последняя побеждает», разбор /neurobot/motion_state исполнителя и /neurobot/safety_state
+safety_gate.
 
-Notifier и front_scan — копии neurobot/executor/sd_notify.py и guard.front_scan: патч для ветки
+Notifier, Spinner и front_scan — копии neurobot/executor/sd_notify.py, spinner.py и guard.front_scan: патч для ветки
 лаборатории должен быть самодостаточным (кладётся в src/camera/ без пакета neurobot). Совпадение поведения
 проверяют общие тесты (neurobot/tests/test_perception_util.py).
 """
@@ -64,6 +65,59 @@ class Notifier:
             return False
         self._last_ping = now
         return self.send("WATCHDOG=1")
+
+
+class Spinner:
+    """Постоянный исполнитель rclpy в своём потоке вместо rclpy.spin_once(node) в главном цикле (H6): узел
+    добавляется один раз, ожидание — без таймаута (нет rcl-таймера на каждую пачку событий), разбудить поток для
+    остановки — своё guard condition. Исключение колбэка останавливает поток и ставит stop; wait() поднимает его
+    дальше. Копия neurobot/executor/spinner.py."""
+
+    def __init__(self, node, stop: threading.Event):
+        import rclpy
+        from rclpy.executors import SingleThreadedExecutor
+
+        self._ok = rclpy.ok
+        self._stop = stop
+        self._closed = False
+        self.error: Optional[BaseException] = None
+        self._ex = SingleThreadedExecutor()
+        self._ex.add_node(node)
+        self._wake = node.create_guard_condition(lambda: None)
+        self._thread = threading.Thread(target=self._run, name="rclpy-spin", daemon=True)
+        self._thread.start()
+
+    def _run(self) -> None:
+        try:
+            while not self._stop.is_set() and self._ok():
+                self._ex.spin_once()
+        except BaseException as e:  # колбэк упал: главный поток выйдет с этим исключением
+            self.error = e
+        finally:
+            self._stop.set()
+
+    def wait(self) -> None:
+        """Ждать выхода (сигнал, упавший колбэк, закрытый контекст rclpy) и остановить поток; исключение колбэка —
+        дальше, вызывающему."""
+        self._stop.wait()
+        self.close()
+        if self.error is not None:
+            raise self.error
+
+    def close(self, timeout: float = 2.0) -> None:
+        """Остановить поток и исполнитель (повторный вызов ничего не делает). Колбэк, не вернувшийся за timeout, —
+        строка журнала: ноль на выходе главный поток шлёт всё равно."""
+        if self._closed:
+            return
+        self._closed = True
+        self._stop.set()
+        if self._thread.is_alive():
+            self._wake.trigger()
+            self._thread.join(timeout)
+        if self._thread.is_alive():
+            log.error("колбэк rclpy не вернулся за %.0f с — выход без остановки исполнителя", timeout)
+            return
+        self._ex.shutdown()
 
 
 class Front(NamedTuple):

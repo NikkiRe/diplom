@@ -145,8 +145,10 @@ safety_gate не пустит робота вперёд (повороты мож
 doctor пишет о молчащем датчике «ещё поднимается» — подождать. Зависший драйвер (процесс жив, тема молчит) сторож
 перезапускает сам: тема старше предела две пробы подряд — строка `sensor_stale` в `journalctl -u neurobot-watchdog`.
 Если молчат все датчики сразу, сторож никого не трогает (так выглядит беда DDS) — `sudo systemctl restart
-neurobot.target`. Робот не реагирует на жесты, а doctor «ОК» и в `journalctl -u neurobot-safety` идут команды — мог
-зависнуть `twist_mux` в launch базы (сторож его не видит): `sudo systemctl restart neurobot-driver@base`.
+neurobot.target`. Зависший `twist_mux` в launch базы сторож ловит по его статусу в `/diagnostics` и перезапускает
+базу (строка `sensor_stale … /diagnostics@twist_mux`). Робот не реагирует на жесты, а doctor «ОК», в `journalctl -u
+neurobot-safety` идут команды и такой строки нет — значит, twist_mux лаборатории не публикует `/diagnostics` (§9):
+`sudo systemctl restart neurobot-driver@base`.
 
 ### 4.7. rosbridge
 
@@ -266,6 +268,12 @@ systemd перезапускает упавший компонент сам (`Re
   systemd послал SIGABRT и перезапустил; стек Python — в журнале. После рестарта движение не возобновляется.
 - `crashed`: процесс завершился с ошибкой — `journalctl -u <юнит> -n 50`.
 - `start_timeout`: не стал готов за `TimeoutStartSec` (safety_gate — 30 с, исполнитель — 60 с, распознавание — 120 с).
+- `restart_loop` (предупреждение в журнале распознавания): распознавание падает раз за разом, и перед каждым
+  следующим стартом пауза растёт — 0, 5, 15, затем по 30 с, пока оно не проработает 10 мин. Причина — выше в `journalctl -u
+  neurobot-perception`; нехватка памяти — `dmesg | grep -i oom`. Ручной `sudo systemctl restart neurobot-perception`
+  стартует сразу. При нехватке памяти ядро сначала убивает пульт, затем rosbridge, MCP-сервер и PicoClaw, потом
+  распознавание; safety_gate и исполнитель — последними.
+- Сторож сам под надзором systemd: завис больше 30 с — systemd перезапускает его (`watchdog` в журнале сторожа).
 - `systemd_error`: сторож не смог вызвать systemctl/journalctl — `journalctl -u neurobot-watchdog`.
 
 ```bash
@@ -320,3 +328,22 @@ cp ~/.picoclaw/config.json.neurobot-<время> ~/.picoclaw/config.json   # п�
 Конфиги `/etc/neurobot`, защёлка и метки `wait-graph` в `/var/lib/neurobot` остаются. Вернуть прежнюю версию
 юнитов — скопировать их из `/var/backups/neurobot/<время>/etc/systemd/system/` обратно и `sudo systemctl
 daemon-reload`. Патчи MCP-серверов снимаются `patch -R -p1 < <патч>`.
+
+## 9. Чек-лист HIL (на роботе, вместе с лабораторией)
+
+То, что на двойнике не проверить: у него другие ядро, cgroup, DDS, камера и тормоза. Порядок — сверху вниз; где нужно
+решение лаборатории, это сказано. Колёса — сняты или робот на подставке, пока не сказано иное. Основание —
+`docs/research/optimization/REVIEW.md` (§2.1, §4).
+
+| # | Что | Как | Критерий / что решается |
+|---|---|---|---|
+| 1 | Факты платы (H11) | `bash collect_diag.sh --sudo` при запущенном стеке | `system/cgroup*.txt`: cgroup v1 или v2, доходят ли `MemoryMax` пульта и `CPUWeight` до файлов cgroup; THP, zram, swappiness, governor, цель загрузки (рабочий стол); `python/`: грузится ли TensorRT в Python 3.8 распознавания; `system/nvmap.txt` против `processes/memory.txt`: видна ли память CUDA в RSS распознавания (от этого зависит запас `OOMScoreAdjust`); `ros/`: версия realsense-ros по именам параметров, `publish_tf` madgwick, издатели `/diagnostics` (есть ли twist_mux) |
+| 2 | Профили камеры и IMU (H5) | env-файл из `neurobot.env.example`; `ros2 param dump /camera/camera --print`, `ros2 topic hz` цвета, глубины и `/camera/imu` | профили приняты: глубина 848×480 15 к/с, цвет 640×480 15 к/с, IMU 200 Гц; иначе — имена параметров по версии из п. 1 |
+| 3 | Сторож камеры по `camera_info` (H5) | `sudo systemctl stop neurobot-perception`, `ros2 topic hz /camera/color/camera_info` 30 с | `camera_info` идёт без подписчиков кадров; иначе вернуть `FRESH="/camera/color/image_raw:2"` |
+| 4 | Разрешение глубины (H5, решение §2.5 REVIEW) | A/B: 424×240 15 к/с против 848×480 15 к/с с прореживанием, пресеты Default и High Accuracy; ровный пол, 1,2–2,5 м | шум высоты пола < 2 см (порог safety_gate), покрытие, CPU safety_gate; победитель — в env-файл |
+| 5 | Поза камеры (H8) | 15 мин записи `/camera/depth/*`, `/tf_static`, `/imu/data`: стоя и на ходу | гистограмма высоты пола по дальности; по ней допуски калибровки на старте (±3°, ±3 см), затем код (МНК-плоскость пола 1,2–2,5 м) |
+| 6 | Торможение (H9) | по 5 стопов с 0,10 и 0,15 м/с (запись `/odom`, `/cmd_vel`, `/camera/imu`); `ros2 param get /diff_cont linear.x.has_acceleration_limits` (и `max_acceleration`, `min_acceleration`) | худшие (не средние) `t_lat` и `a_brake` — в `d_stop` safety_gate; та же запись — порог удара `shock_mps2`; лимитов нет и лаборатория их не задаст — ограниченное замедление в L2 |
+| 7 | Петля OOM и жертвы (H4) | балласт памяти в распознавании (budget, `ballast.py`) до OOM; `journalctl -u neurobot-perception`, `dmesg`; `cat /proc/<pid>/oom_score_adj` главных процессов юнитов | паузы 0, 5, 15, 30 с в строках `restart_loop`; тик safety_gate 20 Гц не проседает; первыми убиты пульт и агентский путь, safety_gate и исполнитель живы |
+| 8 | Надзор (H16) | SIGSTOP узла `twist_mux` (`kill -STOP`); SIGSTOP процесса сторожа | база перезапущена ≤ 10 с (строка `/diagnostics@twist_mux`); сторож — новый запуск ≈ 36 с, стек в журнале |
+| 9 | YOLO на TensorRT FP16 (H12) | если п. 1 показал TensorRT для 3.8: `trtexec --fp16` на самом Nano, вход 256×320 (h × w, как у AutoShape), и попытка с `--tacticSources=-CUDNN` | цикл распознавания и PSS до и после; IoU рамок ≥ 0,95 на ≥ 200 кадрах записей лаборатории |
+| 10 | Геймпад под защёлкой (H17, **решение лаборатории** — это их yaml twist_mux) | если лаборатория согласна: в yaml twist_mux — тема блокировки (lock) с приоритетом 255, safety_gate публикует в неё `true` на время защёлки (правка safety_gate — после решения) | под защёлкой геймпад не двигает робот (приёмка 17.10, P4: 0,20 м мимо L2); цена — под защёлкой не отвести робот геймпадом, сначала снять защёлку |

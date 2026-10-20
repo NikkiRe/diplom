@@ -25,9 +25,11 @@
 #   1) ни один фиктивный секрет и текст сессии не попал в архив, stdout и stderr, а файлы с ними в архиве есть
 #      (иначе проверка утечек пуста); код вокруг вырезанных значений читается; HOME фикстуры не изменён;
 #      лаунчер не запускался; собрано нужное (журналы шлюза, лаунчера, MCP, воркеров; порт 8766 с кодом воркера и
-#      ответом GET /state; версии кода; .python-version; пакеты venv без pip; веса; параметры diff_cont и twist_mux
-#      с --print для Foxy; число издателей); --camera не трогает камеру, пока жив процесс демо;
-#   2) с --sudo журнал пользовательского юнита собран (в Lima sudo без пароля);
+#      ответом GET /state; версии кода; .python-version; пакеты venv без pip; веса; параметры diff_cont, twist_mux
+#      и камеры с --print для Foxy; publish_tf madgwick; число издателей, в том числе /tf и /diagnostics; cgroup,
+#      THP, vm.*, /proc/meminfo, цель загрузки; TensorRT — по интерпретатору, без импорта, если модуля нет; nvmap без
+#      --sudo — «права»; память процессов робота); --camera не трогает камеру, пока жив процесс демо;
+#   2) с --sudo журнал пользовательского юнита собран (в Lima sudo без пароля), nvmap не Jetson — «нет»;
 #   3) на системе без ROS, Jetson, PicoClaw и юнитов сбор завершается с кодом 0 и пометками «нет»; --camera
 #      вызывает rs-enumerate-devices, когда камеру никто не держит;
 #   4) ошибки запуска — код 2 и понятное сообщение; --help описывает флаги без ссылок на файлы репозитория;
@@ -318,20 +320,22 @@ case "$1 $2" in
   "daemon stop") echo "The daemon has been stopped" ;;
   "topic list") printf '%s\n' "/scan [sensor_msgs/msg/LaserScan]" "/cmd_vel [geometry_msgs/msg/Twist]" \
     "/cmd_vel_tracker [geometry_msgs/msg/Twist]" "/diff_cont/cmd_vel_unstamped [geometry_msgs/msg/Twist]" \
-    "/odom [nav_msgs/msg/Odometry]" ;;
-  "node list") printf '%s\n' /controller_manager /diff_cont /robot_state_publisher /topic_watchdog /twist_mux \
-    /urg_node2 /urg_node2 ;;
+    "/odom [nav_msgs/msg/Odometry]" "/tf [tf2_msgs/msg/TFMessage]" \
+    "/diagnostics [diagnostic_msgs/msg/DiagnosticArray]" ;;
+  "node list") printf '%s\n' /camera/camera /controller_manager /diff_cont /imu_filter_madgwick /robot_state_publisher \
+    /topic_watchdog /twist_mux /urg_node2 /urg_node2 ;;
   "topic info") [ "$4" = /scan ] && n=2 || n=1
     printf 'Type: x\nPublisher count: %s\nSubscription count: 1\n  Reliability: BEST_EFFORT\n' "$n" ;;
   "topic echo") printf 'header:\n  frame_id: odom\ntwist:\n  twist:\n    linear:\n      x: 0.0\n---\nheader:\n---\n'
     exec sleep 30 ;;
-  "param dump") if [ "$3" = /diff_cont ]; then
-      printf '/diff_cont:\n  ros__parameters:\n    cmd_vel_timeout: 0.5\n    use_stamped_vel: false\n'
-      printf '    wheel_radius: 0.036\n'
-    else
-      printf '/twist_mux:\n  ros__parameters:\n    topics:\n      tracker:\n        priority: 20\n'
-    fi ;;
-  "param get") echo 'String value is: <robot name="MARK_URDF"/>' ;;
+  "param dump") case $3 in
+      /diff_cont) printf '/diff_cont:\n  ros__parameters:\n    cmd_vel_timeout: 0.5\n    use_stamped_vel: false\n'
+        printf '    wheel_radius: 0.036\n' ;;
+      /camera/camera) printf '/camera/camera:\n  ros__parameters:\n    depth_module.profile: 0,0,0 MARK_RS_PARAMS\n' ;;
+      *) printf '/twist_mux:\n  ros__parameters:\n    topics:\n      tracker:\n        priority: 20\n' ;;
+    esac ;;
+  "param get") if [ "$4" = publish_tf ]; then echo 'Boolean value is: True'
+    else echo 'String value is: <robot name="MARK_URDF"/>'; fi ;;
   "control list_controllers") echo "diff_cont[diff_drive_controller/DiffDriveController] active" ;;
   "node info") printf '/topic_watchdog\n  Subscribers:\n    /cmd_vel: geometry_msgs/msg/Twist\n' ;;
 esac
@@ -529,6 +533,22 @@ expect "ROS 2: параметры /diff_cont (Foxy — с --print) и сводк
 expect "ROS 2: twist_mux, контроллеры, /topic_watchdog, URDF" \
   bash -c "grep -q 'priority: 20' '$d/ros/twist_mux.txt' && grep -q DiffDriveController '$d/ros/controllers.txt' &&
     grep -q '/cmd_vel' '$d/ros/topic_watchdog.txt' && grep -q MARK_URDF '$d/ros/robot_description.txt'"
+expect "ROS 2: камера (параметры — версия realsense-ros), madgwick publish_tf, издатели /tf и /diagnostics" \
+  bash -c "grep -q MARK_RS_PARAMS '$d/ros/camera_params.txt' &&
+    grep -q '^param dump /camera/camera --print domain=77' '$T/ros2.calls' &&
+    grep -q '^\[ок\] ROS 2: madgwick publish_tf — Boolean value is: True' '$r' &&
+    grep -q '/tf 1, /diagnostics 1' '$r'"
+expect "память и cgroup: контроллеры, монтирование, THP, vm.*, /proc/meminfo, get-default" \
+  bash -c "grep -q '^\[ок\] cgroup: контроллеры' '$r' && grep -q '^\[ок\] cgroup: тип /sys/fs/cgroup' '$r' &&
+    grep -q '^#subsys_name' '$d/system/cgroup.txt' && grep -q '/sys/kernel/mm/transparent_hugepage/enabled: ' \
+    '$d/system/memory_kernel.txt' && grep -q '^/proc/sys/vm/swappiness: [0-9]' '$d/system/memory_kernel.txt' &&
+    grep -q '^MemTotal:' '$d/system/memory_kernel.txt' && grep -qE '^(multi-user|graphical)\.target' \
+    '$d/system/cpufreq.txt'"
+expect "TensorRT по каждому интерпретатору — «нет», без импорта" \
+  bash -c "grep -q '^\[нет\] TensorRT в ' '$r' && grep -q 'tensorrt: no module named tensorrt' '$d'/python/pip_*.txt"
+expect "nvmap без --sudo — «права»; память процессов робота" \
+  bash -c "grep -q '^\[права\] nvmap: память GPU по процессам' '$r' &&
+    grep -qE '^(Rss|VmRSS):' '$d/processes/memory.txt' && grep -q '^== pid ' '$d/processes/memory.txt'"
 expect "ROS 2: сводка /scan без rclpy — пометка «нет»" grep -q '^\[нет\] ROS 2: /scan по секторам 10° — нет rclpy' "$r"
 expect "ROS 2: одно сообщение /odom без массивов" \
   bash -c "grep -q 'frame_id: odom' '$d/ros/echo_odom.txt' && test \$(grep -c '^---\$' '$d/ros/echo_odom.txt') -eq 1"
@@ -555,6 +575,7 @@ if ((have_unit)) && sudo -n true 2> /dev/null; then
   ds=$(compgen -G "$T/s/neurobot_diag_*/" | head -n 1)
   expect "журнал юнита собран через sudo" grep -q MARK_UNIT_STARTED "${ds}units/user_$unit.txt"
   expect "лаунчер не запускался и с sudo" bash -c "! grep -q 'picoclaw-launcher version' '${ds}picoclaw/version.txt'"
+  expect "nvmap с --sudo: не Jetson — «нет»" grep -q '^\[нет\] nvmap: память GPU по процессам' "${ds}REPORT.txt"
   no_leaks "--sudo" "$T/s" "$T/stdout_s" "$T/stderr_s"
 else
   echo "skip --sudo: нет юнита или sudo без пароля"

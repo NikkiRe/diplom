@@ -39,7 +39,7 @@ class LabPatch(unittest.TestCase):
     def test_header_names_closed_ids(self):
         header = PATCH.read_text(encoding="utf-8").split("\ndiff --git", 1)[0]
         for pid in ("R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "L1", "L2", "L3", "L4", "L6", "G1", "G2", "G3",
-                    "G4", "S1", "S2", "S3", LAB_SHA256):
+                    "G4", "S1", "S2", "S3", "H6", "H7", "H10", LAB_SHA256):
             self.assertIn(pid, header)
 
 

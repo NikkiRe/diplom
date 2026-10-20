@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # Сбор диагностики с робота NeuroChip: версии, процессы и порты стека, способ запуска, юниты и их журналы,
 # журналы PicoClaw, MCP-серверов, воркеров и демо, ядро, tegrastats, граф ROS 2 и параметры цепочки движения,
-# сводка /scan по секторам, память и диск. Результат — каталог neurobot_diag_<хост>_<время>/ и архив .tar.gz.
+# сводка /scan по секторам, память и диск; cgroup и пределы юнитов, THP, zram, vm.*, governor, TensorRT, память GPU
+# (nvmap). Результат — каталог neurobot_diag_<хост>_<время>/ и архив .tar.gz.
 #
 # Только чтение: ничего не останавливает, не перезапускает и не меняет. Исключения:
 #   - служебный ros2 daemon: если его не было, он поднимается на время сбора и останавливается в конце;
 #   - из программ лаборатории запускаются только «picoclaw version» (сам picoclaw; лаунчер — никогда) и найденные
 #     интерпретаторы Python (venv, pyenv, процессы) — версия и список пакетов: -V, pip freeze или importlib.metadata
-#     (Python при этом читает .pth из site-packages); у pyenv — versions и global;
+#     (Python при этом читает .pth из site-packages), и import tensorrt — только если модуль найден (версия); у
+#     pyenv — versions и global;
 #   - адреса статуса воркеров и шлюза PicoClaw (8765 /health, 8766 /state, 18790 /health и /ready) — запрос GET;
 #   - камера открывается только с флагом --camera и только если её не держит другой процесс.
 # Вывод команд и копии файлов проходят через redact.py до записи на диск; служебные строки и весь каталог
@@ -79,6 +81,15 @@ print(r.read(65536).decode("utf-8", "replace"))'
 PY_DISTS='from importlib import metadata
 names = {d.metadata["Name"] + "==" + d.version for d in metadata.distributions() if d.metadata["Name"]}
 print("\n".join(sorted(names)))'
+# TensorRT в интерпретаторе: где модуль (find_spec, без импорта); есть — импорт и версия. Сборка python3-libnvinfer
+# бывает только под системный Python JetPack, и модуль под 3.8 может найтись, но не загрузиться.
+PY_TRT='import importlib.util, sys
+spec = importlib.util.find_spec("tensorrt")
+if spec is None:
+    sys.exit("tensorrt: no module named tensorrt")
+print("tensorrt:", spec.origin)
+import tensorrt
+print("tensorrt", tensorrt.__version__)'
 
 die() { echo "collect_diag: $*" >&2; exit 2; }
 usage() { awk 'NR > 1 { if (!/^#/) exit; sub(/^# ?/, ""); print }' "$0"; }
@@ -298,7 +309,8 @@ section_system() {
   cap "systemd" system/versions.txt 5 systemctl --version
   cap "python3" system/versions.txt 5 python3 -V
   if command -v dpkg-query > /dev/null; then
-    for f in 'ros-*' 'nvidia-l4t-*' 'nvidia-jetpack' 'librealsense2*' 'python3-rosbridge*'; do
+    for f in 'ros-*' 'nvidia-l4t-*' 'nvidia-jetpack' 'librealsense2*' 'python3-rosbridge*' 'libnvinfer*' \
+      'python3-libnvinfer*' 'tensorrt*'; do
       cap "пакеты $f" system/packages.txt 30 dpkg-query -W -f '${db:Status-Abbrev} ${Package} ${Version}\n' "$f"
     done
   else
@@ -487,6 +499,76 @@ section_processes() {
   fi
 }
 
+# readf <что> <файл> <пути…> — небольшие файлы /proc и /sys строкой «путь: значение» через redact; ни одного
+# читаемого — «нет».
+readf() {
+  local what=$1 rel=$2 f n=0
+  shift 2
+  mkdir -p "$(dirname "$out/$rel")"
+  for f in "$@"; do
+    [[ -r $f ]] && printf '%s: %s\n' "$f" "$(timeout 2 cat "$f" 2> /dev/null | tr '\n' ' ' | sed 's/ *$//')"
+  done | redact >> "$out/$rel"
+  for f in "$@"; do [[ -r $f ]] && n=1 && break; done
+  if ((n)); then note ок "$what" "$rel"; else note нет "$what" "нет $1"; fi
+}
+
+# Память, cgroup и частоты: работают ли MemoryMax и CPUWeight юнитов на cgroup v1 (ядро 4.9, systemd 245) — по
+# свойствам юнитов и по файлам их cgroup; THP (куча Go у PicoClaw), zram и подкачка, vm.*, давление памяти, governor
+# CPU и GPU, цель загрузки (рабочий стол); память GPU по процессам (nvmap, только с --sudo) и память процессов
+# робота — видна ли память CUDA в их RSS и PSS.
+section_memory() {
+  local u cg f pid units=() cgs=()
+  cap "cgroup: контроллеры (/proc/cgroups)" system/cgroup.txt 5 cat /proc/cgroups
+  cap "cgroup: точки монтирования" system/cgroup.txt 5 grep cgroup /proc/mounts
+  cap "cgroup: тип /sys/fs/cgroup (cgroup2fs — v2, tmpfs — v1)" system/cgroup.txt 5 stat -fc %T /sys/fs/cgroup
+  mapfile -t units < <(timeout 10 systemctl list-units --all --no-legend --plain 'neurobot*' 2> /dev/null |
+    awk '{print $1}')
+  if ((${#units[@]})); then
+    cap "юниты neurobot: пределы памяти и CPU, OOMScoreAdjust" system/cgroup_units.txt 10 systemctl show --no-pager \
+      -p Id,ControlGroup,MemoryAccounting,MemoryMax,MemoryLimit,MemoryCurrent,CPUAccounting,CPUWeight,CPUShares \
+      -p OOMScoreAdjust "${units[@]}"
+    mapfile -t cgs < <(sed -n 's/^ControlGroup=//p' "$out/system/cgroup_units.txt" | grep . | sort -u)
+    # что дошло до ядра: v1 — memory.limit_in_bytes и cpu.shares в иерархиях контроллеров, v2 — memory.max и cpu.weight
+    for cg in "${cgs[@]}"; do
+      readf "cgroup $cg: предел памяти и вес CPU" system/cgroup_units.txt \
+        "/sys/fs/cgroup/memory$cg/memory.limit_in_bytes" "/sys/fs/cgroup/cpu,cpuacct$cg/cpu.shares" \
+        "/sys/fs/cgroup/cpu$cg/cpu.shares" "/sys/fs/cgroup$cg/memory.max" "/sys/fs/cgroup$cg/cpu.weight"
+    done
+  else
+    note нет "юниты neurobot: пределы памяти и CPU" "пакет запуска neurobot не установлен"
+  fi
+  readf "THP (transparent hugepages)" system/memory_kernel.txt /sys/kernel/mm/transparent_hugepage/enabled \
+    /sys/kernel/mm/transparent_hugepage/defrag /sys/kernel/mm/transparent_hugepage/khugepaged/defrag
+  readf "vm: swappiness, page-cluster, overcommit" system/memory_kernel.txt /proc/sys/vm/swappiness \
+    /proc/sys/vm/page-cluster /proc/sys/vm/overcommit_memory /proc/sys/vm/min_free_kbytes
+  readf "zram: алгоритм, размер, mm_stat" system/memory_kernel.txt /sys/block/zram*/comp_algorithm \
+    /sys/block/zram*/disksize /sys/block/zram*/mm_stat
+  command -v zramctl > /dev/null && cap "zramctl" system/memory_kernel.txt 5 zramctl
+  readf "давление памяти и CPU (PSI)" system/memory_kernel.txt /proc/pressure/memory /proc/pressure/cpu
+  cap "/proc/meminfo" system/memory_kernel.txt 5 cat /proc/meminfo
+  CAP_SHOW="grep -E <подкачка, мажорные отказы, OOM, THP> /proc/vmstat" cap "/proc/vmstat: подкачка, OOM, THP" \
+    system/memory_kernel.txt 5 grep -E '^(pswp|pgmajfault|oom_kill|thp_fault|thp_collapse|compact_stall|allocstall)' \
+    /proc/vmstat
+  readf "governor и частоты CPU" system/cpufreq.txt /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor \
+    /sys/devices/system/cpu/cpu*/cpufreq/scaling_cur_freq /sys/devices/system/cpu/cpu*/cpufreq/scaling_max_freq
+  readf "governor и частоты GPU и шин (devfreq)" system/cpufreq.txt /sys/class/devfreq/*/governor \
+    /sys/class/devfreq/*/cur_freq /sys/class/devfreq/*/max_freq
+  cap "цель загрузки (systemctl get-default)" system/cpufreq.txt 5 systemctl get-default
+  if ((!use_sudo)); then
+    note права "nvmap: память GPU по процессам" "$hint_sudo"
+  elif exists /sys/kernel/debug/nvmap/iovmm/clients; then
+    cap "nvmap: память GPU по процессам" system/nvmap.txt 10 "${P[@]}" cat /sys/kernel/debug/nvmap/iovmm/clients
+  else
+    note нет "nvmap: память GPU по процессам" "нет /sys/kernel/debug/nvmap (не Jetson или debugfs не смонтирован)"
+  fi
+  ((${#robot_pids[@]})) || return
+  for pid in "${robot_pids[@]}"; do
+    echo "== pid $pid: $(args_of "$pid" | cut -c1-160)"
+    proc_read "$pid" smaps_rollup || proc_read "$pid" status | grep -E '^(VmRSS|RssAnon|RssFile|RssShmem|VmSwap):'
+  done | redact > "$out/processes/memory.txt"
+  note ок "память процессов робота (smaps_rollup, без него — status)" processes/memory.txt
+}
+
 # Порты стека: кто слушает и на каком адресе, ответ адресов статуса (GET), соединения с rosbridge.
 section_network() {
   local port pid who path paths=() pids=()
@@ -606,6 +688,7 @@ section_python() {
     cap "Python $py" "python/pip_$n.txt" 10 "$py" -V || continue
     cap "pip freeze $py" "python/pip_$n.txt" 90 "$py" -m pip freeze --all ||
       cap "пакеты $py (importlib.metadata, без pip)" "python/pip_$n.txt" 30 "$py" -I -c "$PY_DISTS"
+    cap "TensorRT в $py" "python/pip_$n.txt" 60 "$py" -c "$PY_TRT"
   done
 }
 
@@ -775,7 +858,7 @@ section_ros() {
   fi
   rosrun "ROS 2: темы" ros/topics.txt 30 topic list -t
   rosrun "ROS 2: узлы" ros/nodes.txt 30 node list
-  for t in /scan /cmd_vel /odom /cmd_vel_joy /cmd_vel_tracker /diff_cont/cmd_vel_unstamped; do
+  for t in /scan /cmd_vel /odom /cmd_vel_joy /cmd_vel_tracker /diff_cont/cmd_vel_unstamped /tf /diagnostics; do
     if ! grep -qE "^$t( |$)" "$out/ros/topics.txt"; then
       note нет "ROS 2: тема $t" "нет в графе"
       continue
@@ -799,6 +882,14 @@ section_ros() {
     rosrun "ROS 2: контроллеры ros2_control" ros/controllers.txt 20 control list_controllers
   ros_node /robot_state_publisher && rosrun "ROS 2: URDF (robot_description)" ros/robot_description.txt 20 \
     param get /robot_state_publisher robot_description
+  # камера и фильтр IMU: имена параметров покажут версию realsense-ros (4.x — *.profile, 3.x — *_width/*_fps),
+  # publish_tf madgwick — шлёт ли он TF с частотой IMU
+  ros_node /camera/camera && rosrun "ROS 2: параметры камеры /camera/camera" ros/camera_params.txt 30 \
+    param dump /camera/camera "${dump[@]}"
+  if ros_node /imu_filter_madgwick &&
+    rosrun "ROS 2: /imu_filter_madgwick publish_tf" ros/madgwick.txt 20 param get /imu_filter_madgwick publish_tf; then
+    note ок "ROS 2: madgwick publish_tf" "$(grep -m 1 -i 'value is' "$out/ros/madgwick.txt")"
+  fi
   if grep -qE '^/scan( |$)' "$out/ros/topics.txt"; then
     scan_sectors
   fi
@@ -894,6 +985,7 @@ section_power
 section_devices
 section_kernel
 section_processes
+section_memory
 section_network
 section_startup
 section_python

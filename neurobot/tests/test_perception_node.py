@@ -1,7 +1,7 @@
 """predict_live v2 (--mode legacy) как процесс ROS 2 на подставных модулях стенда + страж: дымовой прогон.
 
 Цепочка: подставной pyrealsense2 (10 к/с) → FakeYolo по таймлайну → настоящая SNN лаборатории (torch CPU,
-weights_only=True) → DriveController → /cmd_vel_gesture (ремап) → motion_executor → /cmd_vel. Тест сам
+weights_only=True) → DriveController → /cmd_vel_gesture (ремап) → motion_executor → /neurobot/cmd_vel_req. Тест сам
 публикует /scan (URG-04LX с геометрией скана робота: 683 луча ±2,0923497677 рад). Проверяется: READY после
 первого кадра, стоящая рука не даёт жеста; махание с предобработкой лаборатории — «не распознано» и покой (G1:
 у демо здесь был бы turn180), с --polyline — класс 2 и поворот через стража, а шаг вперёд к препятствию в
@@ -108,7 +108,8 @@ class Recorder:
         self.msgs = {"gesture_cmd": [], "cmd": [], "gesture": [], "health": [], "state": []}
         sub = self.node.create_subscription
         sub(Twist, "/cmd_vel_gesture", lambda m: self._add("gesture_cmd", (m.linear.x, m.angular.z)), 10)
-        sub(Twist, "/cmd_vel", lambda m: self._add("cmd", (m.linear.x, m.angular.z)), 10)
+        # выход стража: с 16.10 он пишет желаемую скорость в /neurobot/cmd_vel_req (писатель /cmd_vel — safety_gate)
+        sub(Twist, "/neurobot/cmd_vel_req", lambda m: self._add("cmd", (m.linear.x, m.angular.z)), 10)
         sub(String, "/neurobot/gesture", lambda m: self._add("gesture", json.loads(m.data)), 10)
         sub(String, "/neurobot/perception_health", lambda m: self._add("health", json.loads(m.data)), 10)
         sub(String, "/neurobot/motion_state", lambda m: self._add("state", json.loads(m.data)), 10)
@@ -257,11 +258,14 @@ class PerceptionProcess(unittest.TestCase):
         g = gesture[1]
         self.assertEqual(len(rec.get("gesture")), 1, "стоящая рука не должна давать жеста")
         self.assertEqual(set(g), {"boot", "seq", "cls", "name", "conf", "spikes", "margin", "side", "n_boxes",
-                                  "t_end", "t_rec"})
+                                  "end", "cut", "t_end", "t_rec"})
         self.assertGreaterEqual(g["n_boxes"], 10)
-        self.assertGreaterEqual(g["t_rec"] - g["t_end"], 0.5)   # END_GAP
+        # уверенный жест — решение спустя --early-gap 0,3 с (H10), иначе — END_GAP 0,5 с; рука в середине кадра
+        gap = {"early": 0.3, "gap": 0.5}[g["end"]]
+        self.assertEqual(g["cut"], 0.0)
+        self.assertGreaterEqual(g["t_rec"] - g["t_end"], gap)
         if not overloaded():
-            self.assertLess(g["t_rec"] - g["t_end"], 0.5 + 0.3)  # + кадр 0,1 с + SNN [ориентир]
+            self.assertLess(g["t_rec"] - g["t_end"], gap + 0.3)  # + кадр 0,1 с + SNN [ориентир]
         return g
 
     def test_lab_preprocessing_wave_is_unknown_and_robot_stays(self):
@@ -269,7 +273,7 @@ class PerceptionProcess(unittest.TestCase):
         self.addCleanup(rec.close)
         self.perception(notify=True)
         g = self.wave_gesture(rec)
-        self.assertEqual((g["cls"], g["name"], g["spikes"]), (-1, "unknown", 0))  # «немая» SNN, R1 [замер]
+        self.assertEqual((g["cls"], g["name"], g["spikes"], g["end"]), (-1, "unknown", 0, "gap"))  # «немая» SNN, R1
         time.sleep(2.0)
         self.assertEqual({v for _, v in rec.get("gesture_cmd")}, {(0.0, 0.0)})  # демо дало бы turn180 (G1)
         # стража и safety_gate здесь нет — срез вперёд и защёлку perception не видит и говорит об этом
@@ -288,7 +292,8 @@ class PerceptionProcess(unittest.TestCase):
         rec = Recorder()
         self.addCleanup(rec.close)
         rec.front = 0.45
-        guard = self.spawn(["-m", "neurobot.executor"], "executor")
+        # safety_gate здесь нет: страж — по правилам v1 (с 16.10 без safety_gate задачи по умолчанию не исполняются)
+        guard = self.spawn(["-m", "neurobot.executor", "--ros-args", "-p", "require_safety:=false"], "executor")
         # срез здесь — дело стража: своя отсечка perception по возрасту скана (её проверяет test_perception_drive)
         # отодвинута, чтобы задержки планирования в нагруженной ВМ не отменили шаг вперёд раньше стража
         proc = self.perception("--polyline", "--scan-timeout", "2.0", notify=True)

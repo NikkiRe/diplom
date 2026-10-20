@@ -78,6 +78,8 @@ class UnitsTest(unittest.TestCase):
             "neurobot-mcp.service": ("exec", None, "1"),
             "neurobot-picoclaw.service": ("exec", None, "2"),
             "neurobot-labworker@.service": ("exec", None, "2"),
+            # сторожа сторожит systemd (H16): READY после первого прохода, WATCHDOG с каждого
+            "neurobot-watchdog.service": ("notify", "30", "5"),
         }
         for name, (typ, wd, restart_sec) in want.items():
             u = self.units[name]
@@ -86,8 +88,12 @@ class UnitsTest(unittest.TestCase):
                 self.assertEqual(dict(u["Service"]).get("WatchdogSec"), wd)
                 self.assertEqual(one(u, "Service", "Restart"), "always")
                 self.assertEqual(one(u, "Service", "RestartSec"), restart_sec)
-                if typ == "notify":
-                    self.assertEqual(one(u, "Service", "NotifyAccess"), "all")
+                if typ == "notify":  # сторож шлёт сам, без ros2 launch и дочерних процессов
+                    self.assertEqual(one(u, "Service", "NotifyAccess"),
+                                     "main" if name == "neurobot-watchdog.service" else "all")
+        # предел и для SIGABRT по WatchdogSec: не умер — SIGKILL через TimeoutStopSec, а не через 90 с по умолчанию
+        self.assertLessEqual(int(one(self.units["neurobot-watchdog.service"], "Service", "TimeoutStopSec")), 15)
+        self.assertIn("PYTHONFAULTHANDLER=1", one(self.units["neurobot-watchdog.service"], "Service", "Environment"))
         self.assertGreaterEqual(int(one(self.units["neurobot-perception.service"], "Service", "TimeoutStartSec")), 60)
         # причину называет wait-http (NEUROBOT_LABWORKER_WAIT_S), а не таймаут systemd
         self.assertGreater(int(one(self.units["neurobot-labworker@.service"], "Service", "TimeoutStartSec")),
@@ -187,6 +193,29 @@ class UnitsTest(unittest.TestCase):
                                   "neurobot-ui.service": "neurobot/ui"})
         # --camera rs, камеру держит другой процесс: код 6 — без рестарта по кругу (каждый грузил бы модель заново)
         self.assertEqual(one(self.units["neurobot-perception.service"], "Service", "RestartPreventExitStatus"), "6")
+
+    def test_oom_victims_by_role(self):
+        # H4: при нехватке памяти ядро берёт процесс с наибольшим oom_score = доля памяти × 1000 + OOMScoreAdjust:
+        # первым — пульт, затем агентский путь, распознавание, драйверы и сторож; цепочка движения — последней
+        adj = {n: int(one(u, "Service", "OOMScoreAdjust")) for n, u in self.units.items() if n != "neurobot.target"}
+        self.assertEqual(adj, {
+            "neurobot-ui.service": 500,
+            "neurobot-rosbridge.service": 400, "neurobot-mcp.service": 400, "neurobot-picoclaw.service": 400,
+            "neurobot-perception.service": 0, "neurobot-labworker@.service": 0,
+            "neurobot-driver@.service": -500, "neurobot-watchdog.service": -500,
+            "neurobot-safety.service": -900, "neurobot-executor.service": -900})
+        # −1000 — «никогда»: своя утечка safety_gate тогда положила бы всё остальное
+        self.assertGreater(min(adj.values()), -1000)
+        # агентский путь +400 обгоняет распознавание даже при его 1,3 ГиБ из 3,9 (budget §6.1): 0 + 330 < 400 + 28
+        self.assertGreater(400 + 1000 * 111 / 3956, 0 + 1000 * 1305 / 3956)
+
+    def test_perception_restart_pause_fits_start_timeout(self):
+        # пауза частых рестартов — в precheck (backoff.py), у каждой команды ExecStartPre свой TimeoutStartSec
+        # [опыт, ВМ, systemd 255: два ExecStartPre по 3 с при TimeoutStartSec=4 — успех]
+        pause = max(float(x) for x in DEFAULTS["NEUROBOT_RESTART_PAUSES_S"].split())
+        u = self.units["neurobot-perception.service"]
+        self.assertLess(pause + 30, int(one(u, "Service", "TimeoutStartSec")))
+        self.assertEqual(one(u, "Service", "StateDirectory"), "neurobot/perception")  # там restart.json
 
     def test_operator_console_unit(self):
         # пульт: свой пользователь (агент не читает токен), токен в StateDirectory 0700, свой предел памяти и slice,

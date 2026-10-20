@@ -58,7 +58,7 @@ class PlaceTest(unittest.TestCase):
 
 class MakeTest(unittest.TestCase):
     def test_faults_drivers_and_agent_never_share_a_segment(self):
-        for name in ("main", "long", "long30", "smoke"):
+        for name in ("main", "long", "long30", "smoke", "holdout"):
             prof = schedule.PROFILES[name]
             faults = set(range(prof["fault_first"], 10 ** 4, prof["fault_every"]))
             agent = set(range(prof["agent_first"], 10 ** 4, prof["agent_every"]))
@@ -80,6 +80,23 @@ class MakeTest(unittest.TestCase):
                          {("kill", "lidar"), ("kill", "camera"), ("kill", "base"), ("stop", "lidar"),
                           ("stop", "camera")})
         self.assertTrue(all(e.get("duration_s", 30.0) == 30.0 for e in drivers))
+
+    def test_holdout_moves_every_event_and_soak_has_no_faults(self):
+        # отложенный набор (PROTOCOL §4): отказы, драйверы и реплики — на других сегментах, отказ — позже после жеста
+        truth = [seg(i, 20.0 * i, 20.0 * i + 5) for i in range(100)]
+        main = schedule.build_events(truth, schedule.PROFILES["main"])
+        hold = schedule.build_events(truth, schedule.PROFILES["holdout"])
+        self.assertLessEqual(abs(len(hold) - len(main)), 1)
+        key = lambda ev: {(e["kind"], e["seg"]) for e in ev}  # noqa: E731
+        self.assertFalse(key(main) & key(hold))
+        self.assertTrue(all(e["at_s"] == truth[e["seg"]]["t_leave"] + 2.5 for e in hold if e["kind"] != "agent"))
+        # 8 ч старения (H14): ни одного отказа, только реплики, «вперёд» — каждая пятая
+        with tempfile.TemporaryDirectory() as d:
+            plan = schedule.make("soak", d, 20261016)
+        self.assertEqual({e["kind"] for e in plan["events"]}, {"agent"})
+        self.assertGreater(plan["duration_s"], 8 * 3600)
+        moves = [e["n"] for e in plan["events"] if e["request"] == "move"]
+        self.assertEqual(moves[:3], [2, 7, 12])
 
     def test_make_writes_plan_faults_and_refuses_to_overwrite(self):
         with tempfile.TemporaryDirectory() as d:

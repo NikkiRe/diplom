@@ -1,5 +1,5 @@
-"""sd_notify, сектор лидара, ящик «последняя побеждает», разбор motion_state и safety_state (perception/node_util.py,
-executor/sd_notify.py, executor/guard.py).
+"""sd_notify, постоянный исполнитель (H6), сектор лидара, ящик «последняя побеждает», разбор motion_state и
+safety_state (perception/node_util.py, executor/sd_notify.py, executor/spinner.py, executor/guard.py).
 
 Копии в node_util (патч лаборатории самодостаточен) проверяются теми же тестами, что и оригиналы стража.
 """
@@ -13,8 +13,10 @@ import socket
 import sys
 import tempfile
 import threading
+import types
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[2]
 PERCEPTION = ROOT / "neurobot" / "perception"
@@ -23,9 +25,10 @@ for p in (str(ROOT), str(PERCEPTION)):
         sys.path.insert(0, p)
 
 import node_util  # noqa: E402
-from neurobot.executor import guard, sd_notify  # noqa: E402
+from neurobot.executor import guard, sd_notify, spinner  # noqa: E402
 
 NOTIFIERS = (node_util.Notifier, sd_notify.Notifier)
+SPINNERS = (node_util.Spinner, spinner.Spinner)
 
 
 class Clock:
@@ -96,6 +99,81 @@ class NotifierTest(unittest.TestCase):
             for cls in NOTIFIERS:
                 self.assertTrue(cls({"NOTIFY_SOCKET": "@" + name}).ready())
                 self.assertEqual(s.recv(64), b"READY=1")
+
+
+class FakeExecutor:
+    """SingleThreadedExecutor без rclpy: spin_once ждёт события узла (колбэк или guard condition)."""
+
+    def __init__(self):
+        self.node = None
+        self.timeouts = []
+        self.shutdowns = 0
+
+    def add_node(self, node):
+        self.node = node
+
+    def spin_once(self, timeout_sec=None):
+        self.timeouts.append(timeout_sec)
+        self.node.event.wait()
+        self.node.event.clear()
+        if self.node.boom is not None:
+            raise self.node.boom
+
+    def shutdown(self):
+        self.shutdowns += 1
+
+
+class FakeNode:
+    def __init__(self):
+        self.event = threading.Event()
+        self.boom = None
+
+    def create_guard_condition(self, callback):
+        return types.SimpleNamespace(trigger=self.event.set)
+
+
+class SpinnerTest(unittest.TestCase):
+    """H6: один исполнитель на узел, ожидание без таймаута, выход по stop и по упавшему колбэку (оригинал и копия)."""
+
+    def run_spinner(self, cls, script):
+        ex = FakeExecutor()
+        rclpy = types.SimpleNamespace(ok=lambda: True)
+        executors = types.SimpleNamespace(SingleThreadedExecutor=lambda: ex)
+        with mock.patch.dict(sys.modules, {"rclpy": rclpy, "rclpy.executors": executors}):
+            node, stop = FakeNode(), threading.Event()
+            sp = cls(node, stop)
+            script(node, stop)
+            return sp, ex, stop
+
+    def test_stop_by_signal(self):
+        for cls in SPINNERS:
+            def script(node, stop):
+                for _ in range(3):  # колбэки идут
+                    node.event.set()
+                threading.Timer(0.05, stop.set).start()  # обработчик сигнала только ставит stop
+            sp, ex, stop = self.run_spinner(cls, script)
+            sp.wait()
+            self.assertTrue(stop.is_set())
+            self.assertEqual(set(ex.timeouts), {None}, cls)  # без rcl-таймера на каждое ожидание
+            sp.close()
+            self.assertEqual(ex.shutdowns, 1, cls)
+
+    def test_callback_error_reaches_main_thread(self):
+        for cls in SPINNERS:
+            def script(node, stop):
+                node.boom = RuntimeError("колбэк упал")
+                node.event.set()
+            sp, ex, stop = self.run_spinner(cls, script)
+            with self.assertRaises(RuntimeError):
+                sp.wait()
+            self.assertTrue(stop.is_set())
+            self.assertEqual(ex.shutdowns, 1, cls)
+
+    def test_copy_matches_original(self):
+        import inspect
+        for name in ("__init__", "_run", "wait", "close"):
+            self.assertEqual(inspect.getsource(getattr(node_util.Spinner, name)),
+                             inspect.getsource(getattr(spinner.Spinner, name)), name)
 
 
 class SectorCopy(unittest.TestCase):

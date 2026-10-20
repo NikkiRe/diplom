@@ -6,6 +6,7 @@ import contextlib
 import io
 import json
 import math
+import os
 import sys
 import types
 import unittest
@@ -543,9 +544,35 @@ class WatchdogTest(unittest.TestCase):
         self.assertEqual(watchdog.driver_watch(c), {
             "neurobot-driver@lidar.service": [("/scan", 2.0)],
             "neurobot-driver@camera.service": [("/camera/color/image_raw", 2.5), ("/camera/imu", 1.0)]})
-        for bad in ("scan:1", "/scan", "/scan:0", "/scan:x"):
+        for bad in ("scan:1", "/scan", "/scan:0", "/scan:x", "/diagnostics@:3", "/diagnostics@twist mux:3"):
             with self.subTest(bad=bad), self.assertRaises(Exception):
                 watchdog.driver_watch(Config({"NEUROBOT_DRIVERS": "lidar", "NEUROBOT_DRIVER_lidar_FRESH": bad}, "e"))
+        # twist_mux без своей темы — по статусу в /diagnostics (H16)
+        c = Config({"NEUROBOT_DRIVERS": "base", "NEUROBOT_DRIVER_base_FRESH": "/odom:2 /diagnostics@twist_mux:3"}, "e")
+        self.assertEqual(watchdog.driver_watch(c), {
+            "neurobot-driver@base.service": [("/odom", 2.0), ("/diagnostics@twist_mux", 3.0)]})
+
+    def test_diagnostics_status_filter(self):
+        # TopicWatch без rclpy: сообщение /diagnostics засчитывается ключу, только если в нём есть его статус; пока
+        # статуса не было ни разу, ключ не стареет (twist_mux без диагностики не даст рестарта базы по кругу)
+        from neurobot_deploy.rosgraph import TopicWatch
+        w = TopicWatch.__new__(TopicWatch)
+        keys = ["/diagnostics@twist_mux", "/diagnostics"]
+        w.born, w.last, w.since = 0.0, dict.fromkeys(keys), dict.fromkeys(keys, 0.0)
+
+        def array(*names):
+            return types.SimpleNamespace(status=[types.SimpleNamespace(name=n) for n in names])
+        with mock.patch("neurobot_deploy.rosgraph.time.monotonic", return_value=10.0):
+            self.assertEqual(w.ages(), {"/diagnostics@twist_mux": 0.0, "/diagnostics": 10.0})
+            w.heard(keys, array("controller_manager: Controller Manager Activity"))
+        self.assertEqual(w.last, {"/diagnostics@twist_mux": None, "/diagnostics": 10.0})
+        for name in ("twist_mux: Twist mux status", "Twist mux status"):  # Jazzy и без имени узла
+            w.last["/diagnostics@twist_mux"] = None
+            with self.subTest(name=name), mock.patch("neurobot_deploy.rosgraph.time.monotonic", return_value=12.0):
+                w.heard(keys, array("controller_manager: x", name))
+                self.assertEqual(w.last["/diagnostics@twist_mux"], 12.0)
+        with mock.patch("neurobot_deploy.rosgraph.time.monotonic", return_value=17.0):
+            self.assertEqual(w.ages()["/diagnostics@twist_mux"], 5.0)  # видели статус — дальше стареет как тема
 
     def test_stale_driver_restarted_after_two_probes(self):
         watch = {"neurobot-driver@lidar.service": [("/scan", 1.5)],
@@ -582,6 +609,22 @@ class WatchdogTest(unittest.TestCase):
         self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
         self.assertEqual([a.unit for a in watchdog.sensor_actions(watch, ages, props, NOW, fails)],
                          ["neurobot-driver@lidar.service"])
+
+    def test_twist_mux_status(self):
+        # H16: статус twist_mux в /diagnostics — свежесть базы; в «молчат все» он не входит: twist_mux шлёт его и при
+        # стоящем Gazebo двойника (на роботе — когда молчат все датчики), и сторож перезапустил бы всех
+        watch = {"neurobot-driver@lidar.service": [("/scan", 2.0)],
+                 "neurobot-driver@base.service": [("/odom", 2.0), ("/diagnostics@twist_mux", 3.0)]}
+        props = {u: running(u) for u in watch}
+        fails: Dict[str, int] = {}
+        for _ in range(3):
+            ages = {"/scan": 9.0, "/odom": 9.0, "/diagnostics@twist_mux": 0.5}
+            self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+        ages = {"/scan": 0.1, "/odom": 0.1, "/diagnostics@twist_mux": 4.0}  # завис только twist_mux
+        self.assertEqual(watchdog.sensor_actions(watch, ages, props, NOW, fails), [])
+        got = watchdog.sensor_actions(watch, ages, props, NOW, fails)
+        self.assertEqual([(a.unit, a.code) for a in got], [("neurobot-driver@base.service", "sensor_stale")])
+        self.assertIn("/diagnostics@twist_mux (4.0 с)", got[0].text)
 
     def test_rosbridge_ping_needs_two_failures(self):
         props = running("r")
@@ -628,6 +671,51 @@ class WatchdogTest(unittest.TestCase):
             with self.assertRaises(Stop):
                 watchdog.loop(cfg(), sd, 10.0, 1.0)
         self.assertEqual(sd.calls, [("restart", "--no-block", "neurobot-picoclaw.service")])
+
+    def test_loop_notifies_ready_then_watchdog(self):
+        # H16: юнит сторожа — Type=notify с WatchdogSec: READY после первого прохода, затем WATCHDOG с каждого
+        sd, sent, passes = FakeSd(healthy(), {"a": AGENT_OK}), [], []
+        run_once = watchdog.run_once
+
+        class Stop(Exception):
+            pass
+
+        def wait(_self, _s):
+            passes.append(1)
+            if len(passes) == 3:
+                raise Stop
+        with mock.patch.object(watchdog, "time", types.SimpleNamespace(time=lambda: WALL, monotonic=lambda: NOW)), \
+                mock.patch.object(watchdog, "run_once", lambda c, s, block=True: run_once(c, s, mcp_ok, block)), \
+                mock.patch.object(watchdog, "WsPing", lambda *a: types.SimpleNamespace(ping=lambda t: None)), \
+                mock.patch.object(watchdog.Fast, "wait", wait):
+            with self.assertRaises(Stop):
+                watchdog.loop(cfg(), sd, 10.0, 1.0, notify=sent.append)
+        self.assertEqual(sent, ["READY=1", "WATCHDOG=1", "WATCHDOG=1"])
+
+    def test_sd_notify_datagram(self):
+        import socket
+        import tempfile
+        from neurobot_deploy.sd import notify
+        self.assertFalse(notify("READY=1", {}))  # не из юнита — ничего
+        with tempfile.TemporaryDirectory(dir="/tmp") as tmp:
+            path = os.path.join(tmp, "n")
+            with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+                s.bind(path)
+                self.assertTrue(notify("WATCHDOG=1", {"NOTIFY_SOCKET": path}))
+                self.assertEqual(s.recv(64), b"WATCHDOG=1")
+            self.assertFalse(notify("READY=1", {"NOTIFY_SOCKET": path}))  # сокета нет — не падает
+
+    def test_systemd_children_without_notify_socket(self):
+        # systemctl и journalctl systemd ≥ 254 шлют EXIT_STATUS в $NOTIFY_SOCKET: из сторожа это шум в журнале
+        seen = {}
+
+        def run(args, **kw):
+            seen.update(kw["env"])
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        with mock.patch.dict(os.environ, {"NOTIFY_SOCKET": "/run/systemd/notify"}):
+            Systemd(run=run).ctl("restart", "--no-block", "neurobot-driver@base.service")
+        self.assertNotIn("NOTIFY_SOCKET", seen)
+        self.assertIn("PATH", seen)
 
     def test_once_restarts_and_reports_to_stderr(self):
         # neurobot watchdog --once: действие — строка причины в stderr; stdout у CLI — только doctor, render, env-get

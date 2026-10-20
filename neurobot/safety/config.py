@@ -49,6 +49,7 @@ class Params(NamedTuple):
     depth_timeout: float = 0.5           # с
     imu_timeout: float = 0.5             # с
     depth_stale: str = "block"           # глубина устарела: block — вперёд нельзя, slow — не быстрее blind_speed
+    frozen_n: int = 3                    # скан или кадр глубины с теми же данными столько раз подряд — застыл; 0 — нет
     # лидар
     mask_scans: int = 20                 # сканов на старте для маски слепых лучей (корпус камеры, RS3)
     mask_from_deg: float = -65.0         # сектор корпуса камеры, пеленг в базе (°): маска учится только в нём
@@ -151,6 +152,8 @@ def make(values: Mapping) -> Params:
     if not -180.0 <= p.mask_from_deg < p.mask_to_deg <= 180.0:
         raise ConfigError("сектор корпуса: ожидается −180 ≤ mask_from_deg < mask_to_deg ≤ 180, получено {!r}…{!r}"
                           .format(p.mask_from_deg, p.mask_to_deg))
+    if p.frozen_n == 1:
+        raise ConfigError("frozen_n: 0 (не сравнивать) или ≥ 2, получено 1")
     if p.obstacle_min_h >= p.obstacle_max_h:
         raise ConfigError("obstacle_min_h должен быть меньше obstacle_max_h")
     if p.reverse_speed > p.max_speed or p.blind_speed > p.max_speed:

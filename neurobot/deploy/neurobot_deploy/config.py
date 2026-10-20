@@ -93,6 +93,10 @@ DEFAULTS = {
     "NEUROBOT_LABWORKER_WAIT_S": "170",
     "NEUROBOT_WRITER_CHECK_S": "0.75",
     "NEUROBOT_PRECHECK_BACKOFF_S": "5",
+    # частые рестарты распознавания (backoff.py): паузы 1-го, 2-го, 3-го… рестарта серии (последняя повторяется) и
+    # сброс серии, если прошлый запуск был раньше, с
+    "NEUROBOT_RESTART_PAUSES_S": "0 5 15 30",
+    "NEUROBOT_RESTART_RESET_S": "600",
     "NEUROBOT_WATCHDOG_PERIOD_S": "10",
     # частые пробы сторожа: свежесть тем драйверов (NEUROBOT_DRIVER_<имя>_FRESH) и ping rosbridge
     "NEUROBOT_WATCHDOG_FAST_S": "1",
@@ -164,6 +168,16 @@ class Config:
             return float(self.get(key))
         except ValueError:
             raise EnvError("{}: ожидалось число, получено {!r}".format(key, self.get(key)))
+
+    def nums(self, key: str) -> List[float]:
+        """Числа ≥ 0 через пробел."""
+        try:
+            out = [float(x) for x in self.get(key).split()]
+        except ValueError:
+            out = [-1.0]
+        if any(not v >= 0 for v in out):
+            raise EnvError("{}: ожидались числа ≥ 0 через пробел, получено {!r}".format(key, self.get(key)))
+        return out
 
     def port(self, key: str) -> int:
         v = self.num(key)

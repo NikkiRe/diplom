@@ -25,6 +25,7 @@ import (
 type stubLLM struct {
 	mu     sync.Mutex
 	reqs   []llm.Request
+	bodies []map[string]any // тела запросов целиком (с полями llm.extra)
 	hdrs   []map[string]string
 	probes int
 	fn     func(req llm.Request, h map[string]string) (*llm.Response, error)
@@ -34,11 +35,16 @@ type stubLLM struct {
 // Complete, как настоящий клиент, прерывается отменой контекста.
 func (s *stubLLM) Complete(ctx context.Context, body []byte, h map[string]string) (*llm.Response, error) {
 	var req llm.Request
+	var raw map[string]any
 	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, err
 	}
 	s.mu.Lock()
 	s.reqs = append(s.reqs, req)
+	s.bodies = append(s.bodies, raw)
 	s.hdrs = append(s.hdrs, h)
 	s.mu.Unlock()
 	type result struct {
@@ -111,8 +117,7 @@ func build(t *testing.T, yaml string, fn func(req llm.Request, h map[string]stri
 	}
 	v := clock.NewVirtual(cfg.EpochTime(), 7*time.Hour)
 	buf := &bytes.Buffer{}
-	store, err := userctx.OpenWithPolicy(":memory:", true, userctx.Policy{Kind: cfg.Policy.History,
-		WindowTurns: cfg.Policy.WindowTurns, MaskKeepTurns: cfg.Policy.MaskKeepTurns}, userctx.StorageOf(cfg.UserCtx))
+	store, err := userctx.OpenWithPolicy(":memory:", true, userctx.PolicyOf(cfg.Policy), userctx.StorageOf(cfg.UserCtx))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -27,6 +27,8 @@ Restart=always
 RestartSec=1
 TimeoutStartSec=60
 TimeoutStopSec=10
+# жертва OOM — после распознавания и агентского пути
+OOMScoreAdjust=-500
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=2000
 

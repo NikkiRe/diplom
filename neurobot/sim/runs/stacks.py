@@ -42,7 +42,9 @@ SENSOR_NODE = r"sensor_model\.py"
 BASE_NODE = r"^gz sim "
 # миры прогона: файл (путь в снимке) и поза спавна — та, куда оператор переносит застрявшего робота
 WORLDS = {"hall": ("neurobot/sim/runs/worlds/hall.sdf", (0.0, 0.0, 0.01, 0.0)),
-          "lab": ("neurobot/sim/twin/worlds/lab.sdf", (-1.5, 0.0, 0.01, 0.0))}
+          "lab": ("neurobot/sim/twin/worlds/lab.sdf", (-1.5, 0.0, 0.01, 0.0)),
+          # отложенный набор (PROTOCOL §4): зеркало hall, только для итогового прогона
+          "hall_m": ("neurobot/sim/runs/worlds/hall_m.sdf", (0.0, 0.0, 0.01, 0.0))}
 
 
 def log(msg: str) -> None:

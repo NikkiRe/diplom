@@ -29,8 +29,9 @@ import os
 import signal
 import sys
 import time
+from typing import Optional
 
-from . import checks, doctor, estop, picoclaw_cfg, render, start_test, uiurl, watchdog
+from . import backoff, checks, doctor, estop, picoclaw_cfg, render, start_test, uiurl, watchdog
 from .config import Config, EnvError, load
 from .picolog import analyze
 from .probes import ProbeError, http_get, probe_mcp, ws_handshake
@@ -105,7 +106,34 @@ def cmd_estop(cfg: Config, args) -> int:
         return 1
 
 
+def restart_pause(cfg: Config, component: str, sd: Optional[Systemd] = None, clock=time.monotonic,
+                  sleep=time.sleep) -> float:
+    """Пауза перед частым автоматическим рестартом (backoff.py). Только из юнита (INVOCATION_ID, StateDirectory):
+    precheck из терминала не ждёт."""
+    unit, state = backoff.COMPONENTS.get(component), _state_dir()
+    if not unit or not state or not os.environ.get("INVOCATION_ID"):
+        return 0.0
+    pauses, reset_s = cfg.nums("NEUROBOT_RESTART_PAUSES_S"), cfg.num("NEUROBOT_RESTART_RESET_S")
+    try:
+        n = int((sd or Systemd()).show([unit], ("Id", "NRestarts")).get(unit, {}).get("NRestarts") or 0)
+    except (SystemdError, ValueError):
+        n = 0  # не узнали — как ручной старт: без паузы
+    path = os.path.join(state, backoff.STATE)
+    pause, streak, new = backoff.plan(n, backoff.read_state(path), backoff.boot_id(), clock(), pauses, reset_s)
+    try:
+        backoff.write_state(path, new)
+    except OSError as e:
+        emit("precheck", component, "restart_loop", "метку запуска не записать ({}): пауза не нарастёт".format(e),
+             level="warning")
+    if pause > 0:
+        emit("precheck", component, "restart_loop", "{}-й рестарт подряд, прошлый запуск — меньше {:g} с назад: "
+             "пауза {:g} с".format(streak, reset_s, pause), level="warning")
+        sleep(pause)
+    return pause
+
+
 def cmd_precheck(cfg: Config, args) -> int:
+    restart_pause(cfg, args.component)
     graph = None
     if args.component in GRAPH_PRECHECK:
         from . import rosgraph

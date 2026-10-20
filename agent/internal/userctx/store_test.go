@@ -3,6 +3,7 @@ package userctx
 import (
 	"fmt"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -268,5 +269,120 @@ func TestStoragePragmas(t *testing.T) {
 	defer s2.Close()
 	if got := pragmas(s2); got != "truncate/2/-64" {
 		t.Fatalf("pragmas %s, want truncate/2 (FULL)/-64", got)
+	}
+}
+
+// viewKey — история в виде, в каком она уходит провайдеру (для сравнения префиксов).
+func viewKey(t *testing.T, msgs []llm.Message) []string {
+	t.Helper()
+	out := make([]string, len(msgs))
+	for i, m := range msgs {
+		b, err := m.MarshalJSON()
+		if err != nil {
+			t.Fatal(err)
+		}
+		out[i] = string(b)
+	}
+	return out
+}
+
+func isPrefix(a, b []string) bool {
+	return len(a) <= len(b) && slices.Equal(a, b[:len(a)])
+}
+
+// Пакетное вытеснение: между сдвигами показанная история только дописывается
+// в конец (прошлый показ — префикс нового), окно и маска сдвигаются на одном
+// ходе раз в B ходов; размер окна — от W до W + B − 1 ходов.
+func TestBatchEvictionKeepsPrefixBetweenEvictions(t *testing.T) {
+	for _, p := range []Policy{
+		{Kind: "mask", WindowTurns: 8, MaskKeepTurns: 2, BatchTurns: 3},
+		{Kind: "mask", WindowTurns: 8, MaskKeepTurns: 2, BatchTurns: 4}, // W − K не кратно B
+		{Kind: "window", WindowTurns: 5, BatchTurns: 3},
+		{Kind: "mask", MaskKeepTurns: 2, BatchTurns: 3}, // маска без окна
+	} {
+		t.Run(fmt.Sprintf("%s_W%d_K%d_B%d", p.Kind, p.WindowTurns, p.MaskKeepTurns, p.BatchTurns), func(t *testing.T) {
+			s, err := OpenWithPolicy(":memory:", true, p, defaultStorage)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { s.Close() })
+			const n = 40
+			var prev []string
+			breaks := 0
+			for i := 1; i <= n; i++ {
+				s.AppendTurn(turn(i, true))
+				_, msgs := s.View(p)
+				cur := viewKey(t, msgs)
+				if i > 1 && !isPrefix(prev, cur) {
+					breaks++
+					// Сдвиг — только в точке вытеснения: i ≡ W (mod B).
+					if (i-p.WindowTurns)%p.BatchTurns != 0 {
+						t.Fatalf("ход %d: префикс истории изменился вне точки вытеснения", i)
+					}
+				}
+				if p.WindowTurns > 0 {
+					if got := len(msgs) / 4; i >= p.WindowTurns && (got < p.WindowTurns || got > p.WindowTurns+p.BatchTurns-1) {
+						t.Fatalf("ход %d: в окне %d ходов", i, got)
+					}
+					if c := len(s.Turns()); c > p.WindowTurns+p.BatchTurns-1 {
+						t.Fatalf("ход %d: в кеше %d ходов", i, c)
+					}
+				}
+				unmasked := strings.Count(strings.Join(cur, ""), `"content":"result`)
+				if i >= p.MaskKeepTurns && p.Kind == "mask" && (unmasked < p.MaskKeepTurns || unmasked > p.MaskKeepTurns+p.BatchTurns-1) {
+					t.Fatalf("ход %d: без заглушки %d ходов", i, unmasked)
+				}
+				prev = cur
+			}
+			// Сдвигов не больше, чем точек вытеснения: ⌈n / B⌉.
+			if max := (n + p.BatchTurns - 1) / p.BatchTurns; breaks > max || breaks == 0 {
+				t.Fatalf("сдвигов %d (ожидалось 1…%d)", breaks, max)
+			}
+		})
+	}
+}
+
+// B = 1 — прежнее поведение: окно и маска сдвигаются на каждом ходе.
+func TestBatchOneMatchesPerTurnShift(t *testing.T) {
+	s := open(t, ":memory:", false)
+	old := func(turns []Turn, w, k int) []llm.Message { // алгоритм до 20.10.2026
+		if w > 0 && len(turns) > w {
+			turns = turns[len(turns)-w:]
+		}
+		return flatten(turns, len(turns)-k)
+	}
+	for i := 1; i <= 15; i++ {
+		s.AppendTurn(turn(i, true))
+		for _, b := range []int{0, 1} {
+			_, got := s.View(Policy{Kind: "mask", WindowTurns: 4, MaskKeepTurns: 2, BatchTurns: b})
+			if want := old(s.Turns(), 4, 2); contents(got) != contents(want) {
+				t.Fatalf("ход %d, B=%d:\n got %s\nwant %s", i, b, contents(got), contents(want))
+			}
+		}
+	}
+}
+
+// После перезапуска показ тот же: точки вытеснения отсчитываются от начала архива.
+func TestBatchEvictionSurvivesRestart(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.db")
+	p := Policy{Kind: "mask", WindowTurns: 3, MaskKeepTurns: 1, BatchTurns: 3}
+	s, err := OpenWithPolicy(path, false, p, defaultStorage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 41; i++ {
+		s.AppendTurn(turn(i, true))
+	}
+	_, before := s.View(p)
+	s.Close()
+	s, err = OpenWithPolicy(path, false, p, defaultStorage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { s.Close() })
+	_, after := s.View(p)
+	// 41 ход, W = 3, B = 3: последняя точка вытеснения — 39, в окне ходы 37–41.
+	if contents(before) != contents(after) || !strings.HasPrefix(contents(after), "q37,call,"+MaskedText) {
+		t.Fatalf("до %s\nпосле %s", contents(before), contents(after))
 	}
 }

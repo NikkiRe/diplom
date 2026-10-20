@@ -199,7 +199,7 @@ def main(argv=None) -> int:
         runner.stop_procs()
         doc = {"system": "a1", "label": a.label, "error": "%s: %s" % (type(e).__name__, e), "events": runner.events}
     finally:
-        journal_dump(list(st.units().values()), t0, os.path.join(a.out, "logs", "journal.txt"))
+        journal_dump(list(st.units().values()), t0, os.path.join(a.out, "logs"))
         st.stop()
         st.restore()
     for name, dest in (("truth.jsonl", "truth_schedule.jsonl"), ("plan.json", "plan.json")):

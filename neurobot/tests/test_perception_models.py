@@ -68,6 +68,13 @@ class Options(unittest.TestCase):
         self.assertEqual((o.speed, o.turn, o.scan_timeout, o.reset_on_start), (0.5, 1.0, 0.5, True))
         self.assertFalse(o.show or o.polyline or o.canvas_norm or o.side_by_sum or o.end_on_still)
         self.assertFalse(pl.parse_args(["--no-reset-on-start"]).reset_on_start)
+        # H10 по умолчанию выключен — как до H10, до A/B на записях лаборатории (README, «Конец жеста (H10)»)
+        self.assertEqual((o.edge_gap, o.edges, o.max_cut, o.conf_start, o.conf_keep, o.early_margin, o.early_gap),
+                         (0.5, ["top"], 0.0, 0.35, 0.35, 0.0, 0.3))
+        self.assertEqual(pl.parse_args(["--end-gap", "1.5"]).edge_gap, 1.5)  # за краем — не меньше END_GAP
+        # профиль стенда для A/B (README) — допустимые флаги
+        o = pl.parse_args("--edge-gap 1.0 --max-cut 0.4 --conf-keep 0.1 --early-margin 0.9".split())
+        self.assertEqual((o.edge_gap, o.max_cut, o.conf_keep, o.early_margin, o.early_gap), (1.0, 0.4, 0.1, 0.9, 0.3))
 
     def test_snn_seed(self):
         self.assertIsInstance(pl.snn_generator(pl.parse_args([]).snn_seed), torch.Generator)
@@ -81,7 +88,10 @@ class Options(unittest.TestCase):
                     ["--frame-timeout-ms", "0"], ["--min-path", "-1"], ["--reset-pause-s", "-1"],
                     ["--speed", "-0.5"], ["--speed", "0.6"], ["--turn", "0"], ["--turn", "1.5"],
                     ["--scan-timeout", "0"], ["--snn-seed", "-2"],
-                    ["--speed", "nan"], ["--end-gap", "inf"], ["--window", "inf"], ["--obstacle-dist", "inf"]):
+                    ["--speed", "nan"], ["--end-gap", "inf"], ["--window", "inf"], ["--obstacle-dist", "inf"],
+                    ["--window", "0.9", "--edge-gap", "1.0"], ["--conf-keep", "0.5"], ["--conf-start", "1.5"],
+                    ["--early-gap", "0.5"],
+                    ["--max-cut", "1.5"], ["--edge-frac", "0.5"], ["--conf-gate", "0"], ["--edges", "up"]):
             with self.assertRaises(SystemExit, msg=bad) as e, mock.patch("sys.stderr"):
                 pl.parse_args(bad)
             self.assertEqual(e.exception.code, 2)

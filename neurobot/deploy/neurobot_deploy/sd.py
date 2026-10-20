@@ -1,4 +1,4 @@
-"""systemd и журнал: systemctl show / list-jobs / restart, journalctl -o json.
+"""systemd и журнал: systemctl show / list-jobs / restart, journalctl -o json, sd_notify.
 
 Работает на systemd 245 (Ubuntu 20.04): свойства NRestarts, InvocationID, WatchdogTimestampMonotonic есть
 с v232–v235; journalctl --invocation появился только в v257, поэтому журнал запуска юнита выбирается
@@ -8,9 +8,11 @@
 from __future__ import annotations
 
 import json
+import os
 import re
+import socket
 import subprocess
-from typing import Callable, Dict, List, NamedTuple, Optional, Sequence
+from typing import Callable, Dict, List, Mapping, NamedTuple, Optional, Sequence
 
 UNIT_PROPS = ("Id", "LoadState", "ActiveState", "SubState", "Result", "NRestarts", "ExecMainStatus",
               "ExecMainCode", "StatusText", "Type", "WatchdogUSec", "WatchdogTimestampMonotonic",
@@ -53,8 +55,11 @@ class Systemd:
         self._run = run
 
     def _out(self, args: Sequence[str], check: bool = True) -> str:
+        # без NOTIFY_SOCKET: systemctl и journalctl systemd ≥ 254 сами шлют в него EXIT_STATUS, и из сторожа
+        # (Type=notify, NotifyAccess=main) это было бы предупреждение systemd на каждый вызов [опыт, ВМ, systemd 255]
+        env = {k: v for k, v in os.environ.items() if k != "NOTIFY_SOCKET"}
         try:
-            r = self._run(list(args), capture_output=True, text=True, timeout=30)
+            r = self._run(list(args), capture_output=True, text=True, timeout=30, env=env)
         except (OSError, subprocess.TimeoutExpired) as e:
             raise SystemdError("{}: {}".format(args[0], e))
         if check and r.returncode != 0:
@@ -117,3 +122,21 @@ class Systemd:
     def version(self) -> int:
         first = self._out(["systemctl", "--version"]).split()
         return int(first[1]) if len(first) > 1 and first[1].isdigit() else 0
+
+
+def notify(state: str, environ: Mapping[str, str] = os.environ) -> bool:
+    """sd_notify(3) без libsystemd — датаграмма в $NOTIFY_SOCKET (как neurobot/executor/sd_notify.py; пакет deploy
+    ставится отдельно и берёт только stdlib). Без NOTIFY_SOCKET (запуск не из юнита) — ничего; ошибка отправки не
+    роняет процесс: молчание заметит сам systemd."""
+    addr = environ.get("NOTIFY_SOCKET")
+    if not addr:
+        return False
+    if addr.startswith("@"):
+        addr = "\0" + addr[1:]  # абстрактное пространство имён
+    try:
+        with socket.socket(socket.AF_UNIX, socket.SOCK_DGRAM) as s:
+            s.connect(addr)
+            s.sendall(state.encode())
+    except OSError:
+        return False
+    return True

@@ -2,9 +2,11 @@
 
 Часто (NEUROBOT_WATCHDOG_FAST_S, по умолчанию 1 с) — то, что «живо, но не работает», и чего не видят ни systemd, ни
 обёртка launch (deploy/launchfiles/supervised.launch.py гасит юнит, только когда процесс умер):
-  1. Свежесть тем драйверов: NEUROBOT_DRIVER_<имя>_FRESH — «/тема:возраст_с» через пробел; пусто — тема готовности
-     NEUROBOT_DRIVER_<имя>_TOPIC с NEUROBOT_WATCHDOG_STALE_S; none — драйвер не смотреть. Подписка raw в одном узле
-     rclpy (кадры камеры не разбираются). Две пробы подряд с устаревшей темой — restart драйвера (зависший узел:
+  1. Свежесть тем драйверов: NEUROBOT_DRIVER_<имя>_FRESH — «/тема[@статус]:возраст_с» через пробел; пусто — тема
+     готовности NEUROBOT_DRIVER_<имя>_TOPIC с NEUROBOT_WATCHDOG_STALE_S; none — драйвер не смотреть. Подписка raw в
+     одном узле rclpy (кадры камеры не разбираются); «@статус» — сообщение /diagnostics засчитывается, только если в
+     нём есть этот статус (узел без своей темы: twist_mux шлёт «Twist mux status» раз в 1 с из того же исполнителя,
+     что и команды, — rosgraph.TopicWatch). Две пробы подряд с устаревшей темой — restart драйвера (зависший узел:
      SIGSTOP, дедлок, оглохший поток USB). Если молчат темы всех драйверов сразу (дольше наименьшего из пределов),
      никого не трогаем: так выглядит беда DDS или самого сторожа, а не отказ одного драйвера.
   2. rosbridge: постоянное соединение WebSocket и ping, pong за PING_S; две неудачи подряд — restart rosbridge.
@@ -23,10 +25,12 @@
 FAST_GRACE_S: их active и так значит «первое сообщение пришло» / «порт ответил»). Рестарты в цикле — без ожидания
 (--no-block), чтобы сторож не стоял, пока юнит поднимается (--once ждёт). Сторож — долгоживущий сервис, а не таймер: на
 systemd 245 таймер раз в 10 с даёт две строки systemd в журнале на каждый запуск (≈17 тыс. в сутки) и стоит запуска
-Python каждые 10 с.
+Python каждые 10 с. Самого сторожа сторожит systemd: READY после первого прохода, WATCHDOG — с каждого (WatchdogSec
+юнита).
 """
 from __future__ import annotations
 
+import re
 import time
 from typing import Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple
 
@@ -34,7 +38,7 @@ from . import picolog
 from .config import Config, EnvError
 from .probes import ProbeError, WsPing, probe_mcp
 from .report import emit
-from .sd import Systemd, SystemdError
+from .sd import Systemd, SystemdError, notify
 
 PROBE_S = 3.0
 PING_S = 1.0
@@ -46,6 +50,7 @@ HANG_AGENT_S = 90.0
 FATAL_AGE_S = 20.0
 MCP_UNIT, AGENT_UNIT = "neurobot-mcp.service", "neurobot-picoclaw.service"
 ROSBRIDGE_UNIT = "neurobot-rosbridge.service"
+_STATUS = re.compile(r"[A-Za-z0-9_.-]+")  # имя статуса диагностики в FRESH: «/diagnostics@twist_mux:3»
 
 
 class Action(NamedTuple):
@@ -83,9 +88,10 @@ def driver_watch(cfg: Config) -> Dict[str, List[Tuple[str, float]]]:
                 limit = float(age)
             except ValueError:
                 limit = 0.0
-            if not sep or not topic.startswith("/") or not limit > 0:
-                raise EnvError("NEUROBOT_DRIVER_{}_FRESH: ожидалось «/тема:возраст_с» через пробел или none, получено "
-                               "{!r}".format(name, token))
+            base, at, status = topic.partition("@")
+            if not sep or not base.startswith("/") or (at and not _STATUS.fullmatch(status)) or not limit > 0:
+                raise EnvError("NEUROBOT_DRIVER_{}_FRESH: ожидалось «/тема[@статус]:возраст_с» через пробел или none, "
+                               "получено {!r}".format(name, token))
             topics.append((topic, limit))
         if topics:
             out["neurobot-driver@{}.service".format(name)] = topics
@@ -97,10 +103,13 @@ def sensor_actions(watch: Dict[str, List[Tuple[str, float]]], ages: Dict[str, fl
     """Рестарты драйверов по свежести их тем. ages — секунды без сообщений по темам (TopicWatch.ages); fails —
     неудачи подряд по юнитам (меняется на месте). Молчат все темы всех драйверов дольше наименьшего предела — общая
     беда (DDS, сам сторож, пауза ВМ; у двойника все датчики идут из Gazebo, и рестарт базы глушит и лидар), никого не
-    трогаем: иначе разные пределы (/odom 3 с, /scan 2 с) дали бы лишний рестарт драйвера с меньшим пределом."""
+    трогаем: иначе разные пределы (/odom 3 с, /scan 2 с) дали бы лишний рестарт драйвера с меньшим пределом. Статусы
+    /diagnostics (`@статус`) в «молчат все» не входят: twist_mux шлёт свой и тогда, когда стоят все датчики (Gazebo
+    двойника на паузе), и иначе сторож перезапускал бы всех."""
     stale = {u: [t for t, limit in topics if ages.get(t, float("inf")) > limit] for u, topics in watch.items()}
-    floor = min((limit for topics in watch.values() for _, limit in topics), default=0.0)
-    if len(watch) > 1 and all(ages.get(t, float("inf")) > floor for topics in watch.values() for t, _ in topics):
+    plain = [(t, limit) for topics in watch.values() for t, limit in topics if "@" not in t]
+    floor = min((limit for _, limit in plain), default=0.0)
+    if len(watch) > 1 and plain and all(ages.get(t, float("inf")) > floor for t, _ in plain):
         fails.clear()
         return []
     out = []
@@ -216,10 +225,13 @@ class Fast:
             time.sleep(seconds)
 
 
-def loop(cfg: Config, sd: Systemd, period: float, fast: float, topics=None) -> None:
+def loop(cfg: Config, sd: Systemd, period: float, fast: float, topics=None, notify: Callable = notify) -> None:
+    """Цикл сторожа. Юниту (Type=notify) — READY после первого прохода и WATCHDOG с каждого: зависший сторож
+    (дедлок rclpy или DDS, вызов без таймаута) перезапустит systemd."""
     ping = WsPing("127.0.0.1", cfg.port("NEUROBOT_ROSBRIDGE_PORT")) if "rosbridge" in cfg.components() else None
     f = Fast(cfg, sd, topics, ping)
     next_slow = 0.0
+    state = "READY=1"
     while True:
         t0 = time.monotonic()
         try:
@@ -229,4 +241,6 @@ def loop(cfg: Config, sd: Systemd, period: float, fast: float, topics=None) -> N
                 run_once(cfg, sd, block=False)  # частые пробы не ждут, пока поднимается MCP или PicoClaw
         except SystemdError as e:
             emit("watchdog", "watchdog", "systemd_error", str(e))
+        notify(state)
+        state = "WATCHDOG=1"
         f.wait(fast - (time.monotonic() - t0))

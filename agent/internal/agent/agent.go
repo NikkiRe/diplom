@@ -234,11 +234,16 @@ func (a *Agent) emitRunStart(nRules int) {
 	a.mu.Lock()
 	nTools := len(a.toolDefs)
 	a.mu.Unlock()
+	// Параметры запроса, от которых зависят цена и кэш: неизменны весь прогон.
+	extra := a.cfg.LLM.Extra
+	llmParams := map[string]any{"reasoning_effort": config.ReasoningEffort(extra), "verbosity": extra["verbosity"],
+		"service_tier": extra["service_tier"]}
 	a.tr.Emit(trace.RunStart, trace.F{
 		"config_hash": a.cfg.Hash(),
 		"policy": map[string]any{
 			"wake": p.Wake, "heartbeat_min": p.HeartbeatMin, "history": p.History, "window_turns": p.WindowTurns,
-			"mask_keep_turns": p.MaskKeepTurns, "hwctx": p.HWCtx, "catalog": p.Catalog, "max_steps": p.MaxSteps,
+			"mask_keep_turns": p.MaskKeepTurns, "history_batch_turns": p.HistoryBatchTurns,
+			"history_noop": p.HistoryNoop, "hwctx": p.HWCtx, "catalog": p.Catalog, "max_steps": p.MaxSteps,
 			"snapshot_period_s": p.SnapshotPeriodS, "summary_threshold_tokens": p.SummaryThresholdTokens,
 			"rules_enabled": a.cfg.RulesEnabled(), "local_tools": sortedKeys(a.local),
 			"gate": map[string]any{"debounce_s": p.Gate.DebounceS, "cooldown_s": p.Gate.CooldownS,
@@ -249,6 +254,7 @@ func (a *Agent) emitRunStart(nRules int) {
 		"start_t":   a.now(),
 		"model":     a.cfg.LLM.Model,
 		"base_url":  a.cfg.LLM.BaseURL,
+		"llm":       llmParams,
 		"budget":    a.cfg.Budget,
 		"sched":     a.cfg.Sched,
 		"servers":   servers,

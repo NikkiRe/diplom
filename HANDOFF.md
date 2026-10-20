@@ -182,7 +182,7 @@ cbor2). Go 1.27.1, MCP Go SDK v1.8.0, limactl 2.1.1. В корне `.venv-nanobo
 
 | Компонент | Путь | Что | Код / тесты | Запуск; бинарники (sha256) |
 |---|---|---|---|---|
-| Агент EdgeCtx | `agent/` | гейт, правила, контексты, LLM-клиент с предохранителем и очередью отложенного, MCP-хост | 9 332 / 5 450 | `go test -race ./...`; `make build-mac build-linux-arm64`. `bin/edgectx-linux-arm64` 13,6 МБ, статический, `a778aff8…`; darwin `301a6ea4…`; 15.10 00:16, **актуальны** |
+| Агент EdgeCtx | `agent/` | гейт, правила, контексты, LLM-клиент с предохранителем и очередью отложенного, MCP-хост | 9 332 / 5 450 | `go test -race ./...`; `make build-mac build-linux-arm64`. `bin/edgectx-linux-arm64` 13,6 МБ, статический, `7a6ac271…`; darwin `66e0590f…`; 20.10 14:46 (H1, H3, M2 обзора оптимизации), **актуальны** |
 | hw-mcp | `hwmcp/` | sysfs IIO/hwmon/w1/thermal, GPIO uAPI v1/v2, чип по метке, живые датчики, шлюз (аренда, `safe_state`), `-session-timeout` | 8 322 / 5 441 | `make test`, `make build build-linux-arm64`; ВМ: `make vm-test vm-gpiosim vm-hotplug`, `tools/vm_smoke.sh`. `.build/hw-mcp-linux-arm64` 8,8 МБ `08825328…`, `hw-mcp` `a01dc69a…`; 15.10, актуальны |
 | cam-mcp | `cammcp/` | источники synthetic/dir/v4l2, детектор на плате, эпизоды, `camera_lost`/`camera_back`, `snapshot` по запросу | 3 299 / 2 352 | `make test`, `make build-linux-arm64`, `make vm-test vm-smoke vm-v4l2`. `.build/cam-mcp-linux-arm64` 8,8 МБ `794f352d…` (09.10; позже менялся только комментарий, сборка та же) |
 | robot-mcp | `robotmcp/` | status, go_to, patrol, look, stop; события; rosbridge с отменой целей Nav2 | 5 839 / 2 150 | `make`. `.build/robot-mcp-linux-arm64` 9,5 МБ `8c30ba2c…`, `fake-rosbridge` `d296f5be…`, `robot-probe` `17042ce6…` (09.10, актуальны; копии в ВМ `~/robotmcp` совпадают) |
@@ -472,8 +472,9 @@ cdev, чип по метке) + edgectx в одном юните `board.sh run`:
 - **`experiments/results` не перезаписывать.** `robotmcp/tools/live_smoke.sh`, `scripts/sim/rosmcp_smoke.sh` и
   `smoke.sh` по умолчанию пишут в `*_<сегодня>`, первые два — с `rm -rf`: всегда задавать новый OUT. Перезаписывают
   также `--force` у `bench.replay`/`drive_*` и `make golden`. `bench.simmcp --journal` дописывает.
-- **Бинарники:** `agent/bin` и `hwmcp/.build` актуальны на 15.10; **`sysmon/bin` устарели**. После правок
-  пересобирать и обновлять копии в ВМ. `drive_edgectx` берёт `agent/bin`.
+- **Бинарники:** `agent/bin` актуальны на 20.10, `hwmcp/.build` — на 15.10; **`sysmon/bin` устарели**. После правок
+  пересобирать и обновлять копии в ВМ; у `agent/bin` копий нет — ВМ видят каталог проекта. `drive_edgectx` берёт
+  `agent/bin`.
 - **gpio-sim на ядре 6.8: use-after-free в `lineevent_release`.** Если снять чип, пока линию держит потребитель
   (`gpiomon`, hw-mcp, `gpioset`, тест): «REMOVING GPIOCHIP WITH GPIOS STILL REQUESTED» → WARNING `gpiod_free` →
   Oops → процессы в состоянии D. Лечится только перезагрузкой ВМ (09.10: `tainted` 640). Порядок:

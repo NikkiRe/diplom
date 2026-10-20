@@ -1,10 +1,12 @@
 """Части прогона без ROS: заглушка воркера 8766, узел отказов камеры (решение по кадру), журнал probe, исходы
 инструментов по сессиям PicoClaw, оператор A1 по doctor, конфиги PicoClaw A0/A1 и адрес mockllm в нём, правки
-env-файла A1, обёртка балласта, драйверы двойника вне jetson.slice бюджета, демо A0, выбор жеста start_test."""
+env-файла A1, обёртка балласта, драйверы двойника вне jetson.slice бюджета, демо A0, выбор жеста start_test, мир
+отложенного набора hall_m — зеркало hall."""
 from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 import tempfile
 import threading
@@ -21,6 +23,7 @@ sys.path.insert(0, str(ROOT))
 
 from neurobot.sim.gestures.clock import boot_id, mono  # noqa: E402
 from neurobot.sim.runs import a0_demo, manifest, relay, runner, stacks, start_gesture, worker8766  # noqa: E402
+from neurobot.sim.runs import queue as runs_queue  # noqa: E402
 from neurobot.sim.runs.budget_a1 import A1Budget, ballast_cmd  # noqa: E402
 
 LAB_CFG = ROOT / stacks.LAB_RP / ".picoclaw" / "config.json"
@@ -119,6 +122,44 @@ class RunnerTest(unittest.TestCase):
             self.assertTrue(callable(r.spawn))
             self.assertEqual(r.spawn_pose, (-1.5, 0.0, 0.01, 0.0))
             self.assertTrue(r.world_sdf.endswith("twin/worlds/lab.sdf"))
+
+    def test_journal_dump_writes_json_for_metrics_and_text_for_people(self):
+        calls = []
+
+        def sh(argv, **kw):
+            calls.append(argv)
+            return types.SimpleNamespace(stdout=argv[argv.index("-o") + 1] + "\n")
+        with tempfile.TemporaryDirectory() as d, mock.patch.object(runner.stacks, "sh", sh):
+            runner.journal_dump(["neurobot-perception.service", "neurobot-watchdog.service"], 1000.9, d)
+            got = {n: open(os.path.join(d, n)).read() for n in sorted(os.listdir(d))}
+        self.assertEqual(got, {"journal.json": "json\n", "journal.txt": "short-iso-precise\n"})
+        self.assertEqual(calls[0][:4], ["journalctl", "--no-pager", "--since", "@1000"])
+        self.assertIn("neurobot-watchdog.service", calls[0])
+
+
+class WorldTest(unittest.TestCase):
+    def test_hall_m_is_the_mirror_of_hall(self):
+        """Мир отложенного набора (PROTOCOL §4) — зеркало hall по y: позы (x, −y, z, −крен, тангаж, −рыскание), свет,
+        стены севера и юга меняются именами; если hall поменяли, а hall_m — нет, тест упадёт."""
+        import re
+        names = {"wall_south": "wall_north", "wall_north_w": "wall_south_w", "wall_north_e": "wall_south_e"}
+
+        def neg(v):
+            return v if float(v) == 0 else v[1:] if v.startswith("-") else "-" + v
+
+        def body(path):
+            text = (ROOT / path).read_text(encoding="utf-8")
+            return text[text.index("<sdf"):]
+        hall = body(stacks.WORLDS["hall"][0])
+        hall = re.sub(r"<pose>(\S+) (\S+) (\S+) (\S+) (\S+) (\S+)</pose>",
+                      lambda m: "<pose>%s %s %s %s %s %s</pose>" % (m[1], neg(m[2]), m[3], neg(m[4]), m[5], neg(m[6])),
+                      hall)
+        hall = re.sub(r"<direction>(\S+) (\S+) (\S+)</direction>",
+                      lambda m: "<direction>%s %s %s</direction>" % (m[1], neg(m[2]), m[3]), hall)
+        hall = re.sub(r'name="(wall_\w+)"', lambda m: 'name="%s"' % names.get(m[1], m[1]), hall)
+        self.assertEqual(body(stacks.WORLDS["hall_m"][0]), hall)
+        self.assertEqual(stacks.WORLDS["hall_m"][1], stacks.WORLDS["hall"][1])
+        self.assertIn("hall_m", runs_queue.RUN_OPTIONS["world"])
 
 
 class DriverNodeTest(unittest.TestCase):
@@ -335,6 +376,22 @@ class DemoTest(unittest.TestCase):
         self.assertEqual(fake.load("w.pth", map_location="cpu"), "state")
         self.assertEqual(calls, [{"map_location": "cpu", "weights_only": True}])
         self.assertIs(fake.hub.load, a0_demo.hub_load)
+
+    def test_script_dir_does_not_shadow_stdlib_queue(self):
+        """a0_demo.py запускается файлом: queue.py очереди рядом с ним не должен заслонять стандартный queue, который
+        импортирует torch (20.10 демо A0 падало на `from queue import Queue`)."""
+        with tempfile.TemporaryDirectory() as d:
+            os.makedirs(os.path.join(d, "torch"))
+            with open(os.path.join(d, "torch", "__init__.py"), "w") as f:
+                f.write("from queue import Queue\nload = lambda *a, **k: None\nhub = type('H', (), {})()\n")
+            demo, mark = os.path.join(d, "demo.py"), os.path.join(d, "ran")
+            with open(demo, "w") as f:
+                f.write("open(%r, 'w').write('ok')\n" % mark)
+            env = dict(os.environ, PYTHONPATH="%s%s%s" % (d, os.pathsep, ROOT), PYTHONDONTWRITEBYTECODE="1")
+            r = subprocess.run([sys.executable, str(ROOT / "neurobot/sim/runs/a0_demo.py"), "--demo", demo],
+                               env=env, capture_output=True, text=True, timeout=120)
+            self.assertEqual(r.returncode, 0, r.stderr[-800:])
+            self.assertTrue(os.path.exists(mark))
 
 
 class StartGestureTest(unittest.TestCase):

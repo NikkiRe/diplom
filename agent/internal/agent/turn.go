@@ -179,8 +179,7 @@ func (a *Agent) runTurn(ctx context.Context, w *wake) {
 	profile := a.profileText
 	tools := a.toolDefs
 	a.mu.Unlock()
-	summary, history := a.store.View(userctx.Policy{Kind: a.cfg.Policy.History,
-		WindowTurns: a.cfg.Policy.WindowTurns, MaskKeepTurns: a.cfg.Policy.MaskKeepTurns})
+	summary, history := a.store.View(userctx.PolicyOf(a.cfg.Policy))
 
 	for step := 0; step < a.cfg.Policy.MaxSteps; step++ {
 		built := prompt.Build(prompt.Input{System: sys, Tools: tools, Profile: profile, Summary: summary,
@@ -316,7 +315,12 @@ func (a *Agent) finishTurn(ctx context.Context, ts *turnState) {
 		return
 	}
 	users := w.users()
-	if len(users) > 0 || a.cfg.HistoryBackground() {
+	keep := len(users) > 0 || a.cfg.HistoryBackground()
+	if keep && a.skipNoopTurn(ts) {
+		keep = false
+		a.m.inc("history.skipped_noop")
+	}
+	if keep {
 		msgs := append([]llm.Message{{Role: "user", Content: a.historyText(w)}}, ts.msgs[1:]...)
 		if _, err := a.store.AppendTurn(userctx.Turn{InputID: w.firstInput(), Kind: w.reason, T: w.submitT, Messages: msgs}); err != nil {
 			a.traceError("history", err)
@@ -354,6 +358,24 @@ func (a *Agent) finishTurn(ctx context.Context, ts *turnState) {
 	if a.cfg.Policy.History == "summary_system" {
 		a.maybeSummarize(ctx, w)
 	}
+}
+
+// skipNoopTurn — пустой фоновый ход не сохраняется в истории (policy.history_noop):
+// модель ответила noop_reply, не вызвав инструментов, и ход прошёл без ошибки.
+// Такой ход не несёт сведений (у плановой проверки — только время тика), но
+// занимает место в окне и вытесняет из него диалог с пользователем; окно
+// считается по содержательным ходам. Ход с репликой пользователя сохраняется
+// всегда.
+func (a *Agent) skipNoopTurn(ts *turnState) bool {
+	mode := a.cfg.Policy.HistoryNoop
+	if mode == "keep" || mode == "" || ts.err != nil || ts.toolCalls > 0 || ts.notified ||
+		len(ts.w.users()) > 0 || !isNoop(ts.final, a.cfg.Policy.NoopReply) {
+		return false
+	}
+	if mode == "skip_heartbeat" {
+		return ts.w.reason == "heartbeat"
+	}
+	return true
 }
 
 // emitUserReply пишет user_reply на реплику p (ход wakeID) и возвращает

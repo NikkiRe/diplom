@@ -1,8 +1,9 @@
 """motion_executor v1 — rclpy-узел вокруг guard.Guard (PLAN §2.4 v1, §13.3).
 
 Пишет желаемую скорость в /neurobot/cmd_vel_req; единственный писатель /cmd_vel — safety_gate (neurobot/safety).
-Входы: /cmd_vel_gesture и /cmd_vel_agent (Twist), /scan (LaserScan) и /odom (Odometry, след для отъезда из тупика) с
-QoS сенсоров (совместим и с reliable, и с best-effort издателем), /neurobot/safety_state (String JSON safety_gate).
+Входы: /cmd_vel_gesture и /cmd_vel_agent (Twist, KEEP_LAST 1), /scan (LaserScan, KEEP_LAST 1) и /odom (Odometry, след
+для отъезда из тупика) с QoS сенсоров (best effort: совместим и с reliable, и с best-effort издателем),
+/neurobot/safety_state (String JSON safety_gate). Колбэки — постоянный исполнитель в своём потоке (spinner.py, H6).
 Выходы: /neurobot/cmd_vel_req (Twist или TwistStamped — параметр cmd_vel_type), /neurobot/motion_state и
 /neurobot/events (String JSON: task_end при отмене задачи по safety_gate, начало и конец отъезда из тупика). Имена тем
 меняются ремапом (--ros-args -r).
@@ -27,12 +28,13 @@ from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
 from rclpy.exceptions import ParameterException
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import QoSProfile, ReliabilityPolicy, qos_profile_sensor_data
 from sensor_msgs.msg import LaserScan
 from std_msgs.msg import String
 
 from .guard import Command, Guard, Params, parse_safety
 from .sd_notify import Notifier
+from .spinner import Spinner
 
 log = logging.getLogger("motion_executor")
 
@@ -80,7 +82,8 @@ def check_types(p: dict) -> dict:
 
 class MotionExecutor(Node):
     def __init__(self):
-        super().__init__("motion_executor")
+        # параметры — только из --ros-args -p: сервисы параметров в наборе ожидания не нужны (O3 п. 7)
+        super().__init__("motion_executor", start_parameter_services=False)
         try:
             p = {name: self.declare_parameter(name, default).value for name, default in DEFAULTS}
         except ParameterException as e:
@@ -110,12 +113,15 @@ class MotionExecutor(Node):
         self._events = 0
         self.notifier = Notifier()
 
-        self._pub = self.create_publisher(TwistStamped if self._stamped else Twist, CMD_VEL_REQ, 10)
+        # Скан и команды — KEEP_LAST 1 (H7, O3 п. 5): отставший колбэк берёт последнее, а не очередь; события — 10.
+        latest = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+        command = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
+        self._pub = self.create_publisher(TwistStamped if self._stamped else Twist, CMD_VEL_REQ, command)
         self._state_pub = self.create_publisher(String, "/neurobot/motion_state", 10)
         self._events_pub = self.create_publisher(String, "/neurobot/events", 10)
-        self.create_subscription(Twist, "/cmd_vel_gesture", self._on_gesture, 10)
-        self.create_subscription(Twist, "/cmd_vel_agent", self._on_agent, 10)
-        self.create_subscription(LaserScan, "/scan", self._on_scan, qos_profile_sensor_data)
+        self.create_subscription(Twist, "/cmd_vel_gesture", self._on_gesture, command)
+        self.create_subscription(Twist, "/cmd_vel_agent", self._on_agent, command)
+        self.create_subscription(LaserScan, "/scan", self._on_scan, latest)
         self.create_subscription(Odometry, "/odom", self._on_odom, qos_profile_sensor_data)
         self.create_subscription(String, "/neurobot/safety_state", self._on_safety, qos_profile_sensor_data)
 
@@ -248,12 +254,12 @@ def main(argv=None) -> int:
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
-    node = None
+    node = spinner = None
     code = 0
     try:
         node = MotionExecutor()
-        while rclpy.ok() and not stop.is_set():
-            rclpy.spin_once(node, timeout_sec=0.1)
+        spinner = Spinner(node, stop)  # постоянный исполнитель в своём потоке (H6)
+        spinner.wait()
     except ConfigError as e:
         log.error("неверная конфигурация: %s", e)
         code = EXIT_CONFIG
@@ -261,6 +267,8 @@ def main(argv=None) -> int:
         log.exception("исполнитель упал")
         code = 1
     finally:
+        if spinner is not None:
+            spinner.close()  # колбэков больше нет — ноль ниже последний
         if node is not None:
             node.halt()
             node.destroy_node()

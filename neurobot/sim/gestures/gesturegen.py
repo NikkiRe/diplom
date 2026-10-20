@@ -44,8 +44,8 @@ FIST_SCALE = (0.8, 0.65, 0.5)       # кулак меньше раскрытой
 MIN_VISIBLE = 0.5                   # доля площади бокса в кадре, при которой детектор ещё видит руку [оценка]
 # диапазоны (min, max): у первых нужен min > 0 (на них делят), у остальных — min ≥ 0
 POSITIVE_RANGES = ("dist_m", "amp_m", "dur_s", "passer_dist_m", "passer_speed")
-RANGES = POSITIVE_RANGES + ("hand_h_m", "pause_s", "conf", "false_conf", "still_s", "false_s", "false_rate",
-                            "empty_s")
+RANGES = POSITIVE_RANGES + ("hand_h_m", "pause_s", "conf", "false_conf", "miss_conf", "still_s", "false_s",
+                            "false_rate", "empty_s")
 # одиночные числа: границы [min, max]; доли — [0, 1): при aspect ≥ 1 форма вырождается или зеркалится
 BOUNDS = {"det_fps": (1.0, 60.0), "hold_pre_s": (0.0, math.inf), "hold_post_s": (0.0, math.inf),
           "lead_in_s": (0.0, math.inf), "rotate_deg": (0.0, 180.0), "jitter": (0.0, 1.0), "size_jitter": (0.0, 1.0),
@@ -110,6 +110,7 @@ class GenConfig:
     size_jitter: float = 0.05
     p_miss: float = 0.1
     conf: tuple = (0.5, 0.9)
+    miss_conf: tuple = (0.0, 0.0)         # пропуск руки — слабая рамка с такой уверенностью (H10); 0,0 — пропуск
     pause_s: tuple = (12.0, 18.0)
     lead_in_s: float = 5.0
     margin_px: float = 4.0
@@ -161,8 +162,8 @@ class GenConfig:
             positive = name in POSITIVE_RANGES
             if not (lo > 0.0 if positive else lo >= 0.0) or not lo <= hi or not math.isfinite(hi):
                 raise ValueError("%s: нужен %s ≤ max" % (name, "0 < min" if positive else "0 ≤ min"))
-        if self.conf[1] > 1.0 or self.false_conf[1] > 1.0:
-            raise ValueError("conf, false_conf: уверенность не больше 1")
+        if self.conf[1] > 1.0 or self.false_conf[1] > 1.0 or self.miss_conf[1] > 1.0:
+            raise ValueError("conf, false_conf, miss_conf: уверенность не больше 1")
 
     def _shapes_for(self, cls: int) -> list:
         return [s for s in (self.shapes or shapes_of(cls)) if SHAPES[s].cls == cls]
@@ -271,6 +272,19 @@ class _Builder:
         return out
 
 
+def _put_hand(b: "_Builder", rng: Rng, k: int, seg: int, box, conf: float, p_miss: float) -> bool:
+    """Отсчёт руки: рамка, пропуск детекции (None) или — при miss_conf — слабая рамка на месте пропуска: детектор с
+    низким порогом видит руку, но неуверенно (H10). True — рамка уверенная."""
+    if box is not None and not rng.chance(p_miss):
+        b.put(k, seg, box, conf)
+        return True
+    if box is not None and b.cfg.miss_conf[1] > 0.0:
+        b.put(k, seg, box, rng.uniform(*b.cfg.miss_conf))
+    else:
+        b.put(k, seg, None, None)
+    return False
+
+
 def _visible_box(cx: float, cy: float, bw: float, bh: float):
     """Бокс, обрезанный кадром, или None, если в кадре меньше MIN_VISIBLE его площади."""
     x1, y1 = max(0.0, cx - bw / 2), max(0.0, cy - bh / 2)
@@ -336,11 +350,7 @@ def _gesture(b: _Builder, rng: Rng, seg: int, k0: int, cls: int, side, shape_nam
         conf = rng.uniform(*cfg.conf)
         lost += box is None
         lost_top += hy < 0.0
-        if box is None or rng.chance(cfg.p_miss):
-            b.put(k, seg, None, None)
-        else:
-            b.put(k, seg, box, conf)
-            n_boxes += 1
+        n_boxes += _put_hand(b, rng, k, seg, box, conf, cfg.p_miss)
     n = k_last + fist + 1 - k0
     return {"kind": "gesture", "cls": cls, "name": CLASS_NAMES[cls], "side": side, "shape": shape_name,
             "reverse": reverse, "end": end, "t_start": t_start, "t0": rnd(t0, 4), "t_leave": b.t(k_last + fist),
@@ -364,11 +374,7 @@ def _negative(b: _Builder, rng: Rng, seg: int, k0: int, kind: str) -> dict:
             box = _visible_box(cx + rng.gauss(0.02 * bw), cy + rng.gauss(0.02 * bh),
                                bw * (1.0 + rng.gauss(cfg.size_jitter)), bh * (1.0 + rng.gauss(cfg.size_jitter)))
             conf = rng.uniform(*cfg.conf)
-            if box is None or rng.chance(cfg.p_miss / 2):
-                b.put(k, seg, None, None)
-            else:
-                b.put(k, seg, box, conf)
-                n_boxes += 1
+            n_boxes += _put_hand(b, rng, k, seg, box, conf, cfg.p_miss / 2)
         info = {"dist_m": rnd(dist, 3)}
     elif kind == "passerby":
         dist = rng.uniform(*cfg.passer_dist_m)
@@ -385,11 +391,7 @@ def _negative(b: _Builder, rng: Rng, seg: int, k0: int, kind: str) -> dict:
             cy = cy0 + 4.0 * math.sin(2.0 * math.pi * 1.8 * dt)
             box = _visible_box(cx, cy, bw, bh)
             conf = rng.uniform(0.36, 0.7)
-            if box is None or rng.chance(cfg.passer_p_miss):
-                b.put(k, seg, None, None)
-            else:
-                b.put(k, seg, box, conf)
-                n_boxes += 1
+            n_boxes += _put_hand(b, rng, k, seg, box, conf, cfg.passer_p_miss)
         info = {"dist_m": rnd(dist, 3), "direction": "right" if rightward else "left"}
     elif kind == "false_boxes":
         rate = rng.uniform(*cfg.false_rate)
@@ -435,6 +437,8 @@ def generate(cfg: GenConfig):
         truth.append(rec)
         k = b.k_at_or_after((k_last + 1) / b.fps + rng.uniform(*cfg.pause_s))
     params = asdict(cfg)
+    if not any(cfg.miss_conf):
+        del params["miss_conf"]  # без слабых рамок заголовок и байты таймлайна — как до H10
     header = {"version": FORMAT_VERSION, "generator": "neurobot.sim.gestures.gesturegen", "seed": cfg.seed,
               "det_fps": cfg.det_fps, "frame": [FRAME_W, FRAME_H], "f_px": cfg.f_px, "classes": CLASS_NAMES,
               "shapes": {n: s.cls for n, s in sorted(SHAPES.items())}, "note": PROBE_NOTE,
@@ -535,6 +539,7 @@ def build_parser() -> argparse.ArgumentParser:
     for name, help_ in (("dist_m", "дистанция до руки, м"), ("hand_h_m", "высота кисти над полом, м"),
                         ("amp_m", "размах жеста, м"), ("dur_s", "длительность жеста, с"),
                         ("pause_s", "пауза между сегментами, с"), ("conf", "уверенность боксов руки"),
+                        ("miss_conf", "уверенность слабой рамки на месте пропуска руки (0,0 — пропуск)"),
                         ("still_s", "«рука стоит», с"), ("false_s", "«ложные боксы», с"),
                         ("false_rate", "ложных боксов в секунду"), ("false_conf", "уверенность ложных боксов"),
                         ("empty_s", "«пустой кадр», с"), ("passer_dist_m", "дистанция прохожего, м"),

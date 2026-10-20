@@ -17,7 +17,7 @@ import sys
 import threading
 
 from .recording import IGNORED_FIELDS
-from .server import MODES, ServerConfig, make_server
+from .server import MODES, ServerConfig, make_server, parse_effort_map
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -52,6 +52,11 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--tool-tokens", choices=("cookbook", "json"), default="cookbook")
     p.add_argument("--calib", default="0,1", help="калибровка prompt_tokens = a + b·оценка: 'a,b'")
     p.add_argument("--reasoning-tokens", type=int, default=0, help="скрытые reasoning-токены на вызов")
+    p.add_argument("--reasoning-by-effort", default="",
+                   help="reasoning-токены по reasoning_effort запроса: 'none=0,minimal=0,low=100,medium=400' "
+                        "(пусто — всегда --reasoning-tokens)")
+    p.add_argument("--reasoning-default-effort", default="medium",
+                   help="уровень запроса без reasoning_effort (умолчание провайдера; у gpt-5-mini — medium)")
     p.add_argument("--summary-tokens", type=int, default=400,
                    help="длина сводки оракула на запрос purpose=summary, токенов (summ_len модели D_artifacts)")
     p.add_argument("--pad-profile", choices=("targeted", "legacy"), default="targeted",
@@ -72,6 +77,7 @@ def config_from_args(a: argparse.Namespace) -> ServerConfig:
         parallel_calls=not a.sequential_calls, honor_k=not a.ignore_k, replay_miss=a.replay_miss,
         tokenizer=a.tokenizer,
         tool_tokens=a.tool_tokens, calib=(ca, cb), reasoning_tokens=a.reasoning_tokens, clock=a.clock,
+        reasoning_by_effort=parse_effort_map(a.reasoning_by_effort), reasoning_default_effort=a.reasoning_default_effort,
         summary_tokens=a.summary_tokens, pad_profile=a.pad_profile,
         tls_cert=a.tls_cert, tls_key=a.tls_key,
         hash_ignore=tuple(x for x in a.hash_ignore.split(",") if x), verbose=a.verbose)

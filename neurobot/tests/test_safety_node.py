@@ -7,8 +7,10 @@ release_dir), стоп агента (ноль сразу, без защёлки)
 
 Нужен rclpy (ВМ sim, Jazzy; на роботе — Foxy): без него тесты пропускаются. Тестовый узел подаёт датчики, как у
 двойника: скан URG с блоком NaN RS3, одометрию (повторяет /cmd_vel), IMU, глубину 424×240 (ровный пол,
-трассировщик test_safety_parts), /tf_static; выход twist_mux повторяет /cmd_vel. Домен DDS — NEUROBOT_TEST_DOMAIN
-(по умолчанию 47). Времена — ориентир, не результат.
+трассировщик test_safety_parts), /tf_static; выход twist_mux повторяет /cmd_vel. У скана и глубины — штамп и шум
+в 1 мм, как у настоящих датчиков: побайтно одинаковые сообщения safety_gate считает застывшими (H7); застывший
+и вставший драйвер — Harness.freeze. Домен DDS — NEUROBOT_TEST_DOMAIN (по умолчанию 47). Времена — ориентир, не
+результат.
 """
 from __future__ import annotations
 
@@ -32,6 +34,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from test_safety_parts import CAM, CAMERA, OPTICAL_Q, render  # noqa: E402
 
 SPOOF = ROOT / "neurobot" / "sim" / "suites" / "scan_spoof.py"
+LATE_S = 1.5  # с: вставший драйвер лидара отдаёт старый скан через столько (больше JUMP_S inputs.py)
 
 try:
     import rclpy
@@ -90,16 +93,31 @@ def tf_static() -> "TFMessage":
     return TFMessage(transforms=out)
 
 
+def noisy_scan(template: "LaserScan", stamp, n: int) -> "LaserScan":
+    """Копия скана со штампом и шумом 1 мм по номеру n: у URG одинаковых сканов подряд не бывает (H7)."""
+    msg = LaserScan()
+    msg.header.frame_id, msg.header.stamp = template.header.frame_id, stamp
+    msg.angle_min, msg.angle_max, msg.angle_increment = template.angle_min, template.angle_max, template.angle_increment
+    msg.range_min, msg.range_max = template.range_min, template.range_max
+    msg.ranges = [r + 0.001 * (n % 3) for r in template.ranges]
+    return msg
+
+
 def depth_msgs():
+    """camera_info и три кадра глубины с шумом 0, 1 и 2 мм (H7: одинаковые кадры подряд — застывший драйвер)."""
     info = CameraInfo()
     info.header.frame_id = "camera_depth_optical_frame"
     info.width, info.height = CAMERA.width, CAMERA.height
     info.k = [CAMERA.fx, 0.0, CAMERA.cx, 0.0, CAMERA.fy, CAMERA.cy, 0.0, 0.0, 1.0]
-    img = Image()
-    img.header.frame_id = info.header.frame_id
-    img.width, img.height, img.encoding, img.step = CAMERA.width, CAMERA.height, "16UC1", CAMERA.width * 2
-    img.data = render().tobytes()
-    return info, img
+    floor = render()
+    images = []
+    for noise in range(3):
+        img = Image()
+        img.header.frame_id = info.header.frame_id
+        img.width, img.height, img.encoding, img.step = CAMERA.width, CAMERA.height, "16UC1", CAMERA.width * 2
+        img.data = (floor + (floor > 0) * noise).astype("<u2").tobytes()
+        images.append(img)
+    return info, images
 
 
 class Harness:
@@ -142,8 +160,14 @@ class Harness:
             ("/scan", LaserScan), ("/odom", Odometry), ("/imu/data", Imu), ("/camera/imu", Imu),
             ("/camera/depth/camera_info", CameraInfo), ("/camera/depth/image_rect_raw", Image))}
         n.create_publisher(TFMessage, "/tf_static", latched).publish(tf_static())
-        self.info, self.image = depth_msgs()
+        self.info, self.images = depth_msgs()
         self.scan = scan_msg()
+        # "scan" — тот же скан с тем же штампом; "depth" — те же данные глубины с новыми штампами; "late" — драйвер
+        # лидара встал: скан, снятый в начале остановки, приходит один раз через LATE_S (late_sent — когда)
+        self.freeze = None
+        self._last_scan = None
+        self._late = None
+        self.late_sent = None
         self.executor = SingleThreadedExecutor()
         self.executor.add_node(n)
         self.stop = threading.Event()
@@ -190,10 +214,21 @@ class Harness:
                     odom.twist.twist.linear.x, odom.twist.twist.angular.z = v, w
                     self.pubs["/odom"].publish(odom)
                 if k % 10 == 0:
-                    self.scan.header.stamp = stamp
-                    self.pubs["/scan"].publish(self.scan)
+                    n = k // 10
+                    if self.freeze == "late":
+                        if self._late is None:
+                            self._late = (time.monotonic(), noisy_scan(self.scan, stamp, n))
+                        elif self.late_sent is None and time.monotonic() - self._late[0] >= LATE_S:
+                            self.pubs["/scan"].publish(self._late[1])
+                            self.late_sent = time.monotonic()
+                    else:
+                        if self.freeze != "scan" or self._last_scan is None:
+                            self._last_scan = noisy_scan(self.scan, stamp, n)
+                        self.pubs["/scan"].publish(self._last_scan)
                     self.pubs["/camera/depth/camera_info"].publish(self.info)
-                    self.pubs["/camera/depth/image_rect_raw"].publish(self.image)
+                    image = self.images[0 if self.freeze == "depth" else n % 3]
+                    image.header.stamp = stamp
+                    self.pubs["/camera/depth/image_rect_raw"].publish(image)
             if self.req is not None and k % 5 == 0:
                 msg = Twist()
                 msg.linear.x, msg.angular.z = map(float, self.req)
@@ -490,9 +525,57 @@ class SafetyProcess(unittest.TestCase):
         h.req = (0.0, 0.0)
         self.assertIsNotNone(h.wait(h.state, lambda s: s["state"] in ("ok", "slow"), 5.0, time.monotonic()))
 
+    def test_frozen_inputs_stop(self):
+        # H7: застывший драйвер лидара шлёт тот же скан с тем же штампом; у глубины — те же данные с новыми штампами
+        h = self.start(req=(0.0, 0.0))
+        self.armed(h)
+        for what, code in (("scan", "stale_scan"), ("depth", "stale_depth")):
+            h.req = (0.1, 0.0)
+            self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] > 0.05, 3.0, time.monotonic()), what)
+            t = time.monotonic()
+            h.freeze = what
+            stop = h.wait(h.state, lambda s: any(r.startswith(code) and "frozen" in r for r in s["reasons"]), 3.0, t)
+            self.assertIsNotNone(stop, (what, h.state[-1][1]["reasons"]))
+            self.assertIsNotNone(h.wait(h.cmd, lambda c: c[0] == 0.0, 0.5, stop[0]), what)
+            h.freeze = None
+            h.req = (0.0, 0.0)
+            self.assertIsNotNone(h.wait(h.state, lambda s: s["state"] in ("ok", "slow"), 5.0, time.monotonic()), what)
+        timing = h.wait(h.state, lambda s: s["timing"].get("depth", {}).get("frozen"), 15.0)
+        self.assertIsNotNone(timing)
+        for name in ("scan", "depth"):
+            got = timing[1]["timing"][name]
+            self.assertGreater(got["frozen"], 0, name)
+            self.assertEqual(len(got["lag_ms"]), 3, name)
+            self.assertLess(got["lag_ms"][1], 300.0, name)  # p95 задержки по штампу в тестовом узле
+            self.assertEqual(len(got["callback_ms"]), 3, name)
+
+    def test_late_scan_is_not_fresh(self):
+        # H7: драйвер лидара встал и через LATE_S отдал скан, снятый в начале остановки, — он старый: вход остаётся
+        # устаревшим (до правки ревью задержка больше 1 с считалась скачком часов, и такой скан был свежим)
+        h = self.start(req=(0.0, 0.0))
+        self.armed(h)
+        h.freeze = "late"
+        self.assertIsNotNone(h.wait(h.state, lambda s: any(r.startswith("stale_scan") for r in s["reasons"]), 3.0,
+                                    time.monotonic()))
+        deadline = time.monotonic() + LATE_S + 2.0
+        while h.late_sent is None and time.monotonic() < deadline:
+            time.sleep(0.01)
+        self.assertIsNotNone(h.late_sent)
+        time.sleep(0.6)  # дольше scan_timeout: скан, принятый за свежий, успел бы снять stale_scan
+        with h.lock:
+            fresh = [s["state"] for t, s in h.state
+                     if t >= h.late_sent and not any(r.startswith("stale_scan") for r in s["reasons"])]
+        self.assertEqual(fresh, [])
+        h.freeze = None
+        timing = h.wait(h.state, lambda s: (s["timing"].get("scan", {}).get("lag_ms") or [0, 0, 0])[2] >= 1000.0,
+                        15.0, h.late_sent)
+        self.assertIsNotNone(timing)
+        self.assertEqual(timing[1]["timing"]["scan"]["clock_resets"], 0)
+
     def test_bad_parameters_exit_2(self):
         for args, word in ((("-p", "max_speed:='0.25'"), "max_speed"), (("-p", "depth_stale:=stop"), "depth_stale"),
-                           (("-p", "mask_scans:=2.5"), "mask_scans"), (("-p", "reverse_speed:=0.5"), "reverse_speed")):
+                           (("-p", "mask_scans:=2.5"), "mask_scans"), (("-p", "reverse_speed:=0.5"), "reverse_speed"),
+                           (("-p", "frozen_n:=1"), "frozen_n")):
             h = Harness(args, sensors=False)
             self.addCleanup(h.close)
             self.assertEqual(h.proc.wait(20), 2, args)

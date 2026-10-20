@@ -52,6 +52,8 @@ kill -TERM <pid>
 | `--tool-tokens` | cookbook | счёт токенов описаний инструментов: `cookbook` или `json` |
 | `--calib a,b` | `0,1` | калибровка `prompt_tokens = a + b·оценка` (решение 6 концепции, по данным E0-P) |
 | `--reasoning-tokens` | 0 | скрытые reasoning-токены на вызов (gpt-5-*: ≈400 по допущению §14 концепции) |
+| `--reasoning-by-effort` | `""` | reasoning-токены по `reasoning_effort` запроса (или `reasoning.effort`), например `none=0,minimal=0,low=100,medium=400`; уровень, которого нет в таблице, — `--reasoning-tokens`; пусто — всегда `--reasoning-tokens` (прежнее поведение) |
+| `--reasoning-default-effort` | medium | уровень запроса без `reasoning_effort` — умолчание провайдера (у gpt-5-mini — `medium`) |
 | `--tls-cert/--tls-key` | — | HTTPS |
 
 ## Эндпойнты
@@ -149,6 +151,16 @@ kill -TERM <pid>
 не записывается и жизнь записи не продлевается. Запись живёт `--cache-ttl` секунд без обращений, попадание
 продлевает её. Время — из заголовка часов запроса (см. `--clock`).
 
+Профили провайдера задаются флагами. «До GPT-5.6» — `--cache-ttl 300` (in-memory, 5–10 мин) и без надбавки
+за запись. «GPT-5.6+ и GPT-6» — `--cache-ttl 1800` (кэш ≥ 30 мин), а надбавку 1,25× за запись считает
+`bench/costmodel` (`call_cost_rub(..., cache_write=True)`): mock-llm пишет обычный `usage`, записанные
+токены из него выводятся.
+
+`completion_tokens_details.reasoning_tokens` — `--reasoning-tokens` или строка `--reasoning-by-effort` для
+уровня запроса; они же прибавляются к `completion_tokens`, как у провайдера. Числа в таблице — допущения
+(R = 400 для `medium` — концепция §14), пока проба E0-P не даст медианы по уровням. В журнал при заданной
+таблице пишется `reasoning{effort, tokens}`, в `/control/state` — `reasoning{tokens, by_effort, default_effort}`.
+
 ## Журнал
 
 JSONL, строка на запрос (`type: "llm"`) или управляющее действие (`type: "control"`); `seq` монотонен. Поля
@@ -168,7 +180,7 @@ prompt_cache_retention, service_tier, stream_options` (`--hash-ignore`). Пов�
 ## Тесты
 
 ```bash
-.venv/bin/python -m pytest bench/tests/test_mockllm.py bench/tests/test_mockllm_server.py -q
+.venv/bin/python -m pytest bench/tests/test_mockllm.py bench/tests/test_mockllm_server.py bench/mockllm/tests -q
 ```
 `test_mockllm.py` — токены по формулам Cookbook, правила кэша (порог 1024 по промпту провайдера, шаг 128,
 TTL, продление только попаданием, порядок ключей инструментов), оракул во всех ветвях (сводка не трогает
@@ -176,6 +188,8 @@ TTL, продление только попаданием, порядок клю
 `test_mockllm_server.py` — HTTP, виртуальный TTL, контракт имён заголовков с `turn.go`, `clock_source` и
 предупреждение без заголовка часов, воспроизводимость двух прогонов после `reset`, record через второй
 экземпляр mock-llm → replay байт в байт, недоступный upstream, процесс CLI с SIGTERM.
+`bench/mockllm/tests/test_reasoning_effort.py` — reasoning-токены по уровню запроса, умолчание провайдера,
+прежнее поведение без таблицы, разбор и проверка флагов.
 
 ## Ограничения
 

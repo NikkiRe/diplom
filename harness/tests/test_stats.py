@@ -543,5 +543,158 @@ class BlockBootstrapTest(unittest.TestCase):
             stats.block_bootstrap_ratio([1.0, 2.0], [1.0])
 
 
+class ZeroClaimTest(unittest.TestCase):
+    """«0 из n» и «0 событий за время» — верхние границы (PROTOCOL; Hanley & Lippman-Hand 1983)."""
+
+    def test_rule_of_three(self):
+        # K6: 30 из 30 ≤ 100 мс — доля превышений до 9,5 %; при большом n граница ≈ 3/n
+        self.assertAlmostEqual(stats.zero_upper(30), 1 - 0.05 ** (1 / 30), places=15)
+        self.assertAlmostEqual(stats.zero_upper(30), 0.0950, places=4)
+        self.assertAlmostEqual(stats.zero_upper(3000) * 3000, 3.0, delta=0.01)
+        # односторонняя 95 % — это верх двустороннего 90 % Клоппера–Пирсона при k = 0
+        self.assertAlmostEqual(stats.zero_upper(28), stats.clopper_pearson(0, 28, conf=0.90)[1], places=9)
+        with self.assertRaises(ValueError):
+            stats.zero_upper(0)
+
+    def test_poisson_known_values(self):
+        self.assertAlmostEqual(stats.poisson_ci(0, sided="upper")[1], -math.log(0.05), places=9)
+        self.assertEqual(stats.poisson_ci(0)[0], 0.0)
+        self.assertAlmostEqual(stats.poisson_ci(0)[1], -math.log(0.025), places=9)
+        # «0 касаний» за 2,14 ч — до 1,4 касания в час (O7 P3)
+        self.assertAlmostEqual(stats.poisson_ci(0, sided="upper")[1] / 2.14, 1.4, delta=0.01)
+
+    @unittest.skipIf(_sps is None, "scipy недоступен")
+    def test_poisson_matches_chi2(self):
+        for k in (1, 2, 5, 23, 80):
+            lo, hi = stats.poisson_ci(k)
+            self.assertAlmostEqual(lo, float(_sps.chi2.ppf(0.025, 2 * k)) / 2, places=7)
+            self.assertAlmostEqual(hi, float(_sps.chi2.ppf(0.975, 2 * k + 2)) / 2, places=7)
+            self.assertAlmostEqual(stats.poisson_ci(k, sided="upper")[1], float(_sps.chi2.ppf(0.95, 2 * k + 2)) / 2,
+                                   places=7)
+
+
+class QuantileCITest(unittest.TestCase):
+    def test_sides_and_minimum_n(self):
+        # O7 P3: n = 63 — у p95 есть только нижняя граница X(56); n = 200 — [X(184); X(197)]
+        r = stats.quantile_ci(range(1, 64), 0.95)
+        self.assertEqual((r["lo_rank"], r["hi_rank"], r["lo"], r["hi"]), (56, None, 56.0, None))
+        r = stats.quantile_ci(range(1, 201), 0.95)
+        self.assertEqual((r["lo_rank"], r["hi_rank"]), (184, 197))
+        self.assertEqual((stats.quantile_ci_min_n(0.5), stats.quantile_ci_min_n(0.95), stats.quantile_ci_min_n(0.99)),
+                         (6, 72, 368))
+        self.assertIsNotNone(stats.quantile_ci(range(72), 0.95)["hi"])
+        self.assertIsNone(stats.quantile_ci(range(71), 0.95)["hi"])
+        self.assertEqual((stats.zero_exceed_min_n(0.95), stats.zero_exceed_min_n(0.99)), (59, 299))
+        self.assertEqual(stats.quantile_ci([], 0.5)["n"], 0)
+
+    def test_order_does_not_matter_and_coverage(self):
+        rng = np.random.default_rng(41)
+        x = rng.exponential(size=100)
+        self.assertEqual(stats.quantile_ci(x, 0.5), stats.quantile_ci(sorted(x), 0.5))
+        true = -math.log(0.05)                      # p95 экспоненциального распределения
+        hits = 0
+        for _ in range(400):
+            r = stats.quantile_ci(rng.exponential(size=100), 0.95)
+            hits += r["lo"] <= true <= r["hi"]
+        self.assertGreaterEqual(hits / 400, 0.93)   # ранговый ДИ консервативен: ≥ conf с точностью Монте-Карло
+
+
+class PairedRatioTTest(unittest.TestCase):
+    def test_known_value(self):
+        base = [1.0, 1.0, 1.0]
+        treat = [math.exp(0.1), math.exp(0.2), math.exp(0.3)]
+        r = stats.paired_ratio_t_ci(base, treat)
+        half = stats.t_quantile(0.975, 2) * 0.1 / math.sqrt(3)
+        self.assertAlmostEqual(r["estimate"], math.exp(0.2), places=12)
+        self.assertAlmostEqual(r["ci_low"], math.exp(0.2 - half), places=12)
+        self.assertAlmostEqual(r["ci_high"], math.exp(0.2 + half), places=12)
+        with self.assertRaises(ValueError):
+            stats.paired_ratio_t_ci([1.0], [2.0])
+        with self.assertRaises(ValueError):
+            stats.paired_ratio_t_ci([1.0, 0.0], [1.0, 1.0])
+
+    def test_five_blocks_t_covers_and_percentile_bootstrap_does_not(self):
+        """O7 P10: при 5 блоках перцентильный бутстреп недопокрывает, t-интервал логарифма — нет."""
+        rng = np.random.default_rng(42)
+        hits = 0
+        for _ in range(2000):
+            base = rng.lognormal(0.0, 0.5, 5)
+            r = stats.paired_ratio_t_ci(base, base * rng.lognormal(0.0, 0.2, 5))    # истинное отношение — 1
+            hits += r["ci_low"] <= 1.0 <= r["ci_high"]
+        self.assertAlmostEqual(hits / 2000, 0.95, delta=0.015)
+        hits = 0
+        for k in range(300):
+            base = rng.lognormal(0.0, 0.5, 5)
+            b = stats.paired_bootstrap_ratio(base, base * rng.lognormal(0.0, 0.2, 5), stat="mean", n_boot=1000, seed=k)
+            hits += b["ci_low"] <= 1.0 <= b["ci_high"]
+        self.assertLess(hits / 300, 0.88)
+
+
+class SeasonalSenTest(unittest.TestCase):
+    """Наклон по сегментам жизни процесса (H14): ступени рестартов не входят в пары."""
+
+    def test_hand_computed(self):
+        # сегмент A: наклоны 1, 1, 1; сегмент B: 3 → медиана 1; Var S = 3·2·11/18 + 2·1·9/18
+        r = stats.sen_slope_seasonal([0, 1, 2, 3, 4], [0, 1, 2, 10, 13], ["a", "a", "a", "b", "b"])
+        self.assertEqual((r["slope"], r["n_slopes"], r["n_groups"]), (1.0, 4, 2))
+        self.assertEqual(r["intercepts"], [0.0, 11.5 - 1.0 * 3.5])
+
+    def test_one_group_equals_sen(self):
+        rng = np.random.default_rng(43)
+        t = np.arange(40.0)
+        y = 0.3 * t + rng.normal(size=40)
+        a = stats.sen_slope(t, y, conf=0.9)
+        b = stats.sen_slope_seasonal(t, y, [0] * 40, conf=0.9)
+        self.assertEqual((a["slope"], a["ci_low"], a["ci_high"]), (b["slope"], b["ci_low"], b["ci_high"]))
+
+    def test_restart_steps_do_not_bias_slope(self):
+        rng = np.random.default_rng(44)
+        t = np.arange(360) * 10 / 3600                       # 1 ч, шаг 10 с
+        seg = np.repeat([0, 1, 2, 3], 90)
+        flat = 600 + 40 * seg + rng.normal(0, 1.0, t.size)   # рестарты поднимают уровень, внутри — ровно
+        self.assertGreater(stats.sen_slope(t, flat)["slope"], 100)
+        r = stats.sen_slope_seasonal(t, flat, seg)
+        self.assertLess(abs(r["slope"]), 3.0)
+
+    def test_batch_means_by_segments_tost(self):
+        rng = np.random.default_rng(45)
+        t = np.arange(2880) * 10 / 3600                      # 8 ч
+        seg = np.repeat(np.arange(4), 720)
+        start = t[seg * 720]
+        # утечка 3 МиБ/ч внутри жизни процесса, рестарт возвращает уровень (омоложение) — общий наклон ≈ 0
+        leak = 600 + 3.0 * (t - start) + rng.normal(0, 0.5, t.size)
+        plain = stats.tost_slope(t, leak, delta=1.0)
+        by_seg = stats.tost_slope(t, leak, delta=1.0, segments=seg)
+        self.assertLess(abs(plain["slope"]), 1.0)
+        self.assertEqual(by_seg["decision"], "not_equivalent")
+        self.assertAlmostEqual(by_seg["slope"], 3.0, delta=0.3)
+        self.assertEqual((by_seg["ci"]["n_segments"], by_seg["ci"]["n_segments_used"]), (4, 4))
+        # ступени вверх при ровной памяти внутри — без сегментов «утечка», по сегментам — эквивалентно нулю
+        steps = 600 + 30 * seg + rng.normal(0, 0.5, t.size)
+        self.assertEqual(stats.tost_slope(t, steps, delta=1.0)["decision"], "not_equivalent")
+        self.assertEqual(stats.tost_slope(t, steps, delta=1.0, segments=seg)["decision"], "equivalent")
+        # короткий сегмент (меньше двух батчей) отбрасывается
+        seg2 = np.where(np.arange(t.size) < 20, -1, seg)
+        r = stats.sen_slope_batch_means(t, steps, segments=seg2)
+        self.assertEqual((r["n_segments"], r["n_segments_used"]), (5, 4))
+        with self.assertRaises(ValueError):
+            stats.sen_slope_batch_means(t[:30], steps[:30], segments=np.arange(30))
+
+
+class MserTest(unittest.TestCase):
+    def test_warmup_noise_and_trend(self):
+        rng = np.random.default_rng(46)
+        n = 300
+        noise = rng.normal(0, 1.0, n)
+        warm = 100 - 60 * np.exp(-np.arange(n) / 8.0) + noise   # прогрев ≈ 40 точек
+        r = stats.mser_truncation(warm)
+        self.assertTrue(20 <= r["cut"] <= 60, r)
+        self.assertFalse(r["at_limit"])
+        self.assertLessEqual(stats.mser_truncation(100 + noise)["cut"], 60)
+        self.assertTrue(stats.mser_truncation(100 + 0.5 * np.arange(n) + noise)["at_limit"])
+        self.assertEqual(stats.mser_truncation(np.ones(12)), {"cut": 0, "at_limit": False, "short": True,
+                                                              "batches": 2})
+
+
 if __name__ == "__main__":
     unittest.main()

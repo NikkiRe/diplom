@@ -3,9 +3,10 @@
 Входы: /neurobot/cmd_vel_req (Twist, исполнитель), /neurobot/estop (String JSON, контракт deploy), /neurobot/stop_now
 (String JSON, стоп агента: ноль сразу, без защёлки), /scan, /odom, /camera/depth/image_rect_raw с
 /camera/depth/camera_info, /imu/data (ориентация), /camera/imu (ускорение), /tf_static (позы датчиков), выход twist_mux
-(параметр base_cmd_topic). Датчики — с QoS сенсоров: best effort совместим и с reliable-издателем. Выходы: /cmd_vel
-(Twist | TwistStamped) и /neurobot/safety_state (String JSON, state_hz и при изменении). Имена тем меняются ремапом
-(--ros-args -r).
+(параметр base_cmd_topic). Датчики — best effort (совместим и с reliable-издателем); скан, кадры глубины и команды —
+KEEP_LAST 1, IMU — 5, события — 10. Скан и глубина свежи по header.stamp, застывшие не принимаются (inputs.py, H7).
+Выходы: /cmd_vel (Twist | TwistStamped) и /neurobot/safety_state (String JSON, state_hz и при изменении). Имена тем
+меняются ремапом (--ros-args -r). Колбэки — постоянный исполнитель в своём потоке (executor/spinner.py, H6).
 
 Публикация /cmd_vel: на тике — каждая ненулевая команда, нули в покое — через тик (10 Гц при 20); при смене
 команды — сразу из колбэка запроса, скана, глубины, защёлки или стопа агента. Явный ноль — при старте (до READY), на
@@ -27,6 +28,7 @@ import threading
 import time
 import uuid
 
+import numpy as np
 import rclpy
 from geometry_msgs.msg import Twist, TwistStamped
 from nav_msgs.msg import Odometry
@@ -38,11 +40,13 @@ from std_msgs.msg import String
 from tf2_msgs.msg import TFMessage
 
 from neurobot.executor.sd_notify import Notifier
+from neurobot.executor.spinner import Spinner
 
 from .config import ConfigError, Params, make
 from .depth import Camera, Coverage, FreeSpace, Sampler, classify, image_array
 from .gate import Decision, Gate
 from .geometry import Pose, StaticTf, yaw_of
+from .inputs import StampWatch, digest, stamp_s
 from .latch import Latch, parse, parse_stop, read_release
 from .lidar import ScanMeta
 from .monitors import tilt_deg, tilt_from_accel
@@ -52,6 +56,8 @@ log = logging.getLogger("safety_gate")
 EXIT_CONFIG = 2
 NODE = "safety_gate"
 CMD_VEL = "/cmd_vel"
+TIMING_S = 10.0       # ряды замера входов (inputs.StampWatch) — в safety_state раз в столько секунд
+TIMING_LOG_S = 600.0  # … и в журнал
 
 
 def _r(x: float, nd: int = 3):
@@ -60,7 +66,8 @@ def _r(x: float, nd: int = 3):
 
 class SafetyGate(Node):
     def __init__(self):
-        super().__init__(NODE)
+        # параметры — только из --ros-args -p: сервисы параметров (6 в наборе ожидания) не нужны (O3 п. 7)
+        super().__init__(NODE, start_parameter_services=False)
         defaults = Params()
         try:
             values = {name: self.declare_parameter(name, list(d) if isinstance(d, tuple) else d).value
@@ -92,34 +99,42 @@ class SafetyGate(Node):
         self._state_t = -math.inf
         self._stamped = p.cmd_vel_type == "TwistStamped"
         self._release_error = ""
+        self._watch = {name: StampWatch(name, p.frozen_n) for name in ("scan", "depth")}
+        self._timing = {}
+        self._timing_logged = time.monotonic()
         self.notifier = Notifier()
 
-        self._pub = self.create_publisher(TwistStamped if self._stamped else Twist, CMD_VEL, 10)
+        # Потоки и команды — KEEP_LAST 1 (H7, O3 п. 5): отставший колбэк берёт последний скан, кадр или команду, а не
+        # очередь (при глубине 5 — сканы до 0,5 с давности). IMU — 5: удару нужны все отсчёты; события — 10.
+        latest = QoSProfile(depth=1, reliability=ReliabilityPolicy.BEST_EFFORT)
+        command = QoSProfile(depth=1, reliability=ReliabilityPolicy.RELIABLE)
+        sensors = qos_profile_sensor_data
+        self._pub = self.create_publisher(TwistStamped if self._stamped else Twist, CMD_VEL, command)
         self._state_pub = self.create_publisher(String, "/neurobot/safety_state", 10)
         self._agent_pub = self.create_publisher(String, p.agent_state_topic, 10) if p.agent_state_topic else None
-        sensors = qos_profile_sensor_data
         latched = QoSProfile(depth=100, durability=DurabilityPolicy.TRANSIENT_LOCAL,
                              reliability=ReliabilityPolicy.RELIABLE)
         self.create_subscription(TFMessage, "/tf_static", self._on_tf_static, latched)
-        self.create_subscription(Twist, "/neurobot/cmd_vel_req", self._on_request, 10)
+        self.create_subscription(Twist, "/neurobot/cmd_vel_req", self._on_request, command)
         # volatile: совместима с любым издателем — и с transient_local CLI, и с обычным (engage от кого угодно)
         self.create_subscription(String, "/neurobot/estop", self._on_estop, 10)
         # стоп агента: MCP-сервер через rosbridge (тема открыта агенту — она умеет только остановить)
         self.create_subscription(String, "/neurobot/stop_now", self._on_stop_now, 10)
-        self._scan_sub = self.create_subscription(LaserScan, "/scan", self._on_scan, sensors)
+        self._scan_sub = self.create_subscription(LaserScan, "/scan", self._on_scan, latest)
         self.create_subscription(Odometry, "/odom", self._on_odom, sensors)
         self.create_subscription(CameraInfo, "/camera/depth/camera_info", self._on_camera_info, sensors)
-        self.create_subscription(Image, "/camera/depth/image_rect_raw", self._on_depth, sensors)
+        self.create_subscription(Image, "/camera/depth/image_rect_raw", self._on_depth, latest)
         self.create_subscription(Imu, "/imu/data", self._on_imu, sensors)
         self.create_subscription(Imu, "/camera/imu", self._on_accel, sensors)
         if p.base_cmd_topic:
-            self.create_subscription(Twist, p.base_cmd_topic, self._on_mux, sensors)
+            self.create_subscription(Twist, p.base_cmd_topic, self._on_mux, latest)
 
         self._publish(0.0, 0.0)
         self.notifier.ready()
         self.create_timer(1.0 / p.rate_hz, self._tick)
         self.create_timer(1.0, self._on_graph)
         self.create_timer(0.5, self._on_release_dir)
+        self.create_timer(TIMING_S, self._on_timing)
         log.info("safety_gate запущен: %s", json.dumps(p._asdict(), ensure_ascii=False))
 
     # ---- входы
@@ -188,14 +203,21 @@ class SafetyGate(Node):
 
     def _on_scan(self, msg: LaserScan) -> None:
         now = time.monotonic()
+        watch = self._watch["scan"]
 
         def take():
+            why = (watch.stamp(now, stamp_s(msg.header.stamp), self._now_ros())
+                   or watch.content(digest(np.asarray(msg.ranges, dtype=np.float32))))
+            if why:
+                raise ValueError(why)
             meta = ScanMeta(msg.angle_min, msg.angle_increment, len(msg.ranges), msg.range_min, msg.range_max)
-            why = self.gate.scan(now, msg.ranges, meta, self._pose(msg.header.frame_id))
+            # скан снят на lag раньше прихода (свежесть по штампу, inputs.py)
+            why = self.gate.scan(now - watch.lag, msg.ranges, meta, self._pose(msg.header.frame_id))
             if why:
                 raise ValueError(why)
         if self._sensor("scan", take):
             self._step(now)
+        watch.callbacks.append(time.monotonic() - now)
 
     def _on_odom(self, msg: Odometry) -> None:
         now = time.monotonic()
@@ -220,8 +242,12 @@ class SafetyGate(Node):
         if now - self._depth_done < 1.0 / self.p.depth_hz:
             return
         self._depth_done = now
+        watch = self._watch["depth"]
 
         def take():
+            why = watch.stamp(now, stamp_s(msg.header.stamp), self._now_ros())
+            if why:
+                raise ValueError(why)
             cam = self._camera
             if self._sampler is None:
                 raise ValueError("нет годной /camera/depth/camera_info")
@@ -233,11 +259,15 @@ class SafetyGate(Node):
             if c is None or c[0] is not self._sampler or c[1] is not pose:
                 c = self._coverage = (self._sampler, pose, Coverage(self._sampler, pose, self.p))
             depth = self._sampler.depths(image, scale)
+            why = watch.content(digest(depth))
+            if why:
+                raise ValueError(why)
             points, valid = self._sampler.points(depth)
-            self.gate.depth(now, classify(pose.apply(points), pose.pos, self.p, c[2](valid)),
+            self.gate.depth(now - watch.lag, classify(pose.apply(points), pose.pos, self.p, c[2](valid)),
                             FreeSpace(self._sampler, pose, depth))
         if self._sensor("depth", take):
             self._step(now)
+        watch.callbacks.append(time.monotonic() - now)
 
     def _on_imu(self, msg: Imu) -> None:
         now = time.monotonic()
@@ -297,6 +327,17 @@ class SafetyGate(Node):
             log.warning("снятие защёлки человеком (%s, %s): %s", req.id, req.reason or "без причины", outcome)
         self._step(time.monotonic())
 
+    def _now_ros(self) -> float:
+        return self.get_clock().now().nanoseconds * 1e-9
+
+    def _on_timing(self) -> None:
+        """Ряды замера входов (свежесть по штампу, застывание, длительность колбэков) — в safety_state и журнал."""
+        self._timing = {name: w.summary() for name, w in self._watch.items()}
+        now = time.monotonic()
+        if now - self._timing_logged >= TIMING_LOG_S:
+            self._timing_logged = now
+            log.info("входы, мс (p50, p95, max): %s", json.dumps(self._timing, ensure_ascii=False))
+
     def _after_latch(self, now: float) -> None:
         """Защёлка встала в колбэке датчика — ноль сразу, не дожидаясь тика."""
         if self.latch.engaged and self._last != (0.0, 0.0):
@@ -351,6 +392,7 @@ class SafetyGate(Node):
             "tilt_deg": None if g.tilt is None else round(g.tilt, 1), "lidar_mask_deg": g.mask_deg,
             "estop": {"engaged": self.latch.engaged, "since": self.latch.since, "reasons": list(self.latch.reasons)},
             "counters": dict(g.counters, ticks=self._ticks, published=self._published),
+            "timing": self._timing,
         }
         msg = String(data=json.dumps(doc, ensure_ascii=False))
         self._state_pub.publish(msg)
@@ -364,7 +406,8 @@ class SafetyGate(Node):
             self._publish(0.0, 0.0)
             # запас на доставку нуля до удаления писателя: не все RMW ждут подтверждений [гипотеза]
             time.sleep(0.1)
-        log.info("safety_gate остановлен, ноль опубликован; счётчики %s", json.dumps(self.gate.counters))
+        log.info("safety_gate остановлен, ноль опубликован; счётчики %s; входы %s", json.dumps(self.gate.counters),
+                 json.dumps({name: w.summary() for name, w in self._watch.items()}, ensure_ascii=False))
 
 
 def main(argv=None) -> int:
@@ -376,12 +419,12 @@ def main(argv=None) -> int:
     stop = threading.Event()
     for sig in (signal.SIGINT, signal.SIGTERM):
         signal.signal(sig, lambda *_: stop.set())
-    node = None
+    node = spinner = None
     code = 0
     try:
         node = SafetyGate()
-        while rclpy.ok() and not stop.is_set():
-            rclpy.spin_once(node, timeout_sec=0.1)
+        spinner = Spinner(node, stop)  # постоянный исполнитель в своём потоке (H6)
+        spinner.wait()
     except ConfigError as e:
         log.error("неверная конфигурация: %s", e)
         code = EXIT_CONFIG
@@ -389,6 +432,8 @@ def main(argv=None) -> int:
         log.exception("safety_gate упал")
         code = 1
     finally:
+        if spinner is not None:
+            spinner.close()  # колбэков больше нет — ноль ниже последний
         if node is not None:
             node.halt()
             node.destroy_node()

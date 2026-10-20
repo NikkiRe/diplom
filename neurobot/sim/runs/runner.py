@@ -4,15 +4,15 @@
   sudo python3 -m neurobot.sim.runs.runner a1-install --mockllm URL      пакет на двойнике (setup_twin.sh + правки)
   sudo python3 -m neurobot.sim.runs.runner a1-teardown
 
-run: подготовка и подъём системы → наблюдатель жестов (neurobot/sim/gestures/observer.py) и сэмплер памяти
-(neurobot/sim/budget/collect.py) → по якорю таймлайна события плана: отказы (kill -9, SIGSTOP процессов по ролям, в
-том числе узлов драйверов датчиков; отказы камеры вносят подставной pyrealsense2 у A0 и relay.py у A1 сами), реплики
-пользователя в канал pico PicoClaw → оператор:
+run: подготовка и подъём системы → наблюдатель жестов (neurobot/sim/gestures/observer.py), сэмплеры памяти
+(neurobot/sim/budget/collect.py) и файловых дескрипторов (fds.py) → по якорю таймлайна события плана: отказы (kill -9,
+SIGSTOP процессов по ролям, в том числе узлов драйверов датчиков; отказы камеры вносят подставной pyrealsense2 у A0 и
+relay.py у A1 сами), реплики пользователя в канал pico PicoClaw → оператор:
 человек, который через --operator-delay с замечает, что робот глух, процесс умер, агент не ответил, робот застрял
 или стоит на защёлке, и чинит это; каждое действие оператора — вмешательство человека (видимый перезапуск,
 PLAN §1). В --out: run.json (события, TTR, вмешательства, запросы агенту, рестарты), truth.jsonl, safety.jsonl,
 executor.jsonl (события исполнителя A1: отмена задач, отъезд из тупика), наблюдатель (events.jsonl, summary.json,
-gestures.jsonl), collect.jsonl, mockllm.jsonl, журналы. Логи — stderr.
+gestures.jsonl), collect.jsonl, fds.jsonl, mockllm.jsonl, журналы. Логи — stderr.
 """
 from __future__ import annotations
 
@@ -208,15 +208,16 @@ class Runner:
                                                   cwd=stacks.SRC)
 
     def start_collect(self) -> None:
+        """Сэмплеры памяти (collect.jsonl) и файловых дескрипторов (fds.jsonl, H14) по units.json системы."""
         units = self.stack.write_units_json()
-        logf = open(os.path.join(self.out, "logs", "collect.log"), "a")
-        self.procs["collect"] = subprocess.Popen(
-            ["python3", "-m", "neurobot.sim.budget.collect", "--units", units, "--out",
-             os.path.join(self.out, "collect.jsonl"), "--interval", str(self.collect_interval)],
-            env=self.env(), stdout=logf, stderr=logf, cwd=stacks.SRC)
+        for name, module in (("collect", "neurobot.sim.budget.collect"), ("fds", "neurobot.sim.runs.fds")):
+            logf = open(os.path.join(self.out, "logs", name + ".log"), "a")
+            self.procs[name] = subprocess.Popen(
+                ["python3", "-m", module, "--units", units, "--out", os.path.join(self.out, name + ".jsonl"),
+                 "--interval", str(self.collect_interval)], env=self.env(), stdout=logf, stderr=logf, cwd=stacks.SRC)
 
     def stop_procs(self) -> None:
-        for name in ("observer", "collect"):
+        for name in ("observer", "collect", "fds"):
             p = self.procs.get(name)
             if p and p.poll() is None:
                 p.send_signal(signal.SIGINT if name == "observer" else signal.SIGTERM)
@@ -543,12 +544,16 @@ class Runner:
                 "restarts": restarts, "operator_delay_s": self.operator_delay, "units": self.stack.units()}
 
 
-def journal_dump(units: List[str], since: float, path: str) -> None:
-    cmd = ["journalctl", "--no-pager", "-o", "short-iso-precise", "--since", "@%d" % int(since)]
+def journal_dump(units: List[str], since: float, logs: str) -> None:
+    """Журнал юнитов с начала прогона в каталог logs: journal.json (journalctl -o json — его читает
+    metrics.journal_restarts: поля UNIT, MESSAGE_ID и метки времени от версии systemd не зависят) и journal.txt
+    (текст для человека)."""
+    cmd = ["journalctl", "--no-pager", "--since", "@%d" % int(since)]
     for u in units:
         cmd += ["-u", u]
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(stacks.sh(cmd, check=False, timeout=300).stdout)
+    for name, fmt in (("journal.json", "json"), ("journal.txt", "short-iso-precise")):
+        with open(os.path.join(logs, name), "w", encoding="utf-8") as f:
+            f.write(stacks.sh(cmd + ["-o", fmt], check=False, timeout=300).stdout)
 
 
 def main(argv=None) -> int:
@@ -570,7 +575,8 @@ def main(argv=None) -> int:
                    help="venv с mcp для прокси лаборатории (A0)")
     r.add_argument("--keep", action="store_true", help="не останавливать систему в конце")
     r.add_argument("--world", default="hall", choices=sorted(stacks.WORLDS),
-                   help="мир двойника A1 (hall — зал 9 × 9 м, lab — комната 5 × 5 м); у A0 — только hall")
+                   help="мир двойника A1 (hall — зал 9 × 9 м, lab — комната 5 × 5 м, hall_m — зеркало hall для "
+                   "отложенного набора); у A0 — только hall")
     r.add_argument("--no-return", default="nan", choices=("nan", "inf"),
                    help="что лидар двойника A1 отдаёт на «нет отражения»: nan (допущение двойника) или +inf (REP 117)")
     i = sub.add_parser("a1-install", help="поставить пакет на двойник (setup_twin.sh + правки прогона)")
@@ -625,7 +631,7 @@ def main(argv=None) -> int:
                        ("faults.json", "faults.json")):
         shutil.copy(os.path.join(a.sched, name), os.path.join(a.out, dest))
     if isinstance(stack, stacks.A1):
-        journal_dump(list(stack.units().values()) + [stacks.A1.RELAY], t0, os.path.join(a.out, "logs", "journal.txt"))
+        journal_dump(list(stack.units().values()) + [stacks.A1.RELAY], t0, os.path.join(a.out, "logs"))
     if not a.keep:
         stack.stop()
     with open(os.path.join(a.out, "run.json"), "w", encoding="utf-8") as f:

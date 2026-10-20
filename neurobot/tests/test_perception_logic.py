@@ -1,4 +1,5 @@
-"""predict_live v2: эпизод жеста, END_GAP, «не распознано», сторона и программа (gesture_logic.py).
+"""predict_live v2: эпизод жеста, END_GAP, «не распознано», сторона и программа (gesture_logic.py); H10 — край
+кадра и доля обрезки, гистерезис уверенности, решение с двумя порогами отрыва (Recognizer).
 
 Без torch и rclpy, Python ≥ 3.8. Рамки — синтетические: темп детекции 8 к/с (шаг 1/8 с точен в двоичной
 записи — границы END_GAP и окна проверяются без погрешности float), кадр 640×480.
@@ -14,8 +15,8 @@ PERCEPTION = Path(__file__).resolve().parents[1] / "perception"
 if str(PERCEPTION) not in sys.path:
     sys.path.insert(0, str(PERCEPTION))
 
-from gesture_logic import (Box, EpisodeSegmenter, decide, path_length, program_for,  # noqa: E402
-                           side_of)
+from gesture_logic import (Box, EpisodeSegmenter, Recognizer, decide, path_length,  # noqa: E402
+                           program_for, side_of)
 
 W = 640
 DT = 0.125  # 8 к/с
@@ -130,9 +131,199 @@ class Segmenter(unittest.TestCase):
         self.assertEqual(run(seg, [None] * 10, t0=1.0), [])
 
     def test_invalid_params(self):
-        for kw in ({"end_gap": 0}, {"window": 0.4}, {"min_boxes": 0}, {"min_path": -1}, {"max_boxes": 2}):
+        for kw in ({"end_gap": 0}, {"window": 0.4}, {"min_boxes": 0}, {"min_path": -1}, {"max_boxes": 2},
+                   {"edge_gap": 0.3}, {"edge_gap": 8.0}, {"edges": ("up",)}, {"edge_frac": 0.5},
+                   {"start_conf": 0.35, "keep_conf": 0.5}, {"start_conf": 1.5}, {"gate": 0}):
             with self.assertRaises(ValueError, msg=str(kw)):
                 EpisodeSegmenter(W, **kw)
+
+
+def top(n: int, cx: float = 320) -> list:
+    """Рука у верхнего края (рамка обрезана кадром: y1 = 0), n кадров с ходом вправо."""
+    return [(cx + 20 * i, 0.0, cx + 20 * i + 80, 50.0) for i in range(n)]
+
+
+class EdgeAndCut(unittest.TestCase):
+    """H10 (1): рука ушла за край — ждём edge_gap; доля времени за краем — cut."""
+
+    def test_hand_left_through_top_waits_edge_gap(self):
+        seg = EpisodeSegmenter(W, edge_gap=1.0)
+        (t, ep), = run(seg, wave(8) + top(2) + [None] * 10)  # за краем 1,25 с: дольше edge_gap
+        self.assertEqual((ep.end, ep.t_end), ("edge", 1.125))
+        self.assertEqual(t - ep.t_end, 1.0)  # а не END_GAP 0,5
+        self.assertAlmostEqual(ep.cut, 1.0 / 2.125)  # ожидание за краем к времени эпизода с ним
+
+    def test_return_within_edge_gap_continues_and_counts_cut(self):
+        seg = EpisodeSegmenter(W, edge_gap=1.0)
+        (t, ep), = run(seg, wave(8) + top(2) + [None] * 6 + wave(8) + [None] * 4)  # за краем 0,875 с
+        self.assertEqual((ep.end, len(ep.boxes)), ("gap", 18))
+        self.assertAlmostEqual(ep.cut, 0.875 / (23 * DT))  # эпизод — от первой рамки до последней
+
+    def test_inside_frame_and_other_edges_keep_end_gap(self):
+        (t, ep), = run(EpisodeSegmenter(W, edge_gap=1.0), wave(10) + [None] * 10)
+        self.assertEqual((ep.end, t - ep.t_end), ("gap", 0.5))
+        right = [(560.0 + 2 * i, 200.0, 640.0, 280.0) for i in range(10)]
+        (t, ep), = run(EpisodeSegmenter(W, edge_gap=1.0), wave(4) + right + [None] * 10)  # у правого края
+        self.assertEqual(t - ep.t_end, 0.5)
+        (t, ep), = run(EpisodeSegmenter(W, edge_gap=1.0, edges=("right",)), wave(4) + right + [None] * 10)
+        self.assertEqual((ep.end, t - ep.t_end), ("edge", 1.0))
+
+    def test_off_by_default(self):
+        (t, ep), = run(EpisodeSegmenter(W), wave(8) + top(2) + [None] * 10)
+        self.assertEqual((ep.end, t - ep.t_end, ep.cut), ("gap", 0.5, 0.0))
+
+    def test_expire_waits_edge_gap(self):
+        seg = EpisodeSegmenter(W, edge_gap=1.0)
+        run(seg, wave(8) + top(2))
+        self.assertFalse(seg.expire(1.125 + 0.75))
+        self.assertTrue(seg.expire(1.125 + 1.0))
+
+
+class Hysteresis(unittest.TestCase):
+    """H10 (2): слабая рамка продолжает эпизод только у прогноза по постоянной скорости, начать и продлить его не может:
+    конец — END_GAP после последней уверенной рамки."""
+
+    def seg(self):
+        return EpisodeSegmenter(W, start_conf=0.35, keep_conf=0.1)
+
+    def test_weak_box_cannot_start(self):
+        seg = self.seg()
+        for i, box in enumerate(wave(10)):
+            self.assertIsNone(seg.update(i * DT, box, 0.2))
+        self.assertEqual(len(seg), 0)
+        self.assertIsNone(seg.update(10 * DT, hand(320, 240), 0.05))  # ниже keep_conf — вовсе не рамка
+
+    def test_weak_box_near_prediction_continues(self):
+        seg = self.seg()
+        line = [hand(100 + 40 * i, 240) for i in range(16)]
+        for i, box in enumerate(line):
+            weak = 6 <= i < 9  # провал уверенности посреди жеста короче END_GAP: слабые рамки — точки траектории
+            self.assertIsNone(seg.update(i * DT, box, 0.2 if weak else 0.8))
+        self.assertEqual(len(seg), 16)
+        self.assertEqual([b.conf for b in seg._boxes][5:10], [0.8, 0.2, 0.2, 0.2, 0.8])
+
+    def test_weak_boxes_do_not_extend_episode(self):
+        # провал уверенности дольше END_GAP: эпизод кончается, как без гистерезиса (слабых рамок детектор не дал бы)
+        line = [hand(100 + 40 * i, 240) for i in range(16)]
+        confs = [0.2 if 6 <= i < 11 else 0.8 for i in range(16)]
+        seg, plain = self.seg(), EpisodeSegmenter(W)
+        got = [(i * DT, seg.update(i * DT, box, c)) for i, (box, c) in enumerate(zip(line, confs))]
+        ref = [(i * DT, plain.update(i * DT, box if c > 0.35 else None)) for i, (box, c) in enumerate(zip(line, confs))]
+        (t, ep), = [(t, ep) for t, ep in got if ep is not None]
+        (t_ref, ep_ref), = [(t, ep) for t, ep in ref if ep is not None]
+        self.assertEqual((t, ep.end), (t_ref, "gap"))
+        self.assertEqual(t, 5 * DT + 0.5)  # END_GAP после последней уверенной рамки
+        self.assertEqual((len(ep.boxes), len(ep_ref.boxes)), (9, 6))  # слабые рамки — в траектории
+
+    def test_still_weak_box_after_gesture_ends_episode(self):
+        # ревью 20.10: после жеста на месте последней рамки стоит слабая ложная рамка (лицо, рукав, опущенная рука) —
+        # без границы эпизод не кончался 6 с и копил её точки; теперь конец — END_GAP после последней уверенной
+        seg = self.seg()
+        events = []
+        for i in range(12 + 48):  # жест 1,5 с, затем 6 с неподвижной рамки 0,15
+            box, conf = (hand(100 + 30 * i, 240), 0.8) if i < 12 else (hand(100 + 30 * 11, 240), 0.15)
+            ep = seg.update(i * DT, box, conf)
+            if ep is not None:
+                events.append((i * DT, ep))
+        (t, ep), = events
+        self.assertEqual((t, ep.end, ep.t_end <= t), (11 * DT + 0.5, "gap", True))
+        self.assertLessEqual(len(ep.boxes), 12 + int(0.5 / DT))
+        self.assertEqual(len(seg), 0)  # слабая рамка нового эпизода не начинает
+        seg = self.seg()
+        for i in range(15):
+            seg.update(i * DT, hand(100 + 30 * min(i, 11), 240), 0.8 if i < 12 else 0.15)
+        self.assertEqual(len(seg), 15)
+        self.assertFalse(seg.expire(14 * DT + 0.05))
+        self.assertTrue(seg.expire(11 * DT + 0.5))  # нет кадров — тоже от последней уверенной рамки
+
+    def test_weak_box_far_from_prediction_is_a_miss(self):
+        seg = self.seg()
+        events = []
+        for i, box in enumerate([hand(100 + 40 * i, 240) for i in range(6)] + [hand(600, 60)] * 6):
+            ep = seg.update(i * DT, box, 0.8 if i < 6 else 0.2)  # слабая рамка в другом углу кадра
+            if ep is not None:
+                events.append(ep)
+        self.assertEqual([len(ep.boxes) for ep in events], [6])
+
+    def test_off_by_default(self):
+        seg = EpisodeSegmenter(W)
+        seg.update(0.0, hand(320, 240), 0.01)
+        self.assertEqual(len(seg), 1)  # порог — у детектора (model.conf), сегментатор берёт всё
+
+
+class Classifier:
+    """Подставная SNN: суммы спайков по классам и счётчик вызовов."""
+
+    def __init__(self, counts):
+        self.counts, self.calls = counts, 0
+
+    def __call__(self, boxes):
+        self.calls += 1
+        return self.counts
+
+
+class TwoThresholds(unittest.TestCase):
+    """H10 (3): уверенный жест — решение спустя early_gap без руки внутри кадра; иначе — по концу, без второй SNN."""
+
+    STEPS = 125
+
+    def recognizer(self, counts, **kw):
+        snn = Classifier(counts)
+        seg = EpisodeSegmenter(W, edge_gap=1.0)
+        return Recognizer(seg, snn, self.STEPS, 0.04, **dict({"early_margin": 0.9, "early_gap": 0.25}, **kw)), snn
+
+    def steps(self, rec, frames):
+        out = []
+        for i, box in enumerate(frames):
+            res = rec.step(i * DT, box)
+            if res is not None:
+                out.append((i * DT, res))
+        return out
+
+    def test_confident_gesture_decided_early(self):
+        rec, snn = self.recognizer([0, 125, 0, 0])
+        (t, res), = self.steps(rec, wave(10) + [None] * 6)
+        self.assertEqual((res.end, res.decision.cls, snn.calls), ("early", 1, 1))
+        self.assertEqual(t - res.episode.t_end, 0.25)  # а не END_GAP 0,5
+        self.assertEqual(len(rec.segmenter), 0)
+
+    def test_not_confident_waits_end_without_second_snn(self):
+        rec, snn = self.recognizer([0, 60, 10, 0])  # отрыв 0,4 < 0,9
+        (t, res), = self.steps(rec, wave(10) + [None] * 6)
+        self.assertEqual((res.end, res.decision.cls, t - res.episode.t_end), ("gap", 1, 0.5))
+        self.assertEqual(snn.calls, 1)  # рамок не прибавилось — спайки прошлого прогона
+
+    def test_hand_back_after_probe_reclassifies(self):
+        rec, snn = self.recognizer([0, 60, 10, 0])
+        (t, res), = self.steps(rec, wave(6) + [None] * 3 + wave(6) + [None] * 6)
+        self.assertEqual((len(res.episode.boxes), snn.calls), (12, 2))
+
+    def test_no_early_decision_at_edge(self):
+        rec, snn = self.recognizer([0, 125, 0, 0])
+        (t, res), = self.steps(rec, wave(8) + top(2) + [None] * 10)
+        self.assertEqual((res.end, t - res.episode.t_end), ("edge", 1.0))
+
+    def test_strong_cut_is_unknown_without_snn(self):
+        rec, snn = self.recognizer([0, 125, 0, 0], max_cut=0.4)
+        (t, res), = self.steps(rec, wave(4) + top(2) + [None] * 10)  # видно 0,625 с, за краем — 1 с
+        self.assertEqual((res.end, res.decision.cls, snn.calls), ("cut", -1, 0))
+
+    def test_rejected_episode_has_no_decision(self):
+        rec, snn = self.recognizer([0, 125, 0, 0])
+        (t, res), = self.steps(rec, [hand(100, 100), hand(500, 100)] + [None] * 6)
+        self.assertIsNone(res.decision)
+        self.assertEqual(snn.calls, 0)
+
+    def test_off_like_before(self):
+        rec, snn = self.recognizer([0, 125, 0, 0], early_margin=0.0)
+        (t, res), = self.steps(rec, wave(10) + [None] * 6)
+        self.assertEqual((res.end, t - res.episode.t_end, snn.calls), ("gap", 0.5, 1))
+
+    def test_invalid_params(self):
+        seg = EpisodeSegmenter(W)
+        for kw in ({"early_gap": 0.5}, {"early_gap": 0}, {"early_margin": -1}, {"max_cut": 1.5}):
+            with self.assertRaises(ValueError, msg=str(kw)):
+                Recognizer(seg, Classifier([0] * 4), self.STEPS, 0.04, **kw)
 
 
 class PathLength(unittest.TestCase):

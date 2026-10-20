@@ -7,6 +7,13 @@ GET https://routerai.ru/api/v1/models от 06.10.2026 (routerai_models_2026-10-0
 
 Метка снимка (путь, SHA-256 JSON, дата) кладётся в metrics.json и в прогнозы предрегистрации,
 чтобы ₽ всегда можно было пересчитать по тому же прайсу (решение 10 концепции).
+
+Запись в кэш. У моделей OpenAI с полем input_cache_write (GPT-5.6+, GPT-6) кэш автоматический, а запись в него
+стоит 1,25× входа (документация OpenAI «Prompt caching», 20.10.2026). call_cost_rub(..., cache_write=True)
+добавляет надбавку: записанными считаются некэшированные токены промпта от CACHE_MIN_TOKENS (короче — кэша нет).
+По умолчанию надбавка выключена: прежние прогнозы и metrics.json не меняются. У Anthropic запись бывает только
+по явному cache_control (агент его не шлёт), у Google поле input_cache_write — цена хранения, а не надбавка,
+поэтому для них надбавки нет.
 """
 from __future__ import annotations
 
@@ -22,19 +29,30 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_PRICE_TABLE = REPO_ROOT / "research" / "new_topic" / "F_artifacts" / "price_table.py"
 PRICE_SNAPSHOT_DATE = "2026-10-06"
 PRICE_TABLE_ENV = "EDGE_PRICE_TABLE"
+CACHE_MIN_TOKENS = 1024                     # кэшируются промпты от 1024 токенов (OpenAI)
+WRITE_PREMIUM_PREFIXES = ("openai/",)       # семейства с автоматическим кэшем и платной записью
 
 
 @dataclass(frozen=True)
 class Price:
-    """Цены модели, ₽ за 1 токен. cached = None — провайдер не публикует цену чтения кэша."""
+    """Цены модели, ₽ за 1 токен. cached = None — провайдер не публикует цену чтения кэша; cache_write = None —
+    запись в кэш не дороже входа."""
     model: str
     input: float
     cached: float | None
     output: float
+    cache_write: float | None = None
 
     def per_million(self) -> dict:
-        return {"input": self.input * 1e6, "cached": None if self.cached is None else self.cached * 1e6,
-                "output": self.output * 1e6}
+        def m(v: float | None) -> float | None:
+            return None if v is None else v * 1e6
+        return {"input": m(self.input), "cached": m(self.cached), "output": m(self.output),
+                "cache_write": m(self.cache_write)}
+
+
+def cache_write_tokens(prompt_tokens: float, cached_tokens: float) -> float:
+    """Токены, записанные в кэш вызовом: некэшированная часть промпта от CACHE_MIN_TOKENS (оценка O1 §4)."""
+    return prompt_tokens - cached_tokens if prompt_tokens >= CACHE_MIN_TOKENS else 0.0
 
 
 class UnknownModel(KeyError):
@@ -98,21 +116,30 @@ class PriceBook:
         if mid not in self._m.BY_ID:
             raise UnknownModel(mid)
         per_m = {k: self._m.rub_per_m(mid, k) for k in ("prompt", "input_cache_read", "completion")}
+        write = self._m.BY_ID[mid]["pricing"].get("input_cache_write") if mid.startswith(WRITE_PREMIUM_PREFIXES) \
+            else None
         return Price(mid, per_m["prompt"] / 1e6,
                      None if per_m["input_cache_read"] is None else per_m["input_cache_read"] / 1e6,
-                     per_m["completion"] / 1e6)
+                     per_m["completion"] / 1e6, None if write is None else float(write))
 
-    def call_cost_rub(self, model: str, prompt_tokens: float, cached_tokens: float, output_tokens: float) -> float:
+    def call_cost_rub(self, model: str, prompt_tokens: float, cached_tokens: float, output_tokens: float,
+                      cache_write: bool = False) -> float:
         """Стоимость вызова, ₽: (prompt − cached)·вход + cached·кэш + output·выход (функция price_table.py).
 
-        output_tokens включает скрытые reasoning-токены — они тарифицируются как выход.
+        output_tokens включает скрытые reasoning-токены — они тарифицируются как выход. cache_write=True добавляет
+        надбавку за запись в кэш: cache_write_tokens · (запись − вход), если у модели она есть.
         """
         mid = normalize_model_id(model)
         if mid not in self._m.BY_ID:
             raise UnknownModel(mid)
         if cached_tokens > prompt_tokens:
             raise ValueError("cached_tokens > prompt_tokens")
-        return float(self._m.call_cost_rub(mid, prompt_tokens, cached_tokens, output_tokens))
+        cost = float(self._m.call_cost_rub(mid, prompt_tokens, cached_tokens, output_tokens))
+        if cache_write:
+            p = self.price(mid)
+            if p.cache_write is not None:
+                cost += cache_write_tokens(prompt_tokens, cached_tokens) * (p.cache_write - p.input)
+        return cost
 
     def provenance(self) -> dict:
         return {"price_table": str(self.path), "snapshot": str(self.snapshot_path) if self.snapshot_path else None,

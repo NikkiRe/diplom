@@ -27,6 +27,8 @@ RestartSec=2
 TimeoutStartSec=180
 TimeoutStopSec=15
 LimitCORE=0
+# жертва OOM — как распознавание (0 — по размеру, как решает ядро)
+OOMScoreAdjust=0
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=2000
 

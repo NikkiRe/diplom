@@ -67,6 +67,16 @@ PROFILES: Dict[str, dict] = {
     "smoke": {"gen": {"gestures": 10, "negatives": 2, "lead_in_s": 15.0},
               "fault_first": 1, "fault_every": 4, "agent_first": 3, "agent_every": 4, "moves": (1,),
               "driver_first": 2, "driver_every": 2},
+    # отложенный набор (PROTOCOL §4): темп main, другие моменты событий — отказы на других сегментах и позже после
+    # жеста (2,5 с, а не 1 с), драйверы и реплики тоже сдвинуты; зерно — своё (PROTOCOL), мир — hall_m. Только для
+    # итогового прогона кода, на нём ничего не настраивают
+    "holdout": {"gen": {"gestures": 80, "negatives": 20, "lead_in_s": 20.0},
+                "fault_first": 5, "fault_every": 8, "agent_first": 3, "agent_every": 8, "moves": (1, 5, 9),
+                "driver_first": 1, "driver_every": 8, "fault_offset_s": 2.5},
+    # ≈8 ч без отказов (H14, PROTOCOL §5): старение — наклон памяти и fd без ступеней рестартов; темп жестов и реплик
+    # как у long, «вперёд» — каждая пятая реплика
+    "soak": {"gen": {"gestures": 640, "negatives": 160, "lead_in_s": 20.0, "pause_s": (10.0, 55.0)},
+             "fault_first": 0, "fault_every": 0, "agent_first": 5, "agent_every": 6, "moves": tuple(range(2, 140, 5))},
     # start_test: каждые 7–10 с от якоря «крючок» слайда 12 — сеть лаборатории на полилинии отвечает классом 0
     # (shapeclass расписания main: 1,0), то есть «полный оборот» — поворот на месте: за 100 стартов робот не уезжает
     "start": {"gen": {"gestures": 24, "negatives": 0, "classes": (1,), "shapes": ("hook", "hook_m"),
@@ -85,12 +95,13 @@ def place(truth: Sequence[dict], first: int, every: int, offset: float) -> List[
 
 def build_events(truth: Sequence[dict], prof: dict) -> List[dict]:
     """События плана по порядку времени: отказы по циклу FAULT_CYCLE, отказы драйверов по DRIVER_CYCLE (cycle
-    driver) и запросы агенту (status, на номерах moves — move)."""
+    driver) — через fault_offset_s профиля после жеста (по умолчанию FAULT_OFFSET_S), и запросы агенту (status, на
+    номерах moves — move)."""
     events = []
-    for n, (seg, at) in enumerate(place(truth, prof["fault_first"], prof["fault_every"], FAULT_OFFSET_S)):
+    offset = prof.get("fault_offset_s", FAULT_OFFSET_S)
+    for n, (seg, at) in enumerate(place(truth, prof["fault_first"], prof["fault_every"], offset)):
         events.append(dict(FAULT_CYCLE[n % len(FAULT_CYCLE)], at_s=at, seg=seg, n=n))
-    for n, (seg, at) in enumerate(place(truth, prof.get("driver_first", 0), prof.get("driver_every", 0),
-                                        FAULT_OFFSET_S)):
+    for n, (seg, at) in enumerate(place(truth, prof.get("driver_first", 0), prof.get("driver_every", 0), offset)):
         events.append(dict(DRIVER_CYCLE[n % len(DRIVER_CYCLE)], at_s=at, seg=seg, n=n, cycle="driver"))
     for n, (seg, at) in enumerate(place(truth, prof["agent_first"], prof["agent_every"], AGENT_OFFSET_S)):
         events.append({"kind": "agent", "request": "move" if n in prof["moves"] else "status", "at_s": at,
@@ -139,7 +150,8 @@ def main(argv=None) -> int:
     sub = p.add_subparsers(dest="cmd", required=True)
     m = sub.add_parser("make", help="новое расписание в каталог")
     m.add_argument("--profile", required=True,
-                   help="main (≈33 мин) | long (≈60 мин) | long30 (≈30 мин) | smoke (≈4 мин) | start (для start_test)")
+                   help="main (≈33 мин) | long (≈60 мин) | long30 (≈30 мин) | smoke (≈4 мин) | holdout (≈33 мин, "
+                   "отложенный набор) | soak (≈8 ч без отказов) | start (для start_test)")
     m.add_argument("--out", required=True, help="каталог расписания (plan.json в нём не перезаписывается)")
     m.add_argument("--seed", type=int, default=20261016, help="зерно gesturegen")
     i = sub.add_parser("info", help="сводка расписания")

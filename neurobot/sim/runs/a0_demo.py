@@ -11,12 +11,20 @@
 """
 from __future__ import annotations
 
-import argparse
-import functools
-import runpy
+import os
 import sys
 
-from neurobot.sim.gestures.fakeyolo import hub_load
+# Запуск файлом ставит каталог скрипта (neurobot/sim/runs) первым в sys.path, а там queue.py очереди прогонов: он
+# заслонил бы стандартный queue, который импортирует torch (torch.export → torch.fx), и демо падало бы на импорте.
+# Свои модули демо берёт по PYTHONPATH (снимок), поэтому каталог скрипта убирается до остальных импортов.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path[:] = [p for p in sys.path if os.path.abspath(p or os.curdir) != _HERE]
+
+import argparse  # noqa: E402
+import functools  # noqa: E402
+import runpy  # noqa: E402
+
+from neurobot.sim.gestures.fakeyolo import hub_load  # noqa: E402
 
 
 def patch_torch(module) -> None:

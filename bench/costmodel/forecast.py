@@ -161,6 +161,38 @@ def daily_cost_bounds(calls: float, prompt_tokens: float, prefix_tokens: float, 
             "rub_no_cache": no_cache, "rub_full_prefix_cache": full_cache}
 
 
+# Ход из двух вызовов для оценки цены рассуждения (O1 §4): вызов 1 — холодный (вход, кэш, видимый выход),
+# вызов 2 — продолжение хода с префиксом из кэша. R — скрытые reasoning-токены на вызов (тарифицируются как выход).
+REASONING_TURN = ((2000, 0, 40), (2100, 1920, 20))
+# Модели и уровни R: у reasoning-моделей R ∈ {0, 100, 400} (400 — допущение концепции §14, не замер; реальное R
+# даст проба E0-P), у моделей без рассуждения и у GPT-6 Luna с effort none — только R = 0.
+REASONING_MODELS: dict[str, tuple[int, ...]] = {
+    "openai/gpt-5-mini": (0, 100, 400), "openai/gpt-5-nano": (0, 100, 400),
+    "openai/gpt-4.1-nano": (0,), "openai/gpt-4o-mini": (0,), "openai/gpt-6-luna": (0,),
+}
+
+
+def reasoning_turn_cost(book: PriceBook, model: str, reasoning: int, cache_write: bool = True,
+                        turn: tuple = REASONING_TURN) -> dict:
+    """₽ хода REASONING_TURN при R reasoning-токенах на вызов и доля выхода (видимого и скрытого) в цене."""
+    p = book.price(model)
+    total = out = 0.0
+    for prompt, cached, visible in turn:
+        total += book.call_cost_rub(model, prompt, cached, visible + reasoning, cache_write=cache_write)
+        out += (visible + reasoning) * p.output
+    return {"model": p.model, "reasoning_tokens": reasoning, "rub_turn": total,
+            "output_share": out / total if total else None, "cache_write": cache_write and p.cache_write is not None}
+
+
+def reasoning_table(book: PriceBook | None = None, models: dict[str, tuple[int, ...]] | None = None,
+                    cache_write: bool = True) -> dict:
+    """Цена хода по моделям и R (расчёт по замороженному прайсу, не замер): основание выбора reasoning_effort."""
+    book = book or PriceBook.load()
+    rows = [reasoning_turn_cost(book, m, r, cache_write) for m, rs in (models or REASONING_MODELS).items() for r in rs]
+    return {"turn": [dict(zip(("prompt", "cached", "visible_output"), c)) for c in REASONING_TURN], "rows": rows,
+            "note": "расчёт; R — допущение до пробы E0-P", "prices": book.provenance()}
+
+
 @dataclass
 class CallShape:
     """Средний вызов LLM (иллюстративно до калибровки E0-P): стабильный префикс и полный промпт, токенов."""

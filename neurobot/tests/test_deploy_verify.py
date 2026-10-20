@@ -1,8 +1,9 @@
-"""Замеры neurobot/deploy/verify (k6.py, recovery.py, agent_truth.py): разбор записей без rclpy — задержки стопа через
-MCP, по скану и кнопкой пульта (копии, поле t шлюза, «поехал после нуля»), квантили, ближайшая дальность в секторе,
-выбор узла в юните, случаи из env-файла, кто перезапустил, честность ответа толчка против сдвига. Сами замеры (rclpy,
-systemd, Gazebo) — на двойнике, артефакты experiments/results/neurobot_20261018_deploy_fix и (СТОП пульта)
-ui_20261019_live/p3. Python 3.8+."""
+"""Замеры neurobot/deploy/verify (k6.py, recovery.py, agent_truth.py, oom.py, load.py): разбор записей без rclpy —
+задержки стопа через MCP, по скану и кнопкой пульта (копии, поле t шлюза, «поехал после нуля»), квантили, ближайшая
+дальность в секторе, выбор узла в юните, случаи из env-файла, кто перезапустил, честность ответа толчка против сдвига;
+юнит стенда петли OOM, паузы из журнала, файлы cgroup, строки CPU и трафика. Сами замеры (rclpy, systemd, Gazebo) — на
+двойнике, артефакты experiments/results/neurobot_20261018_deploy_fix, (СТОП пульта) ui_20261019_live/p3 и
+opt_20261020_deploy. Python 3.8+."""
 from __future__ import annotations
 
 import math
@@ -17,9 +18,58 @@ sys.path.insert(0, str(VERIFY))
 
 import agent_truth  # noqa: E402
 import k6  # noqa: E402
+import load  # noqa: E402
+import oom  # noqa: E402
 import recovery  # noqa: E402
 import stand  # noqa: E402
 from neurobot_deploy.config import Config  # noqa: E402
+
+
+class OomTest(unittest.TestCase):
+    def test_loop_unit_is_isolated_from_package(self):
+        text = "\n".join(["[Unit]", "PartOf=neurobot.target", "After=neurobot-safety.service", "[Service]",
+                           "Type=notify", "StateDirectory=neurobot/perception", "Restart=always", "[Install]",
+                           "WantedBy=neurobot.target"])
+        got = oom.loop_unit(text, "nbopt-oom-after", "nbopt-oom.slice", 400).splitlines()
+        self.assertEqual(got, ["[Unit]", "[Service]", "Slice=nbopt-oom.slice", "MemoryMax=400M", "MemorySwapMax=0",
+                               "Type=notify", "StateDirectory=nbopt/nbopt-oom-after", "Restart=always", "[Install]"])
+
+    def test_pauses_from_journal_and_cgroup_values(self):
+        lines = ["<4>neurobot-precheck: perception: restart_loop: 2-й рестарт подряд, прошлый запуск — меньше 600 с "
+                 "назад: пауза 5 с", "neurobot-precheck: perception: restart_loop: метку запуска не записать (x)",
+                 "Started nbopt-oom-after.service"]
+        self.assertEqual(oom.pauses(lines), [5.0])
+        self.assertEqual(oom.stat_value("usage_usec 1500\nuser_usec 900\n", "usage_usec"), 1500)
+        self.assertEqual(oom.stat_value("low 0\noom 3\noom_kill 2\n", "oom_kill"), 2)
+        self.assertEqual(oom.stat_value("", "oom_kill"), 0)
+        self.assertEqual(oom.adjust_of("[Service]\nOOMScoreAdjust=-900\n"), -900)
+        self.assertEqual(oom.adjust_of("[Service]\n"), 0)
+
+    def test_victim_profiles_and_kernel_scores(self):
+        # equal — роли поровну: без OOMScoreAdjust очки равны, и жертву ядро выбирает не по роли
+        self.assertEqual(oom.victim_sizes("equal", 200, 0.5), {"safety": 200, "perception": 200, "rosbridge": 200})
+        sizes = oom.victim_sizes("robot", 200, 0.5)
+        self.assertEqual(sizes, {"safety": 19, "perception": 652, "rosbridge": 56, "ui": 22})
+        limit = oom.ROBOT_TOTAL * 0.5
+        before = oom.scores(sizes, dict.fromkeys(sizes, 0), limit)
+        after = oom.scores(sizes, {"safety": -900, "perception": 0, "rosbridge": 400, "ui": 500}, limit)
+        # с долями робота до правки первым гибнет самый крупный — распознавание; после — пульт, затем rosbridge,
+        # распознавание — только за ними, safety_gate — последним
+        self.assertEqual(max(before, key=before.get), "perception")
+        self.assertEqual(sorted(after, key=after.get, reverse=True), ["ui", "rosbridge", "perception", "safety"])
+        self.assertEqual(after["ui"], 22 + 989)
+
+
+class LoadTest(unittest.TestCase):
+    def test_rows(self):
+        self.assertEqual(load.unit_row(1_000_000, 1_600_000, "a", "a", 60.0, 40 << 20),
+                         {"restarted": False, "mem_mib": 40.0, "cpu_core_pct": 1.0})
+        # перезапуск за окно: счётчик новой cgroup начался с нуля — доли ядра нет
+        self.assertEqual(load.unit_row(5_000_000, 100, "a", "b", 60.0, None),
+                         {"restarted": True, "mem_mib": None, "cpu_core_pct": None})
+        self.assertEqual(load.topic_row(30, 30 * 921_672, 2.0),
+                         {"msgs": 30, "rate_hz": 15.0, "mb_s": 13.8251, "bytes_per_msg": 921672})
+        self.assertEqual(load.topic_row(0, 0, 2.0)["bytes_per_msg"], None)
 
 
 class StandTest(unittest.TestCase):

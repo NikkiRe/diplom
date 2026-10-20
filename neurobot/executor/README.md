@@ -11,6 +11,7 @@
 |---|---|
 | `guard.py` | логика без rclpy: правила, сектор лидара, тормозная дальность, отмена по safety_gate, счётчики (`Guard`, `front_scan`, `parse_safety`) |
 | `sd_notify.py` | sd_notify(3) без libsystemd: READY, WATCHDOG, STOPPING через `$NOTIFY_SOCKET` |
+| `spinner.py` | постоянный исполнитель rclpy в своём потоке вместо `rclpy.spin_once(node)` (H6); им пользуются и safety_gate, и (копией) perception |
 | `node.py` | узел rclpy вокруг `Guard`, `main()` |
 
 ## Запуск
@@ -123,12 +124,12 @@ PYTHONPATH=<корень проекта>:$PYTHONPATH python3 -m neurobot.executo
 
 | Тема | Тип | Направление |
 |---|---|---|
-| `/cmd_vel_gesture` | `geometry_msgs/Twist` | вход (perception legacy, ремап `/cmd_vel`) |
-| `/cmd_vel_agent` | `geometry_msgs/Twist` | вход (агентский путь; имя — ремапом под конфиг MCP лаборатории) |
-| `/scan` | `sensor_msgs/LaserScan`, QoS сенсоров (best effort — совместим с reliable-издателем) | вход |
+| `/cmd_vel_gesture` | `geometry_msgs/Twist`, `KEEP_LAST 1` | вход (perception legacy, ремап `/cmd_vel`) |
+| `/cmd_vel_agent` | `geometry_msgs/Twist`, `KEEP_LAST 1` | вход (агентский путь; имя — ремапом под конфиг MCP лаборатории) |
+| `/scan` | `sensor_msgs/LaserScan`, best effort (совместим с reliable-издателем), `KEEP_LAST 1` | вход |
 | `/odom` | `nav_msgs/Odometry`, QoS сенсоров | вход: след для отъезда из тупика (правило 10) |
 | `/neurobot/safety_state` | `std_msgs/String`, JSON safety_gate | вход |
-| `/neurobot/cmd_vel_req` | `Twist` или `TwistStamped` | выход: вход safety_gate |
+| `/neurobot/cmd_vel_req` | `Twist` или `TwistStamped`, `KEEP_LAST 1` | выход: вход safety_gate |
 | `/neurobot/motion_state` | `std_msgs/String`, JSON | выход |
 | `/neurobot/events` | `std_msgs/String`, JSON `{type: task_end, task: gesture\|agent\|escape, status: estop\|blocked\|safety_lost\|done\|preempted, reasons, boot, seq}`; начало отъезда — `{type: escape, status: start, reasons}` | выход |
 
@@ -185,7 +186,16 @@ safety_gate, новые команды идут) и `test_safety_node.py`
 жеста). Тесты ROS берут домен `NEUROBOT_TEST_DOMAIN` (41; стенд и его тесты — 30 и 70–99). Под Foxy узел не
 запускался — проверены синтаксис и логика под Python 3.8, API rclpy сверены по исходникам ветки foxy
 (`ParameterException`, `declare_parameter`, `qos_profile_sensor_data`, обработчик SIGINT только будит guard
-conditions — свой обработчик сигналов безопасен).
+conditions — свой обработчик сигналов безопасен; `SingleThreadedExecutor`, `Node.create_guard_condition`,
+`start_parameter_services`).
+
+**20.10.2026 — H6 и H7** (`docs/research/optimization/REVIEW.md`, каталог `experiments/results/opt_20261020_onboard/`):
+колбэки — постоянный исполнитель в своём потоке (`spinner.py`: узел добавлен один раз, ожидание без таймаута —
+без rcl-таймера на каждую пачку; исключение колбэка — выход с кодом 1; ноль на выходе — после остановки
+исполнителя), сервисы параметров выключены (параметры — только `--ros-args -p`); скан и команды — `KEEP_LAST 1`
+(отставший колбэк берёт последнее, а не очередь до 0,5 с давности). Замер [ориентир, ВМ sim, Jazzy;
+`cpu/cpu_ab.json` каталога]: микротест исполнителя — CPU ×0,89 [0,87; 0,91]; исполнитель на живом двойнике — 2,96 →
+2,85 % ядра, ×0,97 [0,89; 1,05] (3 круга, в шуме общей ВМ); на Foxy и A57 не мерено.
 
 Проверка 14–15.10.2026 — `experiments/results/neurobot_20261014_onboard_final/` (вместе с perception): тесты
 под 3.12 и 3.8 на Mac и в ВМ sim; в дымовых прогонах и на стенде Gazebo (stm32_sim hold) — 0 «едет без свежей

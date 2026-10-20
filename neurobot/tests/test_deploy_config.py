@@ -12,7 +12,7 @@ DEPLOY = Path(__file__).resolve().parents[1] / "deploy"
 if str(DEPLOY) not in sys.path:
     sys.path.insert(0, str(DEPLOY))
 
-from neurobot_deploy import checks, render  # noqa: E402
+from neurobot_deploy import checks, render, watchdog  # noqa: E402
 from neurobot_deploy.config import Config, EnvError, load, parse_env, quote  # noqa: E402
 
 
@@ -203,6 +203,25 @@ class RobotProfileTest(unittest.TestCase):
         self.assertEqual(self.cfg.driver(topics["/camera/color/image_raw"], "USB"), self.cfg.get("NEUROBOT_CAMERA_USB"))
         self.assertEqual(checks.camera_mode(self.cfg), "ros")
         self.assertIn("realsense2_camera_node", self.cfg.get("NEUROBOT_FOREIGN_PERCEPTION").split())
+
+    def test_drivers_config_h5(self):
+        # профили камеры — явно (realsense-ros 4.51.1): глубина 15 к/с (разрешение — A/B на роботе), цвет — темп
+        # детектора, IMU — явные частоты; madgwick без TF; сторож камеры — по camera_info, базы — и по twist_mux
+        camera = self.cfg.driver("camera", "CMD").split()
+        for arg in ("depth_module.profile:=848x480x15", "rgb_camera.profile:=640x480x15", "gyro_fps:=200",
+                    "accel_fps:=250", "unite_imu_method:=2"):
+            self.assertIn(arg, camera)
+        self.assertIn("publish_tf:=false", self.cfg.driver("imu", "CMD").split())
+        self.assertEqual(watchdog.driver_watch(self.cfg)["neurobot-driver@camera.service"],
+                         [("/camera/color/camera_info", 2.0)])
+        self.assertEqual(watchdog.driver_watch(self.cfg)["neurobot-driver@base.service"],
+                         [("/odom", 2.0), ("/diagnostics@twist_mux", 3.0)])
+
+    def test_twin_watches_like_robot(self):
+        twin = Config(parse_env((DEPLOY.parent / "sim/suites/twin.env").read_text(encoding="utf-8")), "twin.env")
+        watch = watchdog.driver_watch(twin)
+        self.assertEqual(watch["neurobot-driver@camera.service"], [("/camera/color/camera_info", 2.0)])
+        self.assertIn(("/diagnostics@twist_mux", 3.0), watch["neurobot-driver@twin.service"])
 
     def test_writers_are_remapped_on_robot_and_stand(self):
         for name in ("neurobot.env.example", "fakes/fake.env"):

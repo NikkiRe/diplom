@@ -80,6 +80,8 @@ CODES = {
     "watchdog": ("5", "процесс завис (нет WATCHDOG): systemd перезапустил его; стек — в журнале"),
     "crashed": ("5", "процесс упал: journalctl -u <юнит> -n 50"),
     "start_timeout": ("5", "не стал готов за TimeoutStartSec: journalctl -u <юнит>"),
+    "restart_loop": ("5", "падает раз за разом, пауза перед стартом растёт до 30 с: причина — journalctl -u <юнит>, "
+                          "нехватка памяти — dmesg | grep -i oom"),
     "systemd_error": ("5", "systemctl или journalctl отказали: journalctl -u neurobot-watchdog"),
 }
 LINE = re.compile(r"neurobot-([a-z-]+): (\S+): ([a-z0-9_]+): (.*)")

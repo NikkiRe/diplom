@@ -3,7 +3,7 @@
 недоделанный (ВМ остановили посреди шага, прогон прерван) — его каталог уходит в BASE/interrupted/, шаг идёт заново.
 
   sudo python3 -m neurobot.sim.runs.queue --mockllm URL [--base DIR] [--log FILE] ШАГ…
-  ШАГ: run:a0|a1:МЕТКА:РАСПИСАНИЕ[:world=hall|lab,no_return=nan|inf] | budget:МЕТКА:МиБ:РАСПИСАНИЕ |
+  ШАГ: run:a0|a1:МЕТКА:РАСПИСАНИЕ[:world=hall|lab|hall_m,no_return=nan|inf] | budget:МЕТКА:МиБ:РАСПИСАНИЕ |
        start:МЕТКА:N[:СЦЕНАРИИ|all]
 
 run — runner.py (опции — его --world и --no-return, только A1), budget — budget_a1.py, start — start_test пакета с
@@ -33,7 +33,7 @@ class Step(NamedTuple):
     args: tuple
 
 
-RUN_OPTIONS = {"world": ("hall", "lab"), "no_return": ("nan", "inf")}
+RUN_OPTIONS = {"world": ("hall", "lab", "hall_m"), "no_return": ("nan", "inf")}
 
 
 def run_options(text: str) -> dict:

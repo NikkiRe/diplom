@@ -103,9 +103,7 @@ func run(args []string, stderr io.Writer) int {
 	}
 	defer tw.Close()
 	u := cfg.UserCtx
-	store, err := userctx.OpenWithPolicy(cfg.Path(u.DB), u.Reset, userctx.Policy{
-		Kind: cfg.Policy.History, WindowTurns: cfg.Policy.WindowTurns, MaskKeepTurns: cfg.Policy.MaskKeepTurns,
-	}, userctx.StorageOf(u))
+	store, err := userctx.OpenWithPolicy(cfg.Path(u.DB), u.Reset, userctx.PolicyOf(cfg.Policy), userctx.StorageOf(u))
 	if err != nil {
 		logf("userctx: %v", err)
 		return 1

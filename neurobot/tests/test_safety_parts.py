@@ -1,7 +1,8 @@
 """Части safety_gate без rclpy (Python ≥ 3.8): параметры, геометрия и TF, тормозной путь и разгон, лидар (маска
 корпуса, коридор, участок неизвестного луча в коридоре, направления без лучей, участок вне поля глубины), глубина
 (кодировки, уменьшенная карта, покрытие коридора, препятствие, пол, обрыв, память, «точка свободна» для лидара — и
-без глубины в пикселе), защёлка (файл и каталог снятия root), команда стопа агента, IMU.
+без глубины в пикселе), защёлка (файл и каталог снятия root), команда стопа агента, IMU, входы по штампу (свежесть,
+застывший вход, замер — H7).
 
 Кадры глубины рендерит маленький трассировщик лучей: камера двойника (424×240, 87°, оптический центр на
 (0,058; −0,042; 0,665) базы, ось — вперёд), пол, низкий ящик мира lab и край ступеньки мира step.
@@ -27,6 +28,7 @@ from neurobot.safety.config import ConfigError, Params, make  # noqa: E402
 from neurobot.safety.depth import (DROP, OBSTACLE, Camera, Coverage, FreeSpace, Hazards, Memory,  # noqa: E402
                                    Sampler, classify, image_array)
 from neurobot.safety.geometry import Pose, StaticTf, edge_distance, quat_matrix, yaw_of  # noqa: E402
+from neurobot.safety.inputs import WINDOW_S, StampWatch, digest  # noqa: E402
 from neurobot.safety.latch import Latch, parse, parse_stop, read_release  # noqa: E402
 from neurobot.safety.lidar import MaskLearner, Rays, ScanMeta, mask_spans, view  # noqa: E402
 from neurobot.safety.monitors import Shock, Stall, tilt_deg, tilt_from_accel  # noqa: E402
@@ -114,7 +116,8 @@ class Config(unittest.TestCase):
                              ({"override_topics": "/cmd_vel_joy"}, "override_topics"), ({"nope": 1}, "nope"),
                              ({"depth_min_valid": 0.0}, "depth_min_valid"),
                              ({"depth_min_valid": 1.5}, "depth_min_valid"),
-                             ({"mask_from_deg": 10.0}, "mask_from_deg"), ({"mask_to_deg": 200.0}, "mask_to_deg")):
+                             ({"mask_from_deg": 10.0}, "mask_from_deg"), ({"mask_to_deg": 200.0}, "mask_to_deg"),
+                             ({"frozen_n": 1}, "frozen_n"), ({"frozen_n": -1}, "frozen_n")):
             with self.assertRaises(ConfigError) as e:
                 make(values)
             self.assertIn(word, str(e.exception), values)
@@ -498,6 +501,98 @@ class Imu(unittest.TestCase):
         self.assertTrue(st.feed(1.0, 0.1, 0.0, 0.0, 0.0, True))
         self.assertFalse(st.feed(1.1, 0.1, 0.0, 0.0, 0.0, False))
         self.assertFalse(st.feed(1.2, 0.01, 0.0, 0.0, 0.0, True))  # команда ниже stall_cmd — не движение
+
+
+class Inputs(unittest.TestCase):
+    """H7: свежесть по штампу относительно самого быстрого сообщения, застывший вход, ряды замера."""
+
+    def feed(self, w, pairs, now_ros=None):
+        return [(w.stamp(a, s, now_ros), w.lag) for a, s in pairs]
+
+    def test_lag_against_fastest_and_clock_offset(self):
+        w = StampWatch("/scan")
+        # часы источника на 1000 с впереди (время симуляции, другой узел): смещение сокращается
+        out = self.feed(w, [(10.0 + 0.1 * k, 1010.0 + 0.1 * k) for k in range(10)])
+        self.assertEqual({why for why, _ in out}, {None})
+        self.assertTrue(all(abs(lag) < 1e-9 for _, lag in out))
+        self.assertIsNone(w.stamp(11.3, 1011.0))  # скан 1011,0 пришёл на 0,3 с позже: ждал в очереди или колбэке
+        self.assertAlmostEqual(w.lag, 0.3, places=6)
+        self.assertIsNone(w.stamp(11.4, 1011.4))  # следующий — без задержки
+        self.assertAlmostEqual(w.lag, 0.0, places=6)
+
+    def test_late_message_keeps_its_lag(self):
+        # драйвер встал и отдал накопленное: скан снят сразу после прошлого, а пришёл через delay — задержка видна
+        # при любой длине, а не принимается за скачок часов (до правки ревью: lag 0 при delay > JUMP_S)
+        for delay in (0.6, 0.9, 1.2, 2.0, 5.0):
+            w = StampWatch("/scan")
+            self.feed(w, [(10.0 + 0.125 * k, 1000.0 + 0.125 * k) for k in range(20)])
+            # и следующий из очереди, и первый вовремя после них: штамп обогнал приход, но это не скачок часов
+            got = self.feed(w, [(12.5 + delay, 1002.5), (12.5 + delay, 1002.625), (13.0 + delay, 1003.0 + delay)])
+            self.assertEqual([why for why, _ in got], [None] * 3)
+            self.assertAlmostEqual(got[0][1], delay, places=6, msg=delay)
+            self.assertAlmostEqual(got[1][1], delay - 0.125, places=6, msg=delay)
+            self.assertEqual((got[2][1], w.resets), (0.0, 0), delay)
+
+    def test_source_pause_is_stale_within_window(self):
+        # Gazebo на паузе 5 с: сканов нет, время симуляции стоит; после паузы lag — вся пауза, пока опора в окне
+        w = StampWatch("/scan")
+        self.feed(w, [(10.0 + 0.125 * k, 1000.0 + 0.125 * k) for k in range(9)])
+        lags = [lag for _, lag in self.feed(w, [(16.0 + 0.125 * j, 1001.0 + 0.125 * j) for j in range(1, 13)])]
+        self.assertTrue(all(abs(lag - 5.0) < 1e-9 for lag in lags[:8]), lags)  # штамп не дальше WINDOW_S от опоры
+        self.assertEqual(lags[8:], [0.0] * 4)
+        self.assertEqual(w.resets, 0)
+
+    def test_slow_source_clock_bounded(self):
+        # медленный ход часов источника (RTF двойника ρ) завышает lag не больше чем на (1/ρ − 1)·WINDOW_S
+        for rtf in (1.0, 0.98, 0.8):
+            w = StampWatch("/scan")
+            lags = [lag for _, lag in self.feed(w, [(0.1 * k, 100.0 + 0.1 * rtf * k) for k in range(600)])]
+            self.assertLessEqual(max(lags), (1.0 / rtf - 1.0) * WINDOW_S + 1e-9, rtf)
+
+    def test_frozen_by_stamp_and_clock_jump(self):
+        w = StampWatch("/scan")
+        self.feed(w, [(0.0, 50.0), (0.1, 50.1)])
+        self.assertIn("frozen", w.stamp(0.2, 50.1))   # тот же штамп
+        self.assertIn("frozen", w.stamp(0.3, 50.05))  # штамп назад без скачка часов
+        self.assertIn("frozen", w.stamp(5.0, 50.1))   # застывший издатель — сколько угодно долго
+        self.assertIn("frozen", w.stamp(5.1, 49.5))   # старый скан после долгой тишины — не скачок и не свежий
+        self.assertEqual(w.frozen, 4)
+        self.assertIsNone(w.stamp(5.2, 0.1))          # рестарт Gazebo: время симуляции с нуля — отсчёт заново
+        self.assertEqual((w.resets, w.lag), (1, 0.0))
+        self.assertIsNone(w.stamp(5.3, 0.2))
+        self.assertIsNone(w.stamp(5.4, 1e9))          # скачок вперёд (NTP): опора уходит из окна сама
+        self.assertEqual((w.resets, w.lag), (1, 0.0))
+
+    def test_frozen_by_content(self):
+        w = StampWatch("/scan", frozen_n=3)
+        a, b = digest(np.array([1.0, 2.0], np.float32)), digest(np.array([1.0, 2.001], np.float32))
+        self.assertEqual([w.content(x) for x in (a, b, b)], [None, None, None])
+        self.assertIn("frozen", w.content(b))  # третье подряд
+        self.assertIn("frozen", w.content(b))
+        self.assertIsNone(w.content(a))
+        # без измерений (весь скан NaN или +inf, кадр без глубины) по содержимому не сравнивается
+        nothing = digest(np.array([math.nan, math.inf, 0.0]))
+        self.assertIsNone(nothing)
+        self.assertEqual([w.content(nothing) for _ in range(5)], [None] * 5)
+        off = StampWatch("/scan", frozen_n=0)
+        self.assertEqual([off.content(a) for _ in range(5)], [None] * 5)
+
+    def test_unstamped_source_and_age_series(self):
+        w = StampWatch("/camera/depth")
+        with self.assertLogs("safety_gate", "WARNING"):
+            self.assertIsNone(w.stamp(1.0, 0.0))
+        self.assertIsNone(w.stamp(1.1, 0.0))  # штампа нет — проверок по штампу нет, свежесть по приходу
+        self.assertEqual(w.lag, 0.0)
+        w = StampWatch("/scan")
+        self.feed(w, [(0.1 * k, 100.0 + 0.1 * k) for k in range(20)], now_ros=100.05)  # часы сравнимы
+        self.feed(w, [(2.0 + 0.1 * k, 7.0 + 0.1 * k) for k in range(5)], now_ros=1.7e9)  # время симуляции
+        w.callbacks.extend([0.002, 0.004])
+        got = w.summary()
+        self.assertEqual(len(w.ages), 20)
+        self.assertEqual(got["lag_ms"], [0.0, 0.0, 0.0])
+        self.assertEqual(got["callback_ms"][2], 4.0)
+        self.assertEqual((got["frozen"], got["clock_resets"]), (0, 1))
+        self.assertIsNone(StampWatch("/scan").summary()["age_ms"])
 
 
 if __name__ == "__main__":

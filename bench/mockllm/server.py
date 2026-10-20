@@ -93,6 +93,10 @@ class ServerConfig:
     tool_tokens: str = "cookbook"            # cookbook | json
     calib: tuple[float, float] = (0.0, 1.0)  # prompt_tokens = a + b·оценка
     reasoning_tokens: int = 0                # скрытые reasoning-токены на вызов (gpt-5-*: ≈400 по допущению §14)
+    # reasoning-токены по уровню reasoning_effort запроса ({} — всегда reasoning_tokens). Уровень без строки
+    # в таблице — reasoning_tokens; запрос без уровня — reasoning_default_effort (умолчание провайдера).
+    reasoning_by_effort: dict = field(default_factory=dict)
+    reasoning_default_effort: str = "medium"
     summary_tokens: int = 400                # длина сводки оракула (summ_len, D_artifacts/cost_model.py)
     pad_profile: str = "targeted"            # добор до k: targeted | legacy (до ревью: list_devices ×N)
     clock: str = "auto"                      # auto | wall | virtual
@@ -118,6 +122,33 @@ class ServerConfig:
             raise ValueError("TLS needs both --tls-cert and --tls-key")
         if self.summary_tokens < 0:
             raise ValueError("summary_tokens must be >= 0")
+        if self.reasoning_tokens < 0 or any(not isinstance(v, int) or v < 0 for v in self.reasoning_by_effort.values()):
+            raise ValueError("reasoning tokens must be integers >= 0")
+        for e in (*self.reasoning_by_effort, self.reasoning_default_effort):
+            if e not in REASONING_EFFORTS:
+                raise ValueError(f"unknown reasoning effort {e!r} (one of {REASONING_EFFORTS})")
+
+
+REASONING_EFFORTS = ("none", "minimal", "low", "medium", "high", "xhigh")
+
+
+def parse_effort_map(spec: str) -> dict:
+    """'none=0,low=100,medium=400' → {'none': 0, 'low': 100, 'medium': 400} ('' → {})."""
+    out = {}
+    for item in filter(None, (x.strip() for x in spec.split(","))):
+        k, sep, v = item.partition("=")
+        if not sep:
+            raise ValueError(f"bad effort item {item!r} (want effort=tokens)")
+        out[k.strip()] = int(v)
+    return out
+
+
+def request_effort(body: dict) -> str | None:
+    """Уровень рассуждения запроса: reasoning_effort (Chat Completions) или reasoning.effort."""
+    effort = body.get("reasoning_effort")
+    if effort is None and isinstance(body.get("reasoning"), dict):
+        effort = body["reasoning"].get("effort")
+    return effort if isinstance(effort, str) else None
 
 
 @dataclass
@@ -197,7 +228,9 @@ class MockLLM:
                  "journal_records": len(self.journal), "journal_seq": self.journal_seq,
                  "clock_sources": dict(self.stats.clock_sources),
                  "clock_header_missing": self.stats.clock_header_missing,
-                 "summary_tokens": self.cfg.summary_tokens, "pad_profile": self.cfg.pad_profile}
+                 "summary_tokens": self.cfg.summary_tokens, "pad_profile": self.cfg.pad_profile,
+                 "reasoning": {"tokens": self.cfg.reasoning_tokens, "by_effort": dict(self.cfg.reasoning_by_effort),
+                               "default_effort": self.cfg.reasoning_default_effort}}
         s["oracle"] = self.oracle.state()
         if self.store is not None:
             s["recording"] = {"path": self.cfg.recording_path, "records": len(self.store)}
@@ -268,13 +301,14 @@ class MockLLM:
                                            _first_header(headers, PURPOSE_HEADERS))
         except ValueError as e:
             return 400, _error(str(e), "invalid_request_error", "bad_expectation"), {}
-        completion = count_completion(decision.message, self.tok) + self.cfg.reasoning_tokens
+        effort, reasoning = self.reasoning(body)
+        completion = count_completion(decision.message, self.tok) + reasoning
         usage = {
             "prompt_tokens": acc.prompt_tokens,
             "completion_tokens": completion,
             "total_tokens": acc.prompt_tokens + completion,
             "prompt_tokens_details": {"cached_tokens": cache.cached_tokens, "audio_tokens": 0},
-            "completion_tokens_details": {"reasoning_tokens": self.cfg.reasoning_tokens, "audio_tokens": 0,
+            "completion_tokens_details": {"reasoning_tokens": reasoning, "audio_tokens": 0,
                                           "accepted_prediction_tokens": 0, "rejected_prediction_tokens": 0},
         }
         resp = {
@@ -292,10 +326,20 @@ class MockLLM:
                  "estimate": {"prompt_tokens_raw": acc.raw_estimate, "segments": acc.segments,
                               "sequence_tokens": len(acc.sequence), "common_prefix": cache.common_prefix,
                               "tokenizer": acc.tokenizer}}
+        if self.cfg.reasoning_by_effort:
+            extra["reasoning"] = {"effort": effort, "tokens": reasoning}
         if from_edgectx and clock_source != "header":
             extra["warning"] = ("edgectx request without X-Edgectx-Clock-T: cache TTL uses "
                                 + ("/control/clock (end of replay step)" if clock_source == "control" else "wall clock"))
         return 200, resp, extra
+
+    def reasoning(self, body: dict) -> tuple[str | None, int]:
+        """(уровень рассуждения, reasoning-токены) для запроса; без таблицы — (уровень запроса, reasoning_tokens)."""
+        effort = request_effort(body)
+        if not self.cfg.reasoning_by_effort:
+            return effort, self.cfg.reasoning_tokens
+        effort = effort or self.cfg.reasoning_default_effort
+        return effort, self.cfg.reasoning_by_effort.get(effort, self.cfg.reasoning_tokens)
 
     def _record(self, body: dict, headers: dict) -> tuple[int, dict, dict]:
         url = self.cfg.upstream.rstrip("/") + "/chat/completions"

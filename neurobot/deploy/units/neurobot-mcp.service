@@ -23,6 +23,8 @@ Restart=always
 RestartSec=1
 TimeoutStartSec=60
 TimeoutStopSec=10
+# жертва OOM — раньше распознавания: агентский путь роботу не нужен для жестов
+OOMScoreAdjust=400
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=2000
 

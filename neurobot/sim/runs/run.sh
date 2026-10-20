@@ -4,8 +4,9 @@
 #   run.sh snapshot                       ВМ-локальный снимок кода (/var/tmp/nb-runs/src), venv mcp прокси и mockllm
 #   run.sh mockllm start|stop             bench/mockllm в ВМ (юнит runs-mockllm, 127.0.0.1:$RUNS_MOCK_PORT), журнал —
 #                                         /var/tmp/nb-runs/mockllm/mockllm_all.jsonl
-#   run.sh sched PROFILE [ИМЯ]            расписание main | long | long30 | start → /var/tmp/nb-runs/sched_ИМЯ
-#                                         (по умолчанию ИМЯ = PROFILE; готовое не перезаписывается)
+#   run.sh sched PROFILE [ИМЯ [ЗЕРНО]]    расписание main | long | long30 | smoke | holdout | soak | start →
+#                                         /var/tmp/nb-runs/sched_ИМЯ (по умолчанию ИМЯ = PROFILE, зерно gesturegen —
+#                                         20261016, у отложенного набора — своё, PROTOCOL §4); готовое не перезаписывается
 #   run.sh shapeclass PROFILE             «форма → класс» сетью лаборатории на жестах расписания → shapeclass_PROFILE
 #   run.sh a1-install | a1-teardown       пакет neurobot на двойнике (setup_twin.sh снимка + правки прогона)
 #   run.sh queue NAME ШАГ…                очередь шагов юнитом runs-NAME (queue.py): run:a0|a1:МЕТКА:РАСПИСАНИЕ
@@ -65,10 +66,11 @@ case $cmd in
     fi
     ;;
   sched)
-    [[ $# -eq 1 || $# -eq 2 ]] || die "sched PROFILE [ИМЯ]"
+    [[ $# -ge 1 && $# -le 3 ]] || die "sched PROFILE [ИМЯ [ЗЕРНО]]"
     name=${2:-$1}
-    vm 120 "sudo bash -c '$(py -m neurobot.sim.runs.schedule make --profile "$1" --out $BASE/sched_"$name")' && \
-      sudo chmod -R a+rX $BASE/sched_$name"
+    [[ -z ${3:-} || $3 =~ ^[0-9]+$ ]] || die "ЗЕРНО — целое число"
+    vm 120 "sudo bash -c '$(py -m neurobot.sim.runs.schedule make --profile "$1" --out $BASE/sched_"$name" \
+      ${3:+--seed $3})' && sudo chmod -R a+rX $BASE/sched_$name"
     ;;
   shapeclass)
     [[ $# -eq 1 ]] || die "shapeclass PROFILE"

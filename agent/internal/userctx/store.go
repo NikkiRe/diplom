@@ -9,6 +9,10 @@
 //     заменяются заглушкой (observation masking), плюс окно window_turns, если задано;
 //   - summary_system — старые ходы сжимаются в сводку (системное сообщение), после
 //     сводки — ходы целиком; когда сжимать, решает агент по порогу оплаченных токенов.
+//
+// Окно и маска сдвигаются пачкой по history_batch_turns (B) ходов: пока пачка не
+// набрана, показанная история только дописывается в конец, и её начало остаётся
+// в кэше префикса у провайдера. При B = 1 они сдвигаются на каждом ходе.
 package userctx
 
 import (
@@ -78,6 +82,33 @@ type Policy struct {
 	Kind          string // full | window | mask | summary_system
 	WindowTurns   int
 	MaskKeepTurns int
+	// BatchTurns — шаг вытеснения B: начало окна и граница маски сдвигаются сразу
+	// на B ходов (TokenPilot, «batch-turn schedule»; у Anthropic — clear_at_least).
+	// 0 и 1 — сдвиг на каждом ходе.
+	BatchTurns int
+}
+
+// PolicyOf — политика истории из конфигурации агента.
+func PolicyOf(p config.Policy) Policy {
+	return Policy{Kind: p.History, WindowTurns: p.WindowTurns, MaskKeepTurns: p.MaskKeepTurns,
+		BatchTurns: p.HistoryBatchTurns}
+}
+
+// bounds — границы показа для архива из n ходов, номера от начала архива:
+// ходы до start вне окна, у ходов до masked результаты инструментов скрыты.
+// Обе границы отсчитываются от последней точки вытеснения a ≤ n, a ≡ W (mod B):
+// окно и маска сдвигаются на одном ходе, раз в B ходов. В окне — от W до
+// W + B − 1 ходов, без заглушки — от mask_keep_turns до mask_keep_turns + B − 1.
+func (p Policy) bounds(n int) (start, masked int) {
+	b := max(p.BatchTurns, 1)
+	a := n - ((n-p.WindowTurns)%b+b)%b
+	if (p.Kind == "window" || p.Kind == "mask") && p.WindowTurns > 0 {
+		start = max(a-p.WindowTurns, 0)
+	}
+	if p.Kind == "mask" {
+		masked = max(a-p.MaskKeepTurns, 0)
+	}
+	return start, masked
 }
 
 // Ошибки операций с фактами.
@@ -224,9 +255,11 @@ func (s *Store) load() error {
 	return err
 }
 
+// windowLimit — сколько последних ходов нужно держать в кеше (0 — все): окно
+// с недобранной пачкой вытеснения.
 func (s *Store) windowLimit() int {
-	if s.policy.Kind == "window" || s.policy.Kind == "mask" {
-		return s.policy.WindowTurns
+	if (s.policy.Kind == "window" || s.policy.Kind == "mask") && s.policy.WindowTurns > 0 {
+		return s.policy.WindowTurns + max(s.policy.BatchTurns, 1) - 1
 	}
 	return 0
 }
@@ -237,8 +270,9 @@ func (s *Store) pruneTurnsLocked() {
 		for start < len(s.turns) && s.turns[start].Seq <= s.summaryUpto {
 			start++
 		}
-	} else if n := s.windowLimit(); n > 0 && len(s.turns) > n {
-		start = len(s.turns) - n
+	} else if s.windowLimit() > 0 {
+		first, _ := s.policy.bounds(s.turnCount)
+		start = min(max(first-(s.turnCount-len(s.turns)), 0), len(s.turns))
 	}
 	if start > 0 {
 		// Копия освобождает ссылки на сообщения, вышедшие за пределы кеша.
@@ -458,6 +492,7 @@ func (s *Store) ToSummarize(keep int) []Turn {
 func (s *Store) View(p Policy) (string, []llm.Message) {
 	s.mu.Lock()
 	turns := s.turns
+	base := s.turnCount - len(turns) // номер первого хода кеша в архиве
 	summary, upto := s.summary, s.summaryUpto
 	s.mu.Unlock()
 
@@ -470,23 +505,13 @@ func (s *Store) View(p Policy) (string, []llm.Message) {
 			}
 		}
 		return summary, out
-	case "window":
-		return "", flatten(lastN(turns, p.WindowTurns), -1)
-	case "mask":
-		if p.WindowTurns > 0 {
-			turns = lastN(turns, p.WindowTurns)
-		}
-		return "", flatten(turns, len(turns)-p.MaskKeepTurns)
+	case "window", "mask":
+		start, masked := p.bounds(base + len(turns))
+		start = max(start, base) // кеш короче окна: показать, что есть
+		return "", flatten(turns[start-base:], masked-start)
 	default: // full
 		return "", flatten(turns, -1)
 	}
-}
-
-func lastN(turns []Turn, n int) []Turn {
-	if n <= 0 || len(turns) <= n {
-		return turns
-	}
-	return turns[len(turns)-n:]
 }
 
 // flatten склеивает сообщения ходов; у ходов с индексом < maskBefore результаты

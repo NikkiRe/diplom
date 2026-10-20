@@ -52,6 +52,8 @@ Nice=10
 NoNewPrivileges=yes
 ProtectSystem=full
 LimitCORE=0
+# жертва OOM — первой: робот работает и без пульта
+OOMScoreAdjust=500
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=500
 

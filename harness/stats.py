@@ -1,4 +1,5 @@
-"""Статистика для сравнения конфигураций на парных данных (одни и те же задачи BFCL).
+"""Статистика для сравнения конфигураций на парных данных (одни и те же задачи, трассы или блоки) и для
+утверждений о прогонах во времени (робот, двойник, ядро EdgeCtx).
 
 Без scipy: нормальное распределение — statistics.NormalDist, биномиальные вероятности —
 точной целочисленной арифметикой (math.comb) или через lgamma.
@@ -8,11 +9,13 @@
 Разность долей diff = p_b − p_a = (n01 − n10) / n.
 
 Функции:
-  paired_bootstrap_ratio  — отношение медиан/средних (b / a) и перцентильный ДИ парного бутстрепа;
+  paired_bootstrap_ratio  — отношение медиан/средних (b / a) и перцентильный ДИ парного бутстрепа (от 20–30 пар);
+  paired_ratio_t_ci       — ДИ отношения по t-интервалу среднего логарифма (мало блоков: 5–20);
   mcnemar_exact           — точный двусторонний тест Мак-Немара (биномиальный, p = 1/2), и mid-p;
   paired_diff_ci          — ДИ для разности парных долей: Вальд или score-интервал Танго (1998);
   tost_paired             — TOST эквивалентности парных долей в границах ±δ (Танго или Вальд);
   clopper_pearson         — точный ДИ для доли;
+  zero_upper, poisson_ci  — граница «нулевых» утверждений (0 из n, 0 событий за время) — ниже, у квантилей;
   aa_floor_binary/ratio   — «пол» A/A: насколько расходятся два прогона одной и той же конфигурации;
   holm                    — поправка Холма на множественные сравнения.
 """
@@ -57,6 +60,9 @@ def paired_bootstrap_ratio(baseline: Sequence[float], treatment: Sequence[float]
 
     Пары (baseline[i], treatment[i]) ресэмплируются вместе — сохраняется корреляция между
     конфигурациями на одной задаче. stat: "median" или "mean".
+
+    Перцентильный ДИ на малом числе пар слишком узок (Hesterberg, 2015): на 5 блоках покрытие ≈ 0,83 вместо 0,95.
+    Пока пар меньше 20–30 — paired_ratio_t_ci.
     """
     x = np.asarray(baseline, dtype=float)
     y = np.asarray(treatment, dtype=float)
@@ -83,6 +89,29 @@ def paired_bootstrap_ratio(baseline: Sequence[float], treatment: Sequence[float]
         estimate = float(f(y) / f(x))
     return {"estimate": estimate, "ci_low": float(lo), "ci_high": float(hi), "conf": conf, "stat": stat,
             "n": int(n), "n_boot": int(n_boot), "seed": seed, "method": "paired percentile bootstrap"}
+
+
+def paired_ratio_t_ci(baseline: Sequence[float], treatment: Sequence[float], conf: float = 0.95) -> dict:
+    """Отношение treatment / baseline как среднее геометрическое парных отношений и ДИ по t-интервалу среднего
+    логарифма: exp(mean ± t_{n−1}·s/√n), d_i = ln(treatment_i / baseline_i).
+
+    Для малого числа блоков (E5-T2 — 5 трасс): там перцентильный бутстреп недопокрывает (≈ 0,83 при 5 блоках), а
+    знаково-ранговый тест на 5 парах не может дать p < 0,05 (минимум 0,0625). Допущение — логарифмы отношений
+    примерно нормальны; оно же стоит за расчётом мощности THESIS §12.6 (×/÷1,28 при s = 0,2)."""
+    x = np.asarray(baseline, dtype=float)
+    y = np.asarray(treatment, dtype=float)
+    if x.shape != y.shape or x.ndim != 1 or x.size < 2:
+        raise ValueError("baseline and treatment must be 1-D sequences of equal length >= 2")
+    if not (np.all(np.isfinite(x)) and np.all(np.isfinite(y))) or np.any(x <= 0) or np.any(y <= 0):
+        raise ValueError("values must be finite and positive")
+    if not 0.0 < conf < 1.0:
+        raise ValueError("conf must be in (0, 1)")
+    d = np.log(y / x)
+    n = d.size
+    mean, sd = float(d.mean()), float(d.std(ddof=1))
+    half = t_quantile(1.0 - (1.0 - conf) / 2.0, n - 1) * sd / math.sqrt(n)
+    return {"estimate": math.exp(mean), "ci_low": math.exp(mean - half), "ci_high": math.exp(mean + half),
+            "conf": conf, "n": int(n), "log_mean": mean, "log_sd": sd, "method": "t-interval of mean log ratio"}
 
 
 # ---------------------------------------------------------------------------
@@ -161,6 +190,106 @@ def clopper_pearson(k: int, n: int, conf: float = 0.95) -> tuple[float, float]:
     lo = 0.0 if k == 0 else _bisect(lambda p: (1.0 - _binom_cdf(k - 1, n, p)) - alpha / 2, 0.0, 1.0)
     hi = 1.0 if k == n else _bisect(lambda p: _binom_cdf(k, n, p) - alpha / 2, 0.0, 1.0)
     return lo, hi
+
+
+# ---------------------------------------------------------------------------
+# «Нулевые» утверждения и квантили (PROTOCOL: таблица «утверждение → n»)
+#
+#   zero_upper         — 0 событий из n: верхняя граница доли 1 − α^(1/n), ≈ 3/n («правило трёх», Hanley &
+#                        Lippman-Hand 1983); односторонняя, точная — совпадает с Клоппером–Пирсоном при k = 0;
+#   poisson_ci         — точный ДИ числа событий Пуассона (Garwood, 1936): касания за время прогона → в час;
+#   quantile_ci        — ранговый ДИ квантиля без допущений о форме (Conover, 1999, §3.2), по сторонам: при малом n
+#                        верхней границы p95 нет (n < 72);
+#   quantile_ci_min_n  — наименьшее n, при котором двусторонний ДИ квантиля существует;
+#   zero_exceed_min_n  — сколько замеров подряд без превышения нужно, чтобы утверждать «q-квантиль ≤ порога».
+# ---------------------------------------------------------------------------
+
+def zero_upper(n: int, conf: float = 0.95) -> float:
+    """Верхняя (односторонняя) граница доли при 0 событиях из n: 1 − (1 − conf)^(1/n) ≈ 3/n при conf = 0,95."""
+    if n <= 0:
+        raise ValueError("n must be positive")
+    if not 0.0 < conf < 1.0:
+        raise ValueError("conf must be in (0, 1)")
+    return 1.0 - (1.0 - conf) ** (1.0 / n)
+
+
+def _poisson_cdf(k: int, lam: float) -> float:
+    """P(X ≤ k), X ~ Poisson(lam)."""
+    if k < 0:
+        return 0.0
+    if lam <= 0.0:
+        return 1.0
+    return min(1.0, sum(math.exp(i * math.log(lam) - lam - math.lgamma(i + 1)) for i in range(k + 1)))
+
+
+def poisson_ci(k: int, conf: float = 0.95, sided: str = "two") -> tuple[float, float]:
+    """Точный ДИ среднего числа событий Пуассона по наблюдённому k (Garwood, 1936; как χ²/2 с 2k и 2k + 2 степенями
+    свободы). sided="two" — двусторонний (α/2 на сторону), "upper" — только верхняя граница уровня conf (нижняя 0):
+    при k = 0 это −ln(1 − conf) ≈ 3,0. Частота в час — граница, делённая на часы наблюдения."""
+    if k < 0:
+        raise ValueError("k must be non-negative")
+    if not 0.0 < conf < 1.0:
+        raise ValueError("conf must be in (0, 1)")
+    if sided not in ("two", "upper"):
+        raise ValueError("sided must be 'two' or 'upper'")
+    alpha = (1.0 - conf) / (2.0 if sided == "two" else 1.0)
+    top = max(10.0, 3.0 * k + 30.0)
+    while _poisson_cdf(k, top) > alpha:
+        top *= 2.0
+    hi = _bisect(lambda lam: _poisson_cdf(k, lam) - alpha, 0.0, top)
+    if k == 0 or sided == "upper":
+        return 0.0, hi
+    lo = _bisect(lambda lam: (1.0 - _poisson_cdf(k - 1, lam)) - alpha, 0.0, top)
+    return lo, hi
+
+
+def _binom_cdf_table(n: int, q: float) -> list[float]:
+    """P(B ≤ i), B ~ Bin(n, q), i = 0..n."""
+    out, acc = [], 0.0
+    for i in range(n + 1):
+        acc += math.exp(_binom_logpmf(i, n, q))
+        out.append(min(acc, 1.0))
+    return out
+
+
+def quantile_ci(values: Sequence[float], q: float, conf: float = 0.95) -> dict:
+    """Ранговый ДИ квантиля ξ_q (Conover, 1999, §3.2): порядковые статистики X(l) ≤ ξ_q ≤ X(u), где B — число
+    наблюдений ниже ξ_q, B ~ Bin(n, q); на каждую сторону — не больше (1 − conf)/2. Наблюдения независимы (жесты
+    разделены паузами). Сторона, которой при этом n нет, — None (для p95 верхней нет при n < 72): тогда утверждать
+    можно только другую сторону. Тот же расчёт, что у наблюдателя жестов (analyze.quantile_ci), но по сторонам."""
+    if not 0.0 < q < 1.0:
+        raise ValueError("q must be in (0, 1)")
+    v = sorted(float(x) for x in values)
+    n = len(v)
+    out = {"q": q, "conf": conf, "n": n, "lo": None, "hi": None, "lo_rank": None, "hi_rank": None}
+    if n == 0:
+        return out
+    alpha = (1.0 - conf) / 2.0
+    cdf = _binom_cdf_table(n, q)
+    lo = max((k for k in range(1, n + 1) if cdf[k - 1] <= alpha), default=None)
+    hi = min((k for k in range(1, n + 1) if cdf[k - 1] >= 1.0 - alpha), default=None)
+    if lo is not None:
+        out.update(lo=v[lo - 1], lo_rank=lo)
+    if hi is not None:
+        out.update(hi=v[hi - 1], hi_rank=hi)
+    return out
+
+
+def quantile_ci_min_n(q: float, conf: float = 0.95) -> int:
+    """Наименьшее n, при котором есть обе стороны рангового ДИ квантиля q: (1 − q)^n ≤ α/2 и q^n ≤ α/2
+    (p50 — 6, p95 — 72, p99 — 368 при conf = 0,95)."""
+    if not 0.0 < q < 1.0:
+        raise ValueError("q must be in (0, 1)")
+    a = (1.0 - conf) / 2.0
+    return int(math.ceil(math.log(a) / math.log(max(q, 1.0 - q)) - 1e-12))
+
+
+def zero_exceed_min_n(q: float, conf: float = 0.95) -> int:
+    """Сколько независимых замеров подряд без превышения порога нужно, чтобы с уверенностью conf утверждать «q-квантиль
+    ≤ порога» (доля превышений < 1 − q): q^n ≤ 1 − conf; p95 — 59, p99 — 299."""
+    if not 0.0 < q < 1.0:
+        raise ValueError("q must be in (0, 1)")
+    return int(math.ceil(math.log(1.0 - conf) / math.log(q) - 1e-12))
 
 
 # ---------------------------------------------------------------------------
@@ -331,9 +460,13 @@ def holm(pvalues: Sequence[float]) -> list[float]:
 #                               больше 10⁶ пар — точный выбор блоками (память O(n)), n > 20 000 — ValueError;
 #   sen_slope_batch_means     — тот же наклон по батч-средним (10–30 батчей) с проверкой lag-1 остатков
 #                               батч-средних (≥ 0,2 → батчи вдвое длиннее, иначе lag1_ok = False), τ и n_eff;
+#                               с segments — батчи и пары только внутри сегментов (жизнь процесса между рестартами);
+#   sen_slope_seasonal        — Сен по парам внутри групп (Hirsch, Slack, Smith 1982; ДИ — Gilbert 1987, §17.6);
+#   mser_truncation           — отсечение прогрева MSER-5 (White, 1997);
 #   sen_slope_block_bootstrap — ДИ наклона блочным бутстрепом остатков (кольцевые блоки, L по Politis–White);
 #   tost_slope                — эквивалентность «тренда нет»: (1 − 2α)-ДИ наклона внутри (−δ, δ); исход
 #                               equivalent / not_equivalent / undetermined (ДИ батч-средних с lag1_ok = False);
+#                               kwargs (n_batches, segments) — методу ДИ;
 #   mann_kendall              — тест Манна–Кендалла (только разведочно, см. §12.6: «тренд незначим» ≠ «тренда нет»),
 #                               S за O(n log n) по Найту;
 #   batch_means_ci            — ДИ среднего коррелированного ряда по батч-средним (Стьюдент, B − 1 степеней свободы);
@@ -601,6 +734,79 @@ def sen_slope(t: Sequence[float], y: Sequence[float], conf: float = 0.95, max_n:
             "n": int(x.size), "n_slopes": int(nt), "method": "sen1968" + ("" if dense else " (blockwise selection)")}
 
 
+def _groups(labels: Sequence, n: int) -> list[np.ndarray]:
+    """Индексы точек каждой группы в порядке первого появления метки."""
+    if len(labels) != n:
+        raise ValueError("groups must have the same length as t")
+    order: dict = {}
+    for i, g in enumerate(labels):
+        order.setdefault(g, []).append(i)
+    return [np.asarray(ix, dtype=int) for ix in order.values()]
+
+
+def sen_slope_seasonal(t: Sequence[float], y: Sequence[float], groups: Sequence, conf: float = 0.95) -> dict:
+    """Наклон Сена по парам только внутри групп — сезонный оценщик Хирша, Слэка и Смита (1982), где «сезон» — у нас
+    жизнь одного процесса (между рестартами): ступень рестарта не входит ни в одну пару. Медиана всех внутригрупповых
+    наклонов; ДИ — те же порядковые статистики, что у sen_slope, с дисперсией S как суммой дисперсий групп (Gilbert,
+    1987, §17.6). Свободный член — у каждой группы свой: median(y_g) − b·median(t_g). Одна группа — ровно sen_slope.
+    Группы с одной точкой пар не дают."""
+    if not 0.0 < conf < 1.0:
+        raise ValueError("conf must be in (0, 1)")
+    x, v = _series(t, y)
+    idx = _groups(list(groups), x.size)
+    if sum(g.size * (g.size - 1) // 2 for g in idx) > DENSE_PAIRS:
+        raise ValueError("sen_slope_seasonal: too many pairs; take batch means first")
+    parts, var = [], 0.0
+    for g in idx:
+        if g.size < 2:
+            continue
+        parts.append(_pairwise_slopes(x[g], v[g]))
+        var += _kendall_var(g.size, x[g], v[g])
+    slopes = np.concatenate(parts) if parts else np.empty(0)
+    nt = slopes.size
+    if nt == 0:
+        raise ValueError("no within-group pairs with distinct t")
+    z = _NORMAL.inv_cdf(1.0 - (1.0 - conf) / 2.0)
+    ranks = [(nt - 1) // 2, nt // 2]
+    if var >= 0:
+        sigma = math.sqrt(var)
+        ranks += [max(int(np.round((nt - z * sigma) / 2.0)) - 1, 0), min(int(np.round((nt + z * sigma) / 2.0)), nt - 1)]
+    part = np.partition(slopes, sorted(set(ranks)))
+    vals = [float(part[r]) for r in ranks]
+    slope = 0.5 * (vals[0] + vals[1])
+    lo, hi = (vals[2], vals[3]) if len(vals) == 4 else (math.nan, math.nan)
+    used = [g for g in idx if g.size >= 2]
+    intercepts = [float(np.median(v[g]) - slope * np.median(x[g])) for g in used]
+    return {"slope": slope, "ci_low": lo, "ci_high": hi, "conf": conf, "n": int(x.size), "n_slopes": int(nt),
+            "n_groups": len(idx), "n_groups_used": len(used), "intercepts": intercepts,
+            "method": "seasonal sen (pairs within groups)"}
+
+
+def mser_truncation(y: Sequence[float], batch: int = 5, max_frac: float = 0.5) -> dict:
+    """Точка отсечения прогрева по MSER-5 (White, 1997; лучший из сравнённых правил у Hoad, Robinson, Davies, 2010):
+    ряд режется на батчи по batch точек, отсечение d батчей минимизирует MSER(d) = Σ_{j≥d}(z_j − z̄_d)² / (k − d)²
+    при d ≤ max_frac·k. cut — сколько точек отбросить с начала; at_limit — минимум на границе: установившегося режима
+    в ряду не видно (прогрев длиннее половины ряда или тренд — утечку MSER тоже «отрезает»; решение по наклону
+    это не отменяет). Ряд короче четырёх батчей — cut = 0, short = True."""
+    v = np.asarray(y, dtype=float)
+    if v.ndim != 1 or not np.all(np.isfinite(v)):
+        raise ValueError("y must be a finite 1-D sequence")
+    if batch < 1 or not 0.0 < max_frac < 1.0:
+        raise ValueError("batch >= 1 and max_frac in (0, 1)")
+    k = v.size // batch
+    if k < 4:
+        return {"cut": 0, "at_limit": False, "short": True, "batches": int(k)}
+    z = v[: k * batch].reshape(k, batch).mean(axis=1)
+    d_max = int(math.floor(max_frac * k))
+    best_d, best = 0, math.inf
+    for d in range(d_max + 1):
+        rest = z[d:]
+        val = float(np.sum((rest - rest.mean()) ** 2)) / (rest.size ** 2)
+        if val < best:
+            best_d, best = d, val
+    return {"cut": best_d * batch, "at_limit": best_d == d_max, "short": False, "batches": int(k)}
+
+
 def _contiguous_batches(n: int, n_batches: int) -> list[np.ndarray]:
     """Разбиение индексов 0..n−1 на n_batches смежных батчей равной длины; остаток отбрасывается в начале ряда
     (начало ряда — самое «нестационарное», его и так отделяют, §12.2)."""
@@ -621,17 +827,55 @@ def _lag1(e: np.ndarray, scale: float = 1.0) -> float:
     return float(np.dot(d[:-1], d[1:]) / den) if den > tiny and d.size > 2 else 0.0
 
 
+def _lag1_within(e: np.ndarray, labels: np.ndarray, scale: float = 1.0) -> float:
+    """lag-1 автокорреляция по соседним парам только внутри групп (стык групп — ступень, а не корреляция)."""
+    d = e - e.mean()
+    den = float(np.dot(d, d))
+    same = labels[:-1] == labels[1:]
+    tiny = (1e-9 * max(1.0, abs(scale))) ** 2 * d.size
+    if den <= tiny or not same.any():
+        return 0.0
+    return float(np.dot(d[:-1][same], d[1:][same]) / den)
+
+
+def _segment_batch_means(x: np.ndarray, v: np.ndarray, idx: list[np.ndarray], size: int):
+    """Батч-средние длины size внутри каждой группы (остаток — в начале группы, как у _contiguous_batches); группы
+    меньше двух батчей отбрасываются. → (t батчей, y батчей, метки групп, точек отброшено)."""
+    bt, by, lab, dropped = [], [], [], 0
+    for gi, g in enumerate(idx):
+        k = g.size // size
+        if k < 2:
+            dropped += int(g.size)
+            continue
+        start = g.size - k * size
+        dropped += start
+        for j in range(k):
+            b = g[start + j * size: start + (j + 1) * size]
+            bt.append(x[b].mean())
+            by.append(v[b].mean())
+            lab.append(gi)
+    return np.asarray(bt), np.asarray(by), np.asarray(lab, dtype=int), dropped
+
+
 def sen_slope_batch_means(t: Sequence[float], y: Sequence[float], n_batches: int = 20,
-                          conf: float = 0.95, max_lag1: float = 0.2, min_batches: int = 10) -> dict:
+                          conf: float = 0.95, max_lag1: float = 0.2, min_batches: int = 10,
+                          segments: Sequence | None = None) -> dict:
     """Наклон Сена по батч-средним: ряд режется на смежные батчи, наклон и ДИ (Sen, 1968) — по точкам
     (среднее t, среднее y) батчей. Батчи гасят автокорреляцию соседних отсчётов; 10–30 батчей (§12.6).
 
     Проверка: lag-1 автокорреляция остатков батч-средних от прямой Сена. Если она ≥ max_lag1 (время
     корреляции сравнимо с длиной батча — ДИ недопокрывает, TOST антиконсервативен), число батчей
     уменьшается вдвое (батчи длиннее), но не ниже min_batches; если и тогда ≥ max_lag1 — lag1_ok = False
-    (вывод по ДИ «не определён»)."""
+    (вывод по ДИ «не определён»).
+
+    segments — метка сегмента каждой точки (жизнь процесса между рестартами, H14): батчи не пересекают сегменты
+    (длина батча одна на весь ряд, у сегмента — сколько уместится, меньше двух — сегмент отброшен), наклон и ДИ —
+    sen_slope_seasonal по батч-средним (пары внутри сегментов), lag-1 — по соседям внутри сегментов. Так ступени
+    рестартов (омоложение, Huang et al., 1995) не смешиваются с наклоном."""
     x, v = _series(t, y)
     nb = int(n_batches)
+    if segments is not None:
+        return _batch_means_segments(x, v, _groups(list(segments), x.size), nb, conf, max_lag1, min_batches)
     while True:
         batches = _contiguous_batches(x.size, nb)
         bt = np.array([x[b].mean() for b in batches])
@@ -645,6 +889,35 @@ def sen_slope_batch_means(t: Sequence[float], y: Sequence[float], n_batches: int
     r.update({"method": "sen1968 on batch means", "n": int(x.size), "n_batches": nb,
               "n_batches_requested": int(n_batches), "batch_size": int(batches[0].size), "batch_lag1": lag1,
               "max_lag1": max_lag1, "lag1_ok": bool(lag1 < max_lag1), "tau_int": tau, "n_eff": x.size / tau})
+    return r
+
+
+def _batch_means_segments(x: np.ndarray, v: np.ndarray, idx: list[np.ndarray], nb: int, conf: float,
+                          max_lag1: float, min_batches: int) -> dict:
+    """sen_slope_batch_means по сегментам (см. там)."""
+    if nb < 2:
+        raise ValueError("need at least 2 batches")
+    nb0 = nb
+    while True:
+        size = max(1, x.size // nb)
+        bt, by, lab, dropped = _segment_batch_means(x, v, idx, size)
+        if bt.size < 2:
+            raise ValueError("segments too short for batch means (need >= 2 batches in a segment)")
+        r = sen_slope_seasonal(bt, by, lab, conf=conf)
+        used = sorted(set(lab.tolist()))
+        icpt = dict(zip(used, r["intercepts"]))
+        resid = by - (np.array([icpt[g] for g in lab]) + r["slope"] * bt)
+        lag1 = _lag1_within(resid, lab, float(np.max(np.abs(by))))
+        if lag1 < max_lag1 or nb // 2 < min_batches:
+            break
+        nb //= 2
+    raw = np.concatenate([v[idx[g]] - (icpt[g] + r["slope"] * x[idx[g]]) for g in used])
+    tau = integrated_autocorr_time(raw)
+    r.update({"method": "seasonal sen on batch means within segments", "n": int(x.size), "n_batches": int(bt.size),
+              "n_batches_target": int(nb), "n_batches_requested": int(nb0), "batch_size": int(size),
+              "batch_lag1": lag1, "max_lag1": max_lag1, "lag1_ok": bool(lag1 < max_lag1), "tau_int": tau,
+              "n_eff": raw.size / tau, "n_segments": len(idx), "n_segments_used": len(used),
+              "points_dropped": int(dropped)})
     return r
 
 

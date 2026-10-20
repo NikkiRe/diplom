@@ -291,10 +291,19 @@ def send_estop(cfg: Config, message: dict, done: Callable[[dict], bool], timeout
     return subs, (states[-1] if states else None)
 
 
+def _status_name(text: str) -> str:
+    """Имя статуса диагностики для сравнения: без регистра, «_» = пробел («twist_mux» найдёт и «twist_mux: Twist mux
+    status» Jazzy, и «Twist mux status» без имени узла)."""
+    return text.lower().replace("_", " ")
+
+
 class TopicWatch:
-    """Постоянный узел сторожа: возраст последнего сообщения тем. Подписка raw (кадры камеры не разбираются), QoS
-    сенсоров; тип — из графа: тема, которой в графе ещё нет, подписывается на следующем spin. Пока сообщений не было,
-    возраст считается от подписки (а до неё — от запуска сторожа)."""
+    """Постоянный узел сторожа: возраст последнего сообщения тем. Ключ — «/тема» или «/тема@фильтр». Тема без фильтра —
+    подписка raw (кадры камеры не разбираются), QoS сенсоров; тип — из графа: тема, которой в графе ещё нет,
+    подписывается на следующем spin. Пока сообщений не было, возраст считается от подписки (а до неё — от запуска
+    сторожа). С фильтром (DiagnosticArray, `/diagnostics@twist_mux`) сообщение разбирается и засчитывается, только если
+    в нём есть статус с этим именем (_status_name); пока такого статуса не было ни разу, ключ не стареет: узел без
+    диагностики (другая версия) иначе давал бы рестарт драйвера по кругу."""
 
     def __init__(self, cfg: Config, topics: List[str]):
         os.environ.update(cfg.ros_environ())
@@ -310,16 +319,32 @@ class TopicWatch:
         self.subs: Dict[str, object] = {}
 
     def _subscribe(self) -> None:
-        missing = [t for t in self.last if t not in self.subs]
+        missing = sorted({k.partition("@")[0] for k in self.last} - set(self.subs))
         if not missing:
             return
         types = dict(self.node.get_topic_names_and_types())
         for t in missing:
-            if types.get(t):
-                self.subs[t] = self.node.create_subscription(
-                    msg_class(types[t][0]), t, lambda _m, t=t: self.last.__setitem__(t, time.monotonic()),
-                    self.rclpy.qos.qos_profile_sensor_data, raw=True)
-                self.since[t] = time.monotonic()
+            if not types.get(t):
+                continue
+            keys = [k for k in self.last if k.partition("@")[0] == t]
+            self.subs[t] = self.node.create_subscription(
+                msg_class(types[t][0]), t, lambda m, keys=keys: self.heard(keys, m),
+                self.rclpy.qos.qos_profile_sensor_data, raw=not any("@" in k for k in keys))
+            now = time.monotonic()
+            self.since.update(dict.fromkeys(keys, now))
+
+    def heard(self, keys: List[str], msg) -> None:
+        """Сообщение темы: обновить ключи без фильтра и ключи, чей статус в нём есть."""
+        now = time.monotonic()
+        names = None
+        for k in keys:
+            want = k.partition("@")[2]
+            if want:
+                if names is None:
+                    names = [_status_name(s.name) for s in getattr(msg, "status", ())]
+                if not any(_status_name(want) in n for n in names):
+                    continue
+            self.last[k] = now
 
     def spin(self, seconds: float) -> None:
         self._subscribe()
@@ -328,9 +353,11 @@ class TopicWatch:
             self.ex.spin_once(timeout_sec=min(0.1, max(0.0, end - time.monotonic())))
 
     def ages(self) -> Dict[str, float]:
-        """{тема: с без сообщений}: от последнего, а пока их не было — от подписки или запуска сторожа."""
+        """{ключ: с без сообщений}: от последнего, а пока их не было — от подписки или запуска сторожа; ключ с фильтром
+        до первого своего статуса — 0."""
         now = time.monotonic()
-        return {t: now - (last if last is not None else self.since.get(t, self.born)) for t, last in self.last.items()}
+        return {k: now - (last if last is not None else now if "@" in k else self.since.get(k, self.born))
+                for k, last in self.last.items()}
 
     def close(self) -> None:
         self.ex.remove_node(self.node)

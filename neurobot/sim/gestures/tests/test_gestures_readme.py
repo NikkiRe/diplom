@@ -1,5 +1,5 @@
-"""README компонента называет каждый флаг всех его CLI (gesturegen, analyze, shapeclass, наблюдатель), и у каждого
-флага есть подсказка в --help. observer.py импортирует rclpy, поэтому его флаги берутся из AST файла."""
+"""README компонента называет каждый флаг всех его CLI (gesturegen, analyze, shapeclass, replay, наблюдатель), и у
+каждого флага есть подсказка в --help. observer.py импортирует rclpy, поэтому его флаги берутся из AST файла."""
 from __future__ import annotations
 
 import argparse
@@ -12,7 +12,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[4]
 sys.path.insert(0, str(ROOT))
 
-from neurobot.sim.gestures import analyze, gesturegen, shapeclass  # noqa: E402
+from neurobot.sim.gestures import analyze, gesturegen, replay, shapeclass  # noqa: E402
 
 PKG = ROOT / "neurobot/sim/gestures"
 
@@ -43,7 +43,8 @@ class ReadmeFlagsTest(unittest.TestCase):
     def test_every_flag_is_in_readme_and_has_help(self):
         readme = (PKG / "README.md").read_text(encoding="utf-8")
         clis = {"gesturegen": parser_flags(gesturegen.build_parser()), "analyze": parser_flags(analyze.build_parser()),
-                "shapeclass": parser_flags(shapeclass.build_parser()), "observer": ast_flags(PKG / "observer.py")}
+                "shapeclass": parser_flags(shapeclass.build_parser()), "replay": parser_flags(replay.build_parser()),
+                "observer": ast_flags(PKG / "observer.py")}
         for cli, flags in clis.items():
             self.assertGreaterEqual(len(flags), 5, cli)
             for flag, has_help in sorted(flags.items()):

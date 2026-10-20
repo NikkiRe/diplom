@@ -36,6 +36,8 @@ RestartSec=500ms
 TimeoutStartSec=60
 TimeoutStopSec=5
 LimitCORE=0
+# жертва OOM — последней (−1000 нельзя: своя утечка стала бы неубиваемой)
+OOMScoreAdjust=-900
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=2000
 

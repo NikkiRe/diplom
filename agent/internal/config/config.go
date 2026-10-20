@@ -42,6 +42,18 @@ var (
 	DefaultLocalTools = []string{"notify_user", "create_rule", "delete_rule", "update_profile", "recent_events"}
 )
 
+var (
+	// HistoryNoopModes — что делать с пустым фоновым ходом (ответ noop_reply без
+	// инструментов и уведомлений): keep — хранить; skip_heartbeat — не хранить
+	// плановые проверки (в них нет ничего, кроме времени тика); skip — не хранить и
+	// пустые ходы по событиям (события остаются в журнале L2, recent_events).
+	HistoryNoopModes = []string{"keep", "skip_heartbeat", "skip"}
+	// ReasoningEfforts, Verbosities — значения llm.extra.reasoning_effort и
+	// llm.extra.verbosity (документация OpenAI «Reasoning models», 20.10.2026).
+	ReasoningEfforts = []string{"none", "minimal", "low", "medium", "high", "xhigh"}
+	Verbosities      = []string{"low", "medium", "high"}
+)
+
 // Config — полная конфигурация агента.
 type Config struct {
 	RunID       string      `yaml:"run_id" json:"run_id"`
@@ -111,7 +123,9 @@ type LLM struct {
 	// Breaker — предохранитель на случай недоступности модели.
 	Breaker Breaker `yaml:"breaker" json:"breaker"`
 	// Extra — дополнительные поля тела запроса (например закрепление endpoint'а:
-	// provider: {only: [openai], allow_fallbacks: false}).
+	// provider: {only: [openai], allow_fallbacks: false}, уровень рассуждения
+	// reasoning_effort, verbosity, service_tier). Поля неизменны весь прогон:
+	// reasoning_effort и verbosity входят в ключ кэша провайдера.
 	Extra map[string]any `yaml:"extra" json:"extra"`
 	// TraceHeaders — передавать заголовки X-Edgectx-* (run, req, wake, входы);
 	// нужно mock-llm в режиме oracle, для реального провайдера не требуется.
@@ -194,6 +208,11 @@ type Policy struct {
 	SummaryThresholdTokens int `yaml:"summary_threshold_tokens" json:"summary_threshold_tokens"`
 	// HistoryBackground — сохранять ли в историю фоновые ходы (гейт, heartbeat).
 	HistoryBackground *bool `yaml:"history_background" json:"history_background"`
+	// HistoryBatchTurns — шаг вытеснения истории B: окно и маска сдвигаются сразу
+	// на B ходов (1 — на каждом ходе, как до 20.10.2026).
+	HistoryBatchTurns int `yaml:"history_batch_turns" json:"history_batch_turns"`
+	// HistoryNoop — пустые фоновые ходы в истории: keep | skip_heartbeat | skip.
+	HistoryNoop string `yaml:"history_noop" json:"history_noop"`
 
 	HWCtx           string  `yaml:"hwctx" json:"hwctx"`
 	SnapshotPeriodS float64 `yaml:"snapshot_period_s" json:"snapshot_period_s"`
@@ -306,6 +325,7 @@ func Default() *Config {
 			History:       "mask",
 			WindowTurns:   8,
 			MaskKeepTurns: 2, SummaryThresholdTokens: 4000, HistoryBackground: &t,
+			HistoryBatchTurns: 1, HistoryNoop: "keep",
 			HWCtx: "delta_tail", SnapshotPeriodS: 60, Catalog: "generic",
 			NoopReply: "NO_ACTION", RecentEventsK: 10, ProfileConsolidateS: 600, MaxToolResultChars: 4000,
 		},
@@ -395,6 +415,12 @@ func (c *Config) fillDefaults() {
 	}
 	if c.Policy.HistoryBackground == nil {
 		c.Policy.HistoryBackground = d.Policy.HistoryBackground
+	}
+	if c.Policy.HistoryBatchTurns <= 0 {
+		c.Policy.HistoryBatchTurns = d.Policy.HistoryBatchTurns
+	}
+	if c.Policy.HistoryNoop == "" {
+		c.Policy.HistoryNoop = d.Policy.HistoryNoop
 	}
 	if c.Policy.MaxSteps <= 0 {
 		c.Policy.MaxSteps = d.Policy.MaxSteps
@@ -488,6 +514,9 @@ func (c *Config) Validate() error {
 	if c.LLM.Breaker.ProbeMaxS < c.LLM.Breaker.ProbeS {
 		add("llm.breaker.probe_max_s < probe_s")
 	}
+	for _, msg := range checkReasoning(c.LLM.Model, c.LLM.Extra) {
+		add("%s", msg)
+	}
 	names := map[string]bool{}
 	for i, s := range c.MCP {
 		if s.Name == "" {
@@ -519,6 +548,7 @@ func (c *Config) Validate() error {
 	if p.History == "window" && p.WindowTurns <= 0 {
 		add("policy.window_turns должен быть > 0 для history=window")
 	}
+	oneOf("policy.history_noop", p.HistoryNoop, HistoryNoopModes)
 	oneOf("policy.hwctx", p.HWCtx, HWCtxModes)
 	oneOf("policy.catalog", p.Catalog, Catalogs)
 	for _, tname := range p.LocalTools {

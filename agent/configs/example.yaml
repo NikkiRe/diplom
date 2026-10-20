@@ -28,8 +28,10 @@ llm:
     probe_max_s: 300
     probe_path: models                  # GET {base_url}/models без токенов; удачная проба допускает пробный ход
   trace_headers: true                   # X-Edgectx-* для mock-llm (oracle)
-  extra:                                # добавляется в тело запроса как есть
+  extra:                                # добавляется в тело запроса как есть; неизменно весь прогон
     provider: {only: [openai], allow_fallbacks: false}
+    reasoning_effort: low               # gpt-5-mini/nano: low (minimal — после пробы E0-P); GPT-6 Luna — none
+    verbosity: low                      # таблица по моделям — agent/README.md, «Уровень рассуждения»
 
 mcp:
   - name: sim
@@ -71,6 +73,8 @@ policy:
   history: mask                # full | window | mask | summary_system
   window_turns: 8
   mask_keep_turns: 2
+  history_batch_turns: 3       # окно и маска сдвигаются пачкой по 3 хода: кэш истории ломается раз в 3 хода
+  history_noop: keep           # keep | skip_heartbeat | skip — пустые фоновые ходы в истории (README, «Ход агента»)
   summary_threshold_tokens: 4000
   history_background: true
   hwctx: delta_tail            # snapshot_head | delta_tail | pull

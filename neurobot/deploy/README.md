@@ -20,7 +20,7 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 | `bin/neurobot` | CLI (Python 3.8, только stdlib; rclpy — лениво) |
 | `bin/neurobot-run` | обёртка ExecStart: окружение ROS 2 и команда из переменной env-файла, `exec` без смены PID |
 | `launchfiles/supervised.launch.py` | обёртка `ros2 launch` для драйверов и rosbridge: смерть любого узла гасит launch, юнит перезапускает systemd (`install.sh` ставит в `<prefix>/share/launchfiles/`) |
-| `neurobot_deploy/` | код CLI: `config` env-файл, `checks` проверки перед стартом, `probes` WebSocket, MCP и HTTP, `picolog` журнал PicoClaw, `picoclaw_cfg` версия, схема и оверлей PicoClaw, `doctor`, `estop` защёлка, `watchdog`, `start_test`, `rosgraph` (rclpy), `render`, `report` коды причин |
+| `neurobot_deploy/` | код CLI: `config` env-файл, `checks` проверки перед стартом, `backoff` пауза частых рестартов распознавания, `probes` WebSocket, MCP и HTTP, `picolog` журнал PicoClaw, `picoclaw_cfg` версия, схема и оверлей PicoClaw, `doctor`, `estop` защёлка, `watchdog`, `start_test`, `rosgraph` (rclpy), `render`, `report` коды причин, `sd` systemctl, журнал и sd_notify |
 | `journald/50-neurobot.conf` | лимиты журнала, журнал на диске |
 | `logrotate/neurobot-picoclaw` | ротация `~/.picoclaw/logs/gateway.log` (PicoClaw сам её не делает, N15) |
 | `mcp/ros_mcp_server.patch`, `mcp/ros_mcp.json.example` | патч к присланному `ros_mcp_server.py` и его конфиг |
@@ -28,7 +28,7 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 | `picoclaw/config.overlay.json` | оверлей конфига PicoClaw; `picoclaw/schema-<версия>.json` — поля config.json версий 0.2.8 и 0.3.1 |
 | `weights.sha256.example` | манифест весов для проверки перед стартом |
 | `fakes/` | подставные компоненты, профиль и сценарии стенда для проверки запуска без робота |
-| `verify/` | директивы systemd v245 (Ubuntu 20.04), проверка юнитов systemd-analyze 245, генератор схем PicoClaw, тесты обёртки launch против launch 0.10 из Foxy (`foxy_launch.sh`); замеры на двойнике или роботе: `recovery.py` — kill -9 и SIGSTOP узлов внутри юнитов ros2 launch и время восстановления, `k6.py` — K6 «stop через MCP → ноль» и «препятствие → ноль после скана», `agent_truth.py` — ответы агента (`robot_nudge`, `robot_get_status`) против сдвига по `/odom`, `stand.py` — их общая часть (запись тем, MCP-сессия, квантили, сервисы мира двойника) |
+| `verify/` | директивы systemd v245 (Ubuntu 20.04), проверка юнитов systemd-analyze 245, генератор схем PicoClaw, тесты обёртки launch против launch 0.10 из Foxy (`foxy_launch.sh`); замеры на двойнике или роботе: `recovery.py` — kill -9 и SIGSTOP узлов внутри юнитов ros2 launch и время восстановления, `k6.py` — K6 «stop через MCP → ноль» и «препятствие → ноль после скана», `agent_truth.py` — ответы агента (`robot_nudge`, `robot_get_status`) против сдвига по `/odom`, `oom.py` — провокация OOM: петля рестартов распознавания и выбор жертвы по `OOMScoreAdjust`, `load.py` — CPU юнитов (cgroup) и трафик тем (raw) за окно, `stand.py` — их общая часть (запись тем, MCP-сессия, квантили, сервисы мира двойника) |
 
 ## Цепочка движения (контракт двойника, PLAN §13.3)
 
@@ -89,12 +89,12 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 | 1 | `neurobot-driver@<имя>` (лидар, база, камера `realsense2_camera`, фильтр IMU) | exec | первое сообщение `NEUROBOT_DRIVER_<имя>_TOPIC` | — (сторож: свежесть `NEUROBOT_DRIVER_<имя>_FRESH`) | always / 1 | команда задана; `ros2 launch` — через обёртку (иначе предупреждение `unsupervised_launch`); устройство на месте; камера на USB (`NEUROBOT_DRIVER_<имя>_USB`) | KillSignal=SIGINT; смерть узла — выход launch (обёртка) |
 | 2 | `neurobot-safety` | notify | READY после первого нуля | 3 | always / 500ms | команда; JSON-конфиг; модули интерпретатора (`numpy<2`, rclpy); **цепочка движения** (см. выше) | ExecStopPost: явный ноль (`neurobot zero`); TimeoutStopSec=20 — запуск rclpy для нуля на загруженной ВМ занимал до 14 с [замер]; StateDirectory=neurobot/safety — защёлка |
 | 3 | `neurobot-executor` | notify | READY после первого нуля, затем `wait-graph executor` | 3 | always / 500ms | команда с ремапом `/cmd_vel:=/neurobot/cmd_vel_req`; JSON-конфиг; нет метки `wait-graph` при той же команде; safety_gate слушает `/neurobot/cmd_vel_req`, других писателей нет | TimeoutStartSec=60 (три запуска rclpy); StateDirectory=neurobot/executor — метка `wait-graph` |
-| 4 | `neurobot-perception` | notify | READY после прогрева и первого кадра, затем `wait-graph perception` | 5 (живость цикла) | always / 1 | команда с ремапом `/cmd_vel` вне цепочки; нет метки `wait-graph` при той же команде; камера на USB (и USB 3); веса и sha256; нет чужих владельцев камеры (`predict_live.py`, `realsense2_camera_node` вне `neurobot-driver@` — при `--camera ros`, везде — при `--camera rs`; YOLO-воркер вне юнита); модули (`numpy<2`, torch, pyrealsense2, rclpy) | TimeoutStartSec=120, KillSignal=SIGINT, RestartPreventExitStatus=6 (`--camera rs`: камера занята); StateDirectory=neurobot/perception — метка `wait-graph` |
+| 4 | `neurobot-perception` | notify | READY после прогрева и первого кадра, затем `wait-graph perception` | 5 (живость цикла) | always / 1 | команда с ремапом `/cmd_vel` вне цепочки; нет метки `wait-graph` при той же команде; камера на USB (и USB 3); веса и sha256; нет чужих владельцев камеры (`predict_live.py`, `realsense2_camera_node` вне `neurobot-driver@` — при `--camera ros`, везде — при `--camera rs`; YOLO-воркер вне юнита); модули (`numpy<2`, torch, pyrealsense2, rclpy) | TimeoutStartSec=120, KillSignal=SIGINT, RestartPreventExitStatus=6 (`--camera rs`: камера занята); StateDirectory=neurobot/perception — метка `wait-graph` и `restart.json`; падает раз за разом — precheck перед стартом ждёт 0 → 5 → 15 → 30 с (ниже) |
 | 5 | `neurobot-rosbridge` | exec | WebSocket отвечает (`wait-port`) | — (сторож: ping по WebSocket) | always / 1 | порт свободен; `address:=127.0.0.1`; `topics_glob`, `services_glob`, `params_glob` — списки разрешённого (тема агента, стоп агента и копия состояния для агента; `/rosapi/…`; `none`); каждый аргумент один раз; `ros2 launch` — через обёртку | слушает только 127.0.0.1 — при `address:=127.0.0.1` [опыт, Jazzy]; смерть узла `rosbridge_websocket` — выход launch |
 | 6 | `neurobot-labworker@<имя>` | exec | GET `NEUROBOT_LABWORKER_<имя>_URL` = 200 (`wait-http`) | — | always / 2 | порт свободен (второй экземпляр не стартует, N7); модули | TimeoutStartSec=180 (загрузка модели) |
 | 7 | `neurobot-mcp` | exec | initialize + tools/list (`wait-mcp`) | — | always / 1 | порт свободен; конфиг MCP (HTTP на 127.0.0.1, `/cmd_vel_agent`, пределы L3) или env прокси; нет второго MCP-сервера или воркера вне юнитов; Python ≥ 3.10, `mcp` ≥ 1.8 | без ROS-окружения |
 | 8 | `neurobot-picoclaw` | exec | «MCP server initialization complete» в журнале запуска (`wait-agent`, `+` — root) | — | always / 2 | порт шлюза свободен; конфиг PicoClaw по схеме установленной версии | «All MCP servers failed» → отказ и рестарт (PC5) |
-| 9 | `neurobot-watchdog` | exec | — | — | always / 5 | — | root; окружение ROS (узел rclpy для свежести тем драйверов); без `After=` — стартует вместе с драйверами: иначе ждал бы весь агентский путь, а зависший драйвер камеры (из-за него не поднимается распознавание) некому было бы перезапустить [опыт, ВМ] |
+| 9 | `neurobot-watchdog` | notify | READY после первого прохода проб | 30 (WATCHDOG с каждого прохода цикла) | always / 5 | — | root; окружение ROS (узел rclpy для свежести тем драйверов); без `After=` — стартует вместе с драйверами: иначе ждал бы весь агентский путь, а зависший драйвер камеры (из-за него не поднимается распознавание) некому было бы перезапустить [опыт, ВМ]; TimeoutStopSec=10, `PYTHONFAULTHANDLER` — стек зависшего сторожа в журнале |
 | 10 | `neurobot-ui` (компонент `ui`, по умолчанию не в составе) | notify | READY после узла и порта, затем `wait-graph ui` | 10 | always / 3, код 2 — без рестарта; 5 запусков за 300 с — сдаётся | команда; темы стопа и защёлки (`NEUROBOT_STOP_TOPIC`, `NEUROBOT_ESTOP_TOPIC`) — те, что в коде пульта; свой пользователь (`NEUROBOT_UI_USER` ≠ `NEUROBOT_USER`, не root); узел не `neurobot_*`; порт свободен и не чужой; `StateDirectory` 0700; источник — робот или двойник; rclpy | только `After=neurobot-safety`; отказ и «сдался» — предупреждение doctor; `StateDirectory=neurobot/ui` (токен, коды входа, сессии, аудит), `MemoryMax=128M` (шлюз и doctor по кнопке в одной cgroup — числа в README пульта [замер, двойник]), `MALLOC_ARENA_MAX=2`, `MALLOC_TRIM_THRESHOLD_=131072`, `Slice=neurobot-ui.slice`, `CPUWeight=20`, `Nice=10`, `NoNewPrivileges`, `ProtectSystem=full` |
 
 Общее для всех: `PartOf=neurobot.target` (stop/restart цели — для всех), `StartLimitIntervalSec=0` (непрерывный
@@ -104,6 +104,42 @@ MCP SDK (FastMCP) — готовые компоненты; `ros_mcp_server.py`, 
 `Requires=`: при отказе зависимости юнит с `Requires=` не запускается вовсе, и `Restart=` его не поднимет; с `After=`
 он стартует, ждёт по пробе или отказывает в precheck и сам поправится, когда поднимется зависимость (doctor при этом
 называет первый в порядке отказавший компонент). `After=` на отсутствующий в составе юнит ничего не ломает.
+
+**Кого убивать при нехватке памяти** (`OOMScoreAdjust`, есть в v245). Ядро берёт процесс с наибольшим `oom_score` ≈
+доля памяти × 1000 + `OOMScoreAdjust`; без него выбор — только по размеру, и цепочка движения ничем не защищена
+[ист.: proc(5)]. Роли:
+
+| Юниты | OOMScoreAdjust | Почему |
+|---|---|---|
+| `neurobot-ui` | +500 | первым: робот работает и без пульта |
+| `neurobot-rosbridge`, `-mcp`, `-picoclaw` | +400 | агентский путь: жесты от него не зависят |
+| `neurobot-perception`, `neurobot-labworker@` | 0 | по размеру, как решает ядро |
+| `neurobot-driver@`, `neurobot-watchdog` | −500 | датчики, база и надзор |
+| `neurobot-safety`, `-executor` | −900 | цепочка движения — последней; не −1000: своя утечка стала бы неубиваемой |
+
++400 обгоняет распознавание, пока оно занимает меньше ≈40 % RAM + подкачки: с PSS 1305 МиБ из 3956 (budget §6.1)
+это 330 против ≥ 400 [расчёт]. Учитывается ли память CUDA в RSS распознавания на Nano, покажет nvmap
+(`collect_diag.sh --sudo`). Дочерние процессы (`ros2 launch`, precheck) наследуют значение юнита. [замер, двойник
+20.10, `verify/oom.py victims --profile robot`: доли памяти робота × 0,5 в одном slice — распознавание 664 МиБ RSS
+из предела 1984, rosbridge 66, пульт 32, safety_gate 29, остальное — «прочее» вне выбора; затем утечка растёт без
+предела]: до правки ядро первым убило распознавание, самый крупный процесс (3 из 3), после — пульт, затем rosbridge и
+только третьим распознавание (3 из 3); safety_gate жив в обоих случаях. Значит, всплеск меньше памяти пульта и
+агентского пути (на роботе ≈ 220 МиБ: 43 + 111 + 42 + 28 [расчёт]) распознавание больше не роняет; от утечки без
+предела защищены только юниты с отрицательным `OOMScoreAdjust` (в замере — safety_gate). При равных размерах ролей (`--profile equal`, по 200 МиБ) без
+`OOMScoreAdjust` выбор произволен — ролей ядро не различает: в первом прогоне оно 3 из 3 раз брало safety_gate, при
+повторе — rosbridge 3 из 3; с правкой — rosbridge (+400) 3 из 3 в обоих прогонах.
+
+**Частые рестарты распознавания** (`backoff.py`; `RestartSteps=` — только с v254). С `RestartSec=1` распознавание
+при нехватке памяти крутится по кругу (READY → OOM → рестарт за ≈2 с, budget §6.2), и повторные импорты torch
+отнимают CPU у safety_gate. Поэтому `neurobot precheck perception` перед стартом смотрит, автоматический ли это
+рестарт (`NRestarts` > 0; ручной `start`/`restart` — человек, сторож, start_test — счётчик обнуляет [опыт, ВМ]),
+и как давно был прошлый запуск (`restart.json` в `StateDirectory`). Серия — запуски подряд не реже раза в
+`NEUROBOT_RESTART_RESET_S` (600 с); пауза перед k-м рестартом серии — k-е число `NEUROBOT_RESTART_PAUSES_S`
+(0 5 15 30, дальше 30): одиночный отказ рестартует сразу, TTR не растёт; петля замедляется до раза в ≈30 с. Пауза —
+строка `restart_loop` в журнале; она внутри precheck, а у каждой команды `ExecStartPre` свой `TimeoutStartSec`
+[опыт, ВМ, systemd 255]. [замер, двойник 20.10, `verify/oom.py loop`, 180 с, нагрузка «импорт torch и snntorch,
+затем рост памяти до MemoryMax 400 МиБ»]: до правки — 88 запусков, 87 убийств OOM, 39,3 % ядра ВМ; после — 9
+запусков, 8 убийств, 3,7 % ядра (паузы 5, 15 и 5 раз по 30 с).
 
 Совместимость с Ubuntu 20.04 (systemd 245): все директивы есть в v245 (тест по `verify/systemd245-directives.txt`,
 список извлечён из `man/*.xml` тега v245; в ВМ — `verify/systemd245_verify.sh`: systemd-analyze из пакета focal);
@@ -155,7 +191,7 @@ launch 0.10.10 ветки foxy, Python 3.8, тест `test_deploy_launch.py`; н
 | `NEUROBOT_DRIVER_<имя>_CMD` | — | команда драйвера |
 | `NEUROBOT_DRIVER_<имя>_DEVICE` | — | устройство для проверки перед стартом (`/dev/ttyACM0`) |
 | `NEUROBOT_DRIVER_<имя>_TOPIC` | — | тема готовности драйвера (ждём первое сообщение) |
-| `NEUROBOT_DRIVER_<имя>_FRESH` | тема `TOPIC` с `NEUROBOT_WATCHDOG_STALE_S` | свежесть для сторожа: «/тема:возраст_с» через пробел (камера: `/camera/color/image_raw:2`); тема старше предела две пробы подряд — `restart` драйвера; `none` — не смотреть |
+| `NEUROBOT_DRIVER_<имя>_FRESH` | тема `TOPIC` с `NEUROBOT_WATCHDOG_STALE_S` | свежесть для сторожа: «/тема[@статус]:возраст_с» через пробел (камера: `/camera/color/camera_info:2`, база: `/odom:2 /diagnostics@twist_mux:3`); тема старше предела две пробы подряд — `restart` драйвера; `@статус` — из `/diagnostics` в счёт только сообщения с этим статусом (без регистра, `_` = пробел), и пока такого статуса не было ни разу, по нему не судят; `none` — не смотреть |
 | `NEUROBOT_DRIVER_<имя>_USB` | — | id устройства на USB для проверки перед стартом (камера: `8086:0b3a`): нет — `camera_missing` у драйвера, а не тишина темы через `NEUROBOT_WAIT_S` |
 | `NEUROBOT_LABWORKERS` | — | имена экземпляров `neurobot-labworker@<имя>` (HTTP-воркеры лаборатории) |
 | `NEUROBOT_LABWORKER_<имя>_CMD` | — | команда воркера |
@@ -213,6 +249,8 @@ launch 0.10.10 ветки foxy, Python 3.8, тест `test_deploy_launch.py`; н
 | `NEUROBOT_WAIT_S` | 30 | сколько ждать готовности порта, MCP, агента, темы драйвера, узла компонента в графе (`wait-graph`) |
 | `NEUROBOT_WRITER_CHECK_S` | 0.75 | сколько собирать граф DDS при проверке писателей (0 — не проверять); узлы без имени (граф ещё собирается) досматриваются до 2 с сверху; doctor проверяет писателей ещё раз |
 | `NEUROBOT_PRECHECK_BACKOFF_S` | 5 | пауза после неудачной проверки перед стартом |
+| `NEUROBOT_RESTART_PAUSES_S` | 0 5 15 30 | паузы перед 1-м, 2-м, 3-м… автоматическим рестартом распознавания подряд (последняя повторяется), с |
+| `NEUROBOT_RESTART_RESET_S` | 600 | серия рестартов обнуляется, если прошлый запуск был раньше, с («≈10 мин работы») |
 | `NEUROBOT_FOREIGN_PERCEPTION` | predict_live.py live_stream_yolo.py realsense-viewer realsense2_camera_node yolo_hand_worker.py run_yolo_mcp_stack.sh | чужие владельцы камеры и CUDA: имя программы или файла-аргумента вне cgroup юнита (ручной запуск демо, узел камеры вне наших юнитов, YOLO-воркер вне юнита — второй контекст CUDA ≈1 ГиБ, N12). При `--camera ros` узел камеры в `neurobot-driver@` — свой, при `--camera rs` — чужой и там |
 | `NEUROBOT_FOREIGN_MCP` | ros_mcp_server.py start_robot_mcp.sh robot_vision_mcp_proxy.py yolo_mcp_server.py run_yolo_mcp_stack.sh yolo_hand_worker.py | то же для MCP-серверов и воркеров (stdio-запуск из PicoClaw, `nohup`); воркеры в юнитах `neurobot-labworker@` не в счёт. Имя процесса воркера 8766 добавить, когда лаборатория пришлёт код |
 | `NEUROBOT_ENV` | /etc/neurobot/neurobot.env | путь env-файла для CLI (юниты задают его сами) |
@@ -295,9 +333,13 @@ PicoClaw. Если компоненты ROS запущены, а граф не �
 Сторож (`neurobot-watchdog`, root, с окружением ROS) — то, что «живо, но не работает», чего не видят systemd и обёртка
 launch. Раз в `NEUROBOT_WATCHDOG_FAST_S` (1 с):
 - свежесть тем драйверов (`NEUROBOT_DRIVER_<имя>_FRESH`) в одном постоянном узле rclpy, подписка raw (кадры камеры
-  не разбираются): тема старше предела две пробы подряд — `systemctl restart --no-block` драйвера (SIGSTOP узла, дедлок,
-  оглохший поток USB); если молчат темы всех драйверов сразу, никого не трогает — так выглядит беда DDS или самого
-  сторожа, а не отказ одного драйвера; драйвер моложе 5 с не трогает (его active и так значит «первое сообщение»);
+  не разбираются; у камеры смотрится `camera_info`, он приходит с каждым кадром): тема старше предела две пробы подряд —
+  `systemctl restart --no-block` драйвера (SIGSTOP узла, дедлок, оглохший поток USB); если молчат темы всех драйверов
+  сразу, никого не трогает — так выглядит беда DDS или самого сторожа, а не отказ одного драйвера; драйвер моложе 5 с
+  не трогает (его active и так значит «первое сообщение»). У twist_mux своей темы нет: он раз в 1 с публикует
+  «Twist mux status» в `/diagnostics` из того же исполнителя, что и команды (twist_mux foxy-devel 4.0.1,
+  `DIAGNOSTICS_PERIOD`), поэтому база смотрится и по `/diagnostics@twist_mux` — зависший twist_mux перезапускает базу.
+  В правило «молчат все» статус не входит: twist_mux жив и тогда, когда молчат все датчики;
 - rosbridge: одно постоянное соединение WebSocket и ping, pong за 1 с; две неудачи подряд (нет соединения, нет pong) —
   `restart --no-block` rosbridge. Соединение одно, а не рукопожатие на каждую пробу: rosbridge пишет в журнал каждое
   подключение клиента. На ping самого сервера (`websocket_ping_interval` rosbridge) сторож отвечает pong, иначе
@@ -312,7 +354,10 @@ launch. Раз в `NEUROBOT_WATCHDOG_FAST_S` (1 с):
    больше 20 с; юниты моложе 15 с не трогаются. LLM сторож не вызывает.
 
 Рестарты в цикле — `--no-block`: частые пробы драйверов не ждут, пока поднимается MCP-сервер или PicoClaw
-(`--once` ждёт).
+(`--once` ждёт). Самого сторожа сторожит systemd (`Type=notify`, `WatchdogSec=30`): READY — после первого прохода,
+WATCHDOG — с каждого прохода цикла; завис (дедлок rclpy или DDS) — SIGABRT, стек Python в журнале, рестарт. Дочерние
+`systemctl` и `journalctl` идут без `NOTIFY_SOCKET`: systemd ≥ 254 шлёт из них `EXIT_STATUS`, и при
+`NotifyAccess=main` это было бы предупреждение в журнале раз в секунду [опыт, ВМ, systemd 255].
 
 ## Аварийная защёлка (PLAN §13.3)
 
@@ -594,6 +639,9 @@ python3 $V/recovery.py --out rec.json --runs 5 --mcp                      # др
 python3 $V/recovery.py --out base.json --runs 3 --signals KILL driver@twin:twist_mux
 python3 $V/k6.py --out k6.json --runs 30 --heading 90                       # mcp и scan; мир lab, курс — на север
 python3 $V/agent_truth.py --out truth.json --runs 5                         # free, blocked, estop, nogate
+python3 $V/oom.py loop --deploy DIR --label after --out loop.json             # петля OOM распознавания (H4)
+python3 $V/oom.py victims --deploy DIR --label after --profile robot --out victims.json  # жертва OOM по ролям (H4)
+python3 $V/load.py --out load.json --unit neurobot-watchdog.service --topic /tf   # CPU юнитов, трафик тем
 ```
 
 `recovery.py`: `--runs N` (5) замеров на случай и сигнал, `--signals KILL,STOP`, `--settle S` (10) — юнит active
@@ -780,6 +828,33 @@ safety_gate остановлен — `unconfirmed`, `safety.state` `unknown` 5 �
 30 из 30, касаний 0. Проверки агентского пути (`check_rosbridge`, `check_mcp_config` на установленном env-файле) —
 без замечаний.
 
+## Замеры на двойнике 20.10 (оптимизация: H4, H5, H16 из `docs/research/optimization/REVIEW.md`)
+
+ВМ sim (ядро 6.8, cgroup v2, systemd 255, Jazzy и Cyclone), пакет двойника не переустанавливался: новые юниты и CLI —
+в своих юнитах `nbopt-*` и drop-in в `/run`, снятых после замера. Артефакты, версии и хеши —
+`experiments/results/opt_20261020_deploy/` (`manifest.json`) [замер, двойник, ориентир]. «Ядро A57» — пересчёт через
+7-Zip, как в budget §2 (1 ядро ВМ ≈ 3,8 ядра A57), [оценка].
+
+| Что | До | После |
+|---|---|---|
+| H4: петля OOM распознавания, 180 с, MemoryMax 400 МиБ (`oom.py loop`) | 88 запусков, 87 убийств OOM; 39,3 % ядра ВМ (≈1,5 ядра A57), 0,8 с CPU на запуск | 9 запусков, 8 убийств; 3,7 % ядра ВМ (≈0,14 ядра A57); паузы 5, 15 и 5 × 30 с |
+| H4: жертва OOM, доли памяти робота × 0,5, утечка без предела (`oom.py victims --profile robot`, 3 повтора) | первым — распознавание 3 из 3, затем сама утечка; пульт, rosbridge и safety_gate живы | пульт → rosbridge → распознавание → утечка, 3 из 3; safety_gate жив |
+| H4: роли поровну по 200 МиБ (`--profile equal`, 2 прогона по 3) — проверка правила | выбор произволен: safety_gate 3 из 3, при повторе rosbridge 3 из 3 | rosbridge (+400) 3 из 3 в обоих; safety_gate и распознавание живы |
+| H5: сторож камеры, A/B на одном коде, 2 пары по 60 с (`load.py`) | по `image_raw`: 2,68 и 2,61 % ядра ВМ, 41,6–41,7 МиБ; копия кадров одному подписчику raw — 12,8–13,4 МБ/с | по `camera_info`: 2,34 и 2,34 %, 36,6–36,9 МиБ; 5,4 КБ/с |
+| H5: зависшая камера (SIGSTOP узла, `recovery.py`) | — | по `camera_info` поймана 3 из 3: рестарт через 3,7–4,0 с, кадры через 5,8–6,0 с |
+| H5: madgwick со строкой env робота на `/camera/imu` двойника, выход переименован, 30 с | `/tf` 191,7 Гц (116 Б), 1,68 % ядра ВМ | `publish_tf:=false`: `/tf` 0, 1,34 % |
+| H16: SIGSTOP `twist_mux` (`recovery.py`) | 0 из 2 за 30 с | 3 из 3: рестарт базы через 4,7–5,7 с, `/odom` и статус через 9,7–11,2 с |
+| H16: SIGSTOP самого сторожа | за 60 с не перезапущен | SIGABRT на 30-й с, новый запуск через 35,8 с, стек Python в журнале |
+| H16: SIGSTOP сервера Gazebo — молчат все датчики, twist_mux жив | без рестарта (18.10: 3 из 3) | без рестарта 1 из 1: статус twist_mux в правило «молчат все» не входит |
+
+На двойнике рестарт базы — это рестарт Gazebo: камера возвращается позже 4 с, и сторож трижды из трёх лишний раз
+перезапустил драйвер камеры, а safety_gate поставил защёлку `shock` (снимал оператор стенда, `sudo neurobot estop
+release` в псевдотерминале). Это свойства двойника: на роботе база и камера — разные устройства. Окончательный код
+(после правки правила «молчат все») перепроверен ещё раз: SIGSTOP twist_mux — рестарт базы через 5,7 с. Новый сторож
+становится готов через 0,26 с после старта. systemd-analyze из systemd 245 замечаний к новым юнитам не дал, а
+контрольный `RestartSteps` отверг (как `verify/systemd245_verify.sh`). Числа ВМ на Nano не переносятся: там ядро 4.9,
+cgroup v1 и Fast DDS с SHM; проверка на роботе — RUNBOOK §9.
+
 ## Ограничения
 
 - Первый `robot_stop` после старта MCP-сервера открывает тему стопа агента лениво (advertise и пауза 50 мс): на двойнике ноль через 52–55 мс против 2–3 мс у следующих. На Jetson это может подойти к пределу K6 (100 мс), особенно сразу после перезапуска сервера сторожем. Предложение: делать advertise `/neurobot/stop_now` при старте сервера (правка в локальном патче к ros_mcp_server) — не сделано.
@@ -803,18 +878,19 @@ safety_gate остановлен — `unconfirmed`, `safety.state` `unknown` 5 �
   и launch базы — нет. Launch базы лаборатории может запускать ещё одноразовые процессы,
   кроме spawner: их надо дописать в `oneshot:=`, иначе их нормальный выход погасит базу (в журнале — «процесс …
   завершился с кодом 0 — гашу launch»).
-- Сторож подписан на кадры цвета raw: ≈14 МБ/с копирования на Nano при 640×480×15 [оценка, не мерили]; дешевле —
-  `FRESH="/camera/color/camera_info:2"`. Пороги свежести (2 с, две пробы по 1 с) — [допущение]: SIGSTOP узла лидара,
-  камеры или rosbridge — снова работает через 4,5–4,9 с, 15 из 15 [замер, двойник]. Вне внесённых отказов за ≈1 ч
+- Сторож камеры смотрит `camera_info`, а не сами кадры (с 20.10): копия кадра 640×480 raw — ≈13 МБ/с [замер,
+  двойник]. Что realsense-ros 4.51.1 на роботе шлёт `camera_info`, пока на него есть подписчик, даже без подписчиков
+  кадров, — [допущение по коду], проверка — RUNBOOK §9. Пороги свежести (2 с, две пробы по 1 с) — [допущение]: SIGSTOP
+  узла лидара, камеры или rosbridge — снова работает через 4,5–4,9 с, 15 из 15 [замер, двойник]. Вне внесённых отказов за ≈1 ч
   замеров 18.10 сторож никого не перезапускал; при рестарте Gazebo двойника (из него идут все датчики) прежнее правило
   «молчат все» не срабатывало из-за разных пределов (/odom 3 с, /scan 2 с) и давало лишний рестарт драйвера лидара —
   3 раза из 5 [замер]; теперь «все молчат» — дольше наименьшего предела (тест; повтор на двойнике — в артефактах).
 - Что сторож не лечит: зависание всех датчиков сразу (на двойнике — SIGSTOP сервера Gazebo: 3 из 3 без рестарта,
-  после SIGCONT всё продолжилось само; на роботе так выглядит беда DDS) и зависший узел, у которого нет своей темы
-  свежести, — `twist_mux` (SIGSTOP: 1 из 1 без рестарта; база стоит по `cmd_vel_timeout`, жесты не исполняются, doctor
-  этого не видит). Нужна проба «вход `/cmd_vel` идёт, а `/diff_cont/cmd_vel_unstamped` — нет» — пакет 2; до него —
-  `sudo systemctl restart neurobot-driver@base` человеком (RUNBOOK §4.6). Смерть `twist_mux` (kill -9) ловит обёртка:
-  3 из 3.
+  после SIGCONT всё продолжилось само; на роботе так выглядит беда DDS) и зависший узел, у которого нет ни своей темы,
+  ни статуса в `/diagnostics`. Зависший `twist_mux` с 20.10 ловится по его статусу (выше); что twist_mux лаборатории
+  на Foxy публикует `/diagnostics`, покажет `collect_diag.sh` (издатели `/diagnostics`) — без статуса сторож по нему не
+  судит, и тогда остаётся `sudo systemctl restart neurobot-driver@base` человеком (RUNBOOK §4.6). Смерть `twist_mux`
+  (kill -9) ловит обёртка: 3 из 3.
 - На двойнике смерть узла базы — рестарт Gazebo: мир заново, робот на точке спавна, всплеск IMU и защёлка `shock` /
   `tilt` safety_gate — снимает человек. В замерах 18.10 её снимал сценарий как оператор стенда (`sudo neurobot estop
   release` в псевдотерминале).

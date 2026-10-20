@@ -22,8 +22,11 @@ func TestExampleConfigLoads(t *testing.T) {
 	if len(c.Policy.Gate.Signals) != 4 || c.Policy.Gate.Signals[1].Above == nil || *c.Policy.Gate.Signals[1].Above != 30 {
 		t.Fatalf("signals %+v", c.Policy.Gate.Signals)
 	}
-	if c.LLM.Extra["provider"] == nil {
-		t.Fatal("llm.extra lost")
+	if c.LLM.Extra["provider"] == nil || ReasoningEffort(c.LLM.Extra) != "low" || c.LLM.Extra["verbosity"] != "low" {
+		t.Fatalf("llm.extra %v", c.LLM.Extra)
+	}
+	if c.Policy.HistoryBatchTurns != 3 || c.Policy.HistoryNoop != "keep" {
+		t.Fatalf("history B=%d noop=%q", c.Policy.HistoryBatchTurns, c.Policy.HistoryNoop)
 	}
 	if !filepath.IsAbs(c.Path(c.Trace)) {
 		t.Fatalf("trace path not resolved: %s", c.Path(c.Trace))

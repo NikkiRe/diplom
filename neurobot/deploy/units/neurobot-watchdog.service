@@ -3,6 +3,10 @@
 # поднимется весь агентский путь, а зависший драйвер камеры, из-за которого не поднимается распознавание, некому
 # было бы перезапустить. Юниты моложе пробы он и так не трогает. Долгоживущий сервис, а не таймер: на systemd 245
 # таймер раз в 10 с даёт две строки systemd на запуск.
+# Сторожа сторожит systemd: READY — после первого прохода проб, WATCHDOG — с каждого прохода цикла; нет его 30 с
+# (дедлок rclpy или DDS, зависший вызов) — SIGABRT (systemd добавляет SIGCONT, так что умирает и остановленный),
+# стек Python — в журнале, и рестарт: SIGSTOP сторожа — новый запуск через 36 с [замер, двойник]. Иначе зависший
+# сторож молча оставлял бы драйверы без надзора. TimeoutStopSec — предел и для SIGABRT, дальше SIGKILL.
 [Unit]
 Description=neurobot: сторож драйверов, rosbridge, MCP-сервера и PicoClaw
 Documentation=file:@PREFIX@/share/RUNBOOK.md
@@ -10,12 +14,19 @@ PartOf=neurobot.target
 StartLimitIntervalSec=0
 
 [Service]
-Type=exec
+Type=notify
+NotifyAccess=main
 EnvironmentFile=@ETC@/neurobot.env
-Environment=NEUROBOT_ENV=@ETC@/neurobot.env
+Environment=NEUROBOT_ENV=@ETC@/neurobot.env PYTHONUNBUFFERED=1 PYTHONFAULTHANDLER=1
 ExecStart=@PREFIX@/bin/neurobot watchdog
+WatchdogSec=30
 Restart=always
 RestartSec=5
+TimeoutStartSec=60
+TimeoutStopSec=10
+LimitCORE=0
+# жертва OOM — вместе с драйверами
+OOMScoreAdjust=-500
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=200
 
