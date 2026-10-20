@@ -78,7 +78,7 @@ export function catalogDevices(catalog) {
     const state=src?.status==='error'?'error':src?.status==='connecting'?'missing':src?.status==='degraded'?'degraded':
       !props.length?'described':props.every(p=>p.status==='error')?'error':props.every(bad)?'stale':props.some(bad)?'degraded':'live';
     return {...d,group:'mcp',kind:d.kind||'device',label:d.location||d.id,source:src?src.label||src.url:d.source,
-      sourceId:d.source,clock:'wall',raw:d.raw||d,sampleTs:src?.last_success||0,sourceStatusTs:src?.updated_at||0,
+      sourceId:d.source,sourceInfo:src?.server_info||{},clock:'wall',raw:d.raw||d,sampleTs:src?.last_success||0,sourceStatusTs:src?.updated_at||0,
       lastTs:state==='described'?null:Math.max(0,...props.map(p=>Number.isFinite(p.ts)?p.ts:0))||src?.last_success||null,status:state,
       signals:(d.properties||[]).flatMap(p=>{
         const vals=flatten(p.value,[p.name]);

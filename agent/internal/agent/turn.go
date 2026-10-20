@@ -221,11 +221,15 @@ func (a *Agent) callLLM(ctx context.Context, w *wake, step int, purpose string, 
 	}
 	reqID := a.newID("r")
 	est := built.Tokens.Total()
-	a.tr.Emit(trace.LLMRequest, trace.F{
+	requestTrace := trace.F{
 		"req_id": reqID, "wake_id": w.id, "step": step, "purpose": purpose, "model": a.cfg.LLM.Model,
 		"prompt_tokens_est": est, "segments": built.Chars.Map(), "segments_tokens_est": built.Tokens.Map(),
 		"n_tools": len(tools), "n_messages": len(built.Messages), "bytes": len(body),
-	})
+	}
+	if a.cfg.TraceContext {
+		requestTrace["context_snapshot"] = promptSnapshot(built, tools, a.cfg.TraceContextMaxBytes)
+	}
+	a.tr.Emit(trace.LLMRequest, requestTrace)
 	a.m.inc("llm.requests")
 	a.m.inc("llm.requests_" + purpose)
 	a.m.add("llm.prompt_tokens_est", est)

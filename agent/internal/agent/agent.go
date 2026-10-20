@@ -239,7 +239,8 @@ func (a *Agent) emitRunStart(nRules int) {
 	llmParams := map[string]any{"reasoning_effort": config.ReasoningEffort(extra), "verbosity": extra["verbosity"],
 		"service_tier": extra["service_tier"]}
 	a.tr.Emit(trace.RunStart, trace.F{
-		"config_hash": a.cfg.Hash(),
+		"config_hash":     a.cfg.Hash(),
+		"context_capture": map[string]any{"enabled": a.cfg.TraceContext, "max_bytes": a.cfg.TraceContextMaxBytes},
 		"policy": map[string]any{
 			"wake": p.Wake, "heartbeat_min": p.HeartbeatMin, "history": p.History, "window_turns": p.WindowTurns,
 			"mask_keep_turns": p.MaskKeepTurns, "history_batch_turns": p.HistoryBatchTurns,

@@ -1,6 +1,7 @@
 import { html } from './ui.js';
 
 const paths = {
+  lab: 'M9 3h6M10 3v6l-6 10a1.3 1.3 0 0 0 1 2h14a1.3 1.3 0 0 0 1-2L14 9V3M8 14h8M10 17h.01M14 18h.01',
   equipment: 'M4 5h5v5H4zM15 4h5v5h-5zM8 16h6v5H8zM9 7h6M6.5 10v3h4.5v3M17.5 9v4H11',
   network: 'M4 5h5v5H4zM15 4h5v5h-5zM8 16h6v5H8zM9 7h6M6.5 10v3h4.5v3M17.5 9v4H11',
   search: 'M16 10a6 6 0 1 1-12 0 6 6 0 0 1 12 0m-1.5 4.5L21 21',

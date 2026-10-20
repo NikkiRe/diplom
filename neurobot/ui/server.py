@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import unquote, urlsplit
 
-from neurobot.ui import catalog, stream
+from neurobot.ui import cam_snapshot, catalog, lab, stream
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 LOOPBACK = ("127.0.0.1", "::1")
@@ -89,7 +89,7 @@ class Static:
         with open(os.path.join(self.web, "index.html"), encoding="utf-8") as f:
             html = f.read()
         self.csp = ("default-src 'none'; script-src 'self' %s; style-src 'self'; img-src 'self' data:; "
-                    "font-src 'self'; connect-src 'self'; base-uri 'none'; form-action 'none'; "
+                    "font-src 'self'; connect-src 'self'; media-src 'self' data:; base-uri 'none'; form-action 'none'; "
                     "frame-ancestors 'none'" % importmap_hash(html))
 
     def static(self, path: str) -> Optional[Tuple[bytes, str]]:
@@ -123,6 +123,7 @@ class App(Static):
         super().__init__(web)
         self.bundle = Bundle(bundle_path) if bundle_path else None
         self.catalog = catalog.Registry()
+        self.lab = lab.LabStore()
 
     def meta(self) -> bytes:
         if self.bundle is None:
@@ -167,6 +168,16 @@ def handler(app: App):
             if path == "/api/catalog":
                 raw = json.dumps(app.catalog.snapshot(), ensure_ascii=False).encode("utf-8")
                 return self.send(200, raw, "application/json")
+            if path.startswith("/api/lab/export/"):
+                raw = app.lab.export(unquote(path[len("/api/lab/export/"):]))
+                if raw is None:
+                    return self.deny(404, "Прогон не найден")
+                return self.send(200, raw, "application/x-ndjson; charset=utf-8",
+                                 {"Content-Disposition": 'attachment; filename="edgelab-trace.jsonl"'})
+            if path == "/api/lab" or path.startswith("/api/lab/runs/"):
+                doc = app.lab.snapshot() if path == "/api/lab" else app.lab.run(unquote(path[len("/api/lab/runs/"):]))
+                return self.send(200 if doc is not None else 404,
+                                 json.dumps(doc if doc is not None else {"error": "Прогон не найден"}, ensure_ascii=False).encode("utf-8"), "application/json")
             if path == "/api/bundle" and app.bundle is not None:
                 if "gzip" in (self.headers.get("Accept-Encoding") or ""):
                     return self.send(200, app.bundle.gz, "application/json", {"Content-Encoding": "gzip"})
@@ -180,7 +191,8 @@ def handler(app: App):
 
         def do_POST(self):   # noqa: N802 — configuration only; no equipment commands
             path = urlsplit(self.path).path
-            if path not in ("/api/catalog/sources", "/api/catalog/disconnect"):
+            lab_paths = ("/api/lab/import", "/api/lab/experiments", "/api/lab/cancel")
+            if path not in ("/api/catalog/sources", "/api/catalog/disconnect", "/api/catalog/frame") + lab_paths:
                 return self.deny(405, "пульт не отправляет команды оборудования")
             host = (self.headers.get("Host") or "").lower()
             if not host_ok(host) or (self.headers.get("Origin") or "").lower() != "http://" + host:
@@ -191,7 +203,7 @@ def handler(app: App):
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 length = -1
-            if not 0 <= length <= catalog.MAX_BODY:
+            if not 0 <= length <= (8 * 1024 * 1024 if path in lab_paths else catalog.MAX_BODY):
                 self.close_connection = True
                 return self.deny(413, "слишком большой запрос")
             try:
@@ -200,7 +212,13 @@ def handler(app: App):
                 body = None
             if not isinstance(body, dict):
                 return self.send(400, b'{"ok":false,"error":"JSON object required"}', "application/json")
-            code, doc = catalog.mutate(app.catalog, path, body)
+            if path == "/api/catalog/frame":
+                try:
+                    code, doc = 200, cam_snapshot.snapshot(app.catalog, body.get("source_id"))
+                except lab.LabError as exc:
+                    code, doc = exc.status, {"error": str(exc)}
+            else:
+                code, doc = lab.mutate(app.lab, path, body) if path in lab_paths else catalog.mutate(app.catalog, path, body)
             return self.send(code, json.dumps(doc, ensure_ascii=False).encode("utf-8"), "application/json")
 
         def refuse(self):
@@ -219,11 +237,15 @@ class Server(ThreadingHTTPServer):
     def shutdown(self):
         if hasattr(self, "catalog"):
             self.catalog.close()
+        if hasattr(self, "lab"):
+            self.lab.close()
         super().shutdown()
 
     def server_close(self):
         if hasattr(self, "catalog"):
             self.catalog.close()
+        if hasattr(self, "lab"):
+            self.lab.close()
         super().server_close()
 
 
@@ -241,14 +263,17 @@ def make_server(bundle: Optional[str], port: int, host: str = "127.0.0.1", web: 
     srv = cls((host, port), handler(app))
     srv.daemon_threads = True
     srv.catalog = app.catalog
+    srv.lab = app.lab
     return srv
 
 
-def serve(bundle: Optional[str], port: int, host: str = "127.0.0.1", sources: Optional[List[str]] = None) -> int:
+def serve(bundle: Optional[str], port: int, host: str = "127.0.0.1", sources: Optional[List[str]] = None,
+          traces: Optional[List[str]] = None) -> int:
     bad = verify_vendor()
     if bad:
         sys.stderr.write("neurobot-ui: vendor/ не совпадает с SHA256SUMS: %s\n" % "; ".join(bad))
         return 2
+    srv = None
     try:
         initial = [catalog.endpoint(url) for url in (sources or [])]
         if len(set(initial)) > catalog.MAX_SOURCES:
@@ -256,12 +281,16 @@ def serve(bundle: Optional[str], port: int, host: str = "127.0.0.1", sources: Op
         srv = make_server(bundle, port, host)
         for url in initial:
             srv.catalog.connect(url)
+        for trace in (traces or []):
+            srv.lab.watch_trace(trace)
     except (OSError, ValueError, stream.FormatError) as e:
+        if srv is not None:
+            srv.server_close()
         sys.stderr.write("neurobot-ui: %s\n" % e)
         return 2
     url = "http://%s:%d/" % ("127.0.0.1" if host == "127.0.0.1" else "[::1]", srv.server_address[1])
     if bundle is None:
-        print("Edge Atlas: %s — каталог MCP-оборудования; Ctrl+C — выход" % url, flush=True)
+        print("EdgeLab: %s — лаборатория агента и MCP-оборудование; Ctrl+C — выход" % url, flush=True)
     else:
         print("пульт (запись): %s — бандл %s; Ctrl+C — выход" % (url, bundle), flush=True)
     try:

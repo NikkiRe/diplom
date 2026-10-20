@@ -66,8 +66,12 @@ type Config struct {
 	Sched       Sched       `yaml:"sched" json:"sched"`
 	Trace       string      `yaml:"trace" json:"trace"`
 	TraceFlushS float64     `yaml:"trace_flush_s" json:"trace_flush_s"` // период сброса буфера трассы, с (0 — каждая запись)
-	UserCtx     UserCtx     `yaml:"userctx" json:"userctx"`
-	Prompt      Prompt      `yaml:"prompt" json:"prompt"`
+	// TraceContext сохраняет отправленные сообщения и схемы инструментов для
+	// разбора в EdgeLab. По умолчанию выключено: тексты могут быть личными.
+	TraceContext         bool    `yaml:"trace_context" json:"trace_context"`
+	TraceContextMaxBytes int     `yaml:"trace_context_max_bytes" json:"trace_context_max_bytes"`
+	UserCtx              UserCtx `yaml:"userctx" json:"userctx"`
+	Prompt               Prompt  `yaml:"prompt" json:"prompt"`
 
 	// BaseDir — каталог файла конфигурации (для относительных путей); не из YAML.
 	BaseDir string `yaml:"-" json:"-"`
@@ -329,10 +333,11 @@ func Default() *Config {
 			HWCtx: "delta_tail", SnapshotPeriodS: 60, Catalog: "generic",
 			NoopReply: "NO_ACTION", RecentEventsK: 10, ProfileConsolidateS: 600, MaxToolResultChars: 4000,
 		},
-		Budget:      Budget{DegradeAt: 0.8},
-		Sched:       Sched{MaxInFlight: 1, QueueMax: 64, DeferredMax: 32},
-		TraceFlushS: 2,
-		UserCtx:     UserCtx{DB: "edgectx.db", CacheKiB: 256, JournalMode: "wal", Synchronous: "normal"},
+		Budget:               Budget{DegradeAt: 0.8},
+		Sched:                Sched{MaxInFlight: 1, QueueMax: 64, DeferredMax: 32},
+		TraceFlushS:          2,
+		TraceContextMaxBytes: 64 << 10,
+		UserCtx:              UserCtx{DB: "edgectx.db", CacheKiB: 256, JournalMode: "wal", Synchronous: "normal"},
 	}
 }
 
@@ -371,6 +376,9 @@ func Parse(data []byte) (*Config, error) {
 
 func (c *Config) fillDefaults() {
 	d := Default()
+	if c.TraceContextMaxBytes == 0 {
+		c.TraceContextMaxBytes = d.TraceContextMaxBytes
+	}
 	if c.Clock.Mode == "" {
 		c.Clock.Mode = d.Clock.Mode
 	}
@@ -491,6 +499,9 @@ func (c *Config) Validate() error {
 		add("%s: %q не из %v", field, v, allowed)
 	}
 	oneOf("clock", c.Clock.Mode, ClockModes)
+	if c.TraceContextMaxBytes < 1024 || c.TraceContextMaxBytes > 256<<10 {
+		add("trace_context_max_bytes: требуется 1024..262144")
+	}
 	if c.Clock.Epoch != "" {
 		if _, err := time.Parse(time.RFC3339, c.Clock.Epoch); err != nil {
 			add("clock.epoch: %v", err)

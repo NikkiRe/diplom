@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { html } from '../lib/ui.js';
 import { Icon } from '../lib/icons.js';
 import { SignalMap } from '../lib/signalmap.js';
+import { CapabilityView } from './instrument.js';
+import { captureObservations } from '../lib/capabilities.js';
 import { GROUPS, STATUS, streamDevices, catalogDevices, numericPoints, shortValue } from '../lib/equipment.js';
 import { num, clock, age, DASH } from '../lib/fmt.js';
 
@@ -109,6 +111,7 @@ function Inspector({device,selectedSignal,setSignal,pins,togglePin,now}) {
 export function Equipment({tl,T,run,live,meta}) {
   const catalog=useCatalog(meta),[selection,setSelection]=useState(null),[signalKey,setSignal]=useState(null),[query,setQuery]=useState(''),[filter,setFilter]=useState('all');
   const [connect,setConnect]=useState(false),[sources,setSources]=useState(false),[mode,setMode]=useState('map'),[pinError,setPinError]=useState('');
+  const [capturing,setCapturing]=useState(false),[captureError,setCaptureError]=useState('');
   const [pins,setPins]=useState(()=>saved('edge-atlas-pins',[])),[motion,setMotion]=useState(()=>saved('edge-atlas-motion',true));
   const history=useRef(new Map());
   const timeline=useRef(tl);
@@ -128,7 +131,7 @@ export function Equipment({tl,T,run,live,meta}) {
     for(const id of history.current.keys())if(!id.startsWith('stream:')&&!activeIds.has(id))history.current.delete(id);
     for(const d of external) {
       const arr=history.current.get(d.id)||[];const stamp=d.sampleTs;
-      if(['live','degraded'].includes(d.status)&&stamp&&(!arr.length||arr[arr.length-1].t!==stamp))arr.push({t:stamp,values:Object.fromEntries(d.signals.map(s=>[s.key,['error','stale','unknown','missing'].includes(s.status)?null:s.value]))});
+      if(['live','degraded'].includes(d.status)&&stamp&&(!arr.length||arr[arr.length-1].t!==stamp))arr.push({t:stamp,values:Object.fromEntries(d.signals.filter(s=>s.value===null||typeof s.value==='number'||typeof s.value==='boolean').map(s=>[s.key,['error','stale','unknown','missing'].includes(s.status)?null:s.value]))});
       else if(['error','stale','missing'].includes(d.status)&&arr.length&&!arr[arr.length-1].gap)arr.push({t:d.sourceStatusTs||Date.now()/1000,values:{},gap:true});
       history.current.set(d.id,arr.slice(-180));
     }
@@ -141,6 +144,18 @@ export function Equipment({tl,T,run,live,meta}) {
     }
   },[external,T,tl]);
   const select=id=>{setSelection(id);setSignal(null);};
+  const capture=async()=>{
+    if(capturing)return;setCapturing(true);setCaptureError('');
+    try {
+      const events=captureObservations(external,history.current,Date.now()/1000);
+      const body=JSON.stringify({name:'Эпизод MCP · '+new Date().toLocaleTimeString('ru-RU'),events});
+      if(new Blob([body]).size>8*1024*1024)throw Error('Эпизод больше 8 МиБ. Сократите число источников.');
+      const r=await fetch('api/lab/import',{method:'POST',headers:{'Content-Type':'application/json',...(meta?.csrf?{'X-Neurobot-CSRF':meta.csrf}:{})},body});
+      const doc=await r.json();if(!r.ok)throw Error(doc.error||'HTTP '+r.status);
+      const id=doc.run?.id;if(id)sessionStorage.setItem('edge-lab-open-run',id);
+      location.hash='#/lab';
+    }catch(e){setCaptureError(e.message);}finally{setCapturing(false);}
+  };
   const togglePin=(d,s)=>{
     setPins(old=>{
       const exists=old.some(p=>p.device===d.id&&p.signal===s.key);
@@ -154,7 +169,8 @@ export function Equipment({tl,T,run,live,meta}) {
   const samples=points.filter(p=>Number.isFinite(p[1]));
   return html`<div class="equipment" data-testid="equipment" data-motion=${motion?'on':'off'}>
     <div class="eq-toolbar"><div class="eq-summary"><span><b>${devices.length.toString().padStart(2,'0')}</b> источников</span><span><b>${signalCount}</b> сигналов</span><span><i class="signal-dot"></i>${available} с данными</span></div>
-      <div class="eq-toolbar-actions"><button class="eq-text-button eq-motion" aria-pressed=${motion} onClick=${()=>{setMotion(!motion);persist('edge-atlas-motion',!motion);}}>Анимация <b>${motion?'вкл':'выкл'}</b></button><button class="eq-secondary" data-testid="sources-manage" onClick=${()=>setSources(true)}>Подключения <span>${catalog.doc.sources.length}</span></button><button class="eq-primary" onClick=${()=>setConnect(true)} data-testid="add-source"><b>+</b> Источник</button></div></div>
+      <div class="eq-toolbar-actions"><button class="eq-secondary" data-testid="capture-episode" disabled=${capturing||!external.length} onClick=${capture}>${capturing?'Сохранение…':'Зафиксировать эпизод'}</button><button class="eq-text-button eq-motion" aria-pressed=${motion} onClick=${()=>{setMotion(!motion);persist('edge-atlas-motion',!motion);}}>Анимация <b>${motion?'вкл':'выкл'}</b></button><button class="eq-secondary" data-testid="sources-manage" onClick=${()=>setSources(true)}>Подключения <span>${catalog.doc.sources.length}</span></button><button class="eq-primary" onClick=${()=>setConnect(true)} data-testid="add-source"><b>+</b> Источник</button></div></div>
+    ${captureError?html`<div class="eq-source-error" role="status">${captureError}</div>`:''}
     ${catalog.error?html`<div class="eq-source-error" data-testid="catalog-error">${catalog.error}</div>`:''}
     ${catalog.doc.sources.filter(s=>['error','degraded'].includes(s.status)).map(s=>html`<div class="eq-source-error" data-testid="source-error">${s.label||s.url} · ${s.error||STATUS[s.status]}<button onClick=${()=>setSources(true)}>Подключения ↗</button></div>`)}
     <div class="eq-workspace"><aside class="eq-catalog"><div class="eq-pane-label"><span>КАТАЛОГ</span><span class="eq-index">01</span></div>
@@ -166,8 +182,8 @@ export function Equipment({tl,T,run,live,meta}) {
       })}${!matched.length?html`<div class="eq-empty-state">Ничего не найдено.<br/>Попробуйте название поля.</div>`:''}</div>
       <div class="eq-catalog-foot"><span class="eq-index">DISCOVERY / ${catalog.doc.sources.length?'MCP + STREAM':'STREAM'}</span><p>Поля определяются из данных.<br/>Неизвестные типы тоже видны.</p></div>
     </aside>
-    <section class="eq-workplane"><div class="eq-workplane-head"><div><span class="eq-pane-label">РАБОЧАЯ ПЛОСКОСТЬ <span class="eq-index">02</span></span><h2>${mode==='map'?'Карта сигналов':'Все источники'}</h2></div><div class="eq-view-switch"><button aria-pressed=${mode==='map'} onClick=${()=>setMode('map')} aria-label="Карта сигналов"><${Icon} name="network" size=${17} /></button><button aria-pressed=${mode==='grid'} onClick=${()=>setMode('grid')} aria-label="Сетка устройств"><${Icon} name="overview" size=${17} /></button></div></div>
-      ${mode==='map'?html`<${SignalMap} devices=${devices} selected=${device?.id} onSelect=${select} T=${T} live=${!!live||run.catalog||catalog.doc.sources.length>0} />`:html`<div class="eq-device-grid">${devices.map(d=>html`<button class=${d.id===device?.id?'selected':''} onClick=${()=>select(d.id)}><${Icon} name=${d.group==='sensor'?'pulse':'chip'} size=${24} /><b>${d.name}</b><small>${d.signals.length} полей · ${STATUS[d.status]}</small></button>`)}</div>`}
+    <section class="eq-workplane"><div class="eq-workplane-head"><div><span class="eq-pane-label">РАБОЧАЯ ПЛОСКОСТЬ <span class="eq-index">02</span></span><h2>${mode==='map'?'Карта сигналов':mode==='instrument'?'Прибор устройства':'Все источники'}</h2></div><div class="eq-view-switch"><button aria-pressed=${mode==='instrument'} onClick=${()=>setMode('instrument')} aria-label="Прибор устройства"><${Icon} name="pulse" size=${17} /></button><button aria-pressed=${mode==='map'} onClick=${()=>setMode('map')} aria-label="Карта сигналов"><${Icon} name="network" size=${17} /></button><button aria-pressed=${mode==='grid'} onClick=${()=>setMode('grid')} aria-label="Сетка устройств"><${Icon} name="overview" size=${17} /></button></div></div>
+      ${mode==='instrument'?device?html`<${CapabilityView} key=${device.id} device=${device} meta=${meta}/>`:html`<div class="eq-empty-state">Выберите источник данных</div>`:mode==='map'?html`<${SignalMap} devices=${devices} selected=${device?.id} onSelect=${select} T=${T} live=${!!live||run.catalog||catalog.doc.sources.length>0} />`:html`<div class="eq-device-grid">${devices.map(d=>html`<button class=${d.id===device?.id?'selected':''} onClick=${()=>select(d.id)}><${Icon} name=${d.group==='sensor'?'pulse':'chip'} size=${24} /><b>${d.name}</b><small>${d.signals.length} полей · ${STATUS[d.status]}</small></button>`)}</div>`}
       <div class="eq-scope" data-testid="signal-scope"><div class="eq-scope-head"><div><span class="eq-pane-label">ОСЦИЛЛОГРАММА / ПОСЛЕДНИЕ 5 МИН</span><h3 data-testid="selected-signal">${signal?signal.name:'Выберите сигнал'}</h3><span class="eq-signal-origin">${device?.name||''} ${signal?' / '+signal.type:''}</span></div>
         <div class="eq-scope-value" data-testid="selected-value">${signal?shortValue(signal.value):DASH}<small>${signal?.unit||''}</small><button class=${'eq-pin '+(pins.some(p=>p.device===device?.id&&p.signal===signal?.key)?'active':'')} disabled=${!signal} onClick=${()=>signal&&togglePin(device,signal)} data-testid="pin-selected" aria-label="Закрепить выбранный сигнал">+</button></div></div>
         <${Trace} points=${points} signal=${signal} /><div class="eq-scope-footer"><span>${samples.length} отсчётов${samples.length?' · min '+shortValue(Math.min(...samples.map(p=>p[1])))+' / max '+shortValue(Math.max(...samples.map(p=>p[1]))):''}</span><span>${device?.clock==='wall'?'История с подключения в этой вкладке':live?'Часы потока':'Часы записи'} · полученные отсчёты</span></div></div>

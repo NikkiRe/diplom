@@ -13,8 +13,10 @@ import { SafetyScreen } from './screens/safety.js';
 import { TrendsScreen } from './screens/trends.js';
 import { Icon } from './lib/icons.js';
 import { Equipment } from './screens/equipment.js';
+import { LabScreen } from './screens/lab.js';
 
 const SCREENS = [
+  { id: 'lab', key: '5', title: 'Лаборатория агента', desc: 'Наблюдать. Понять решение. Проверить другую гипотезу.', C: LabScreen },
   { id: 'equipment', key: '4', title: 'Атлас сигналов', desc: 'Оборудование, контекст и каждый сигнал между ними.', C: Equipment },
   { id: 'overview', key: '1', title: 'Обзор', desc: 'Вся система. В одном поле зрения.', C: Overview },
   { id: 'safety', key: '2', title: 'Безопасность и жесты', desc: 'Контроль движения, защитные ограничения и распознавание.', C: SafetyScreen },
@@ -36,7 +38,7 @@ function params() {
   const hash = location.hash.replace(/^#\/?/, '');
   return {
     run: q.get('run'), t: q.has('t') ? Number(q.get('t')) : null, speed: Number(q.get('speed')) || 10,
-    play: q.get('play') === '1', screen: SCREENS.some((s) => s.id === hash) ? hash : (q.get('screen') || 'equipment'),
+    play: q.get('play') === '1', screen: SCREENS.some((s) => s.id === hash) ? hash : (q.get('screen') || 'lab'),
     theme: q.get('theme'), mode: q.get('mode'), demo: q.get('demo') === '1',
   };
 }
@@ -133,11 +135,18 @@ function CatalogApp({ meta, p0, theme }) {
   const [T, setT] = useState(() => Date.now() / 1000);
   const [acked, setAcked] = useState(() => new Set());
   const started = useRef(T);
+  const [screen, go] = useScreen({ ...p0, screen: ['lab', 'equipment'].includes(p0.screen) ? p0.screen : 'lab' });
+  useBlurOnClick();
+  useEffect(() => {
+    const onKey = e => { if (!typing(e) && ['4', '5'].includes(e.key)) screenKey(e, go); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   useEffect(() => { const id = setInterval(() => setT(Date.now() / 1000), 1000); return () => clearInterval(id); }, []);
   const run = { catalog: true, demo: p0.demo, id: 'catalog', system: 'mcp', run: 'MCP', origin: 'MCP', has_safety: false, date: '' };
   const ctx = { meta, run, tl, T, t0: started.current, live: null, theme: theme.themeKey };
-  return html`<${Frame} ctx=${ctx} screen="equipment" go=${() => {}} acked=${acked} setAcked=${setAcked} theme=${theme} silence=${0}
-    footer=${html`<footer class="player livebar"><span class="badge live">MCP</span><span>Локальная обсерватория оборудования</span><span class="muted">Обнаружение устройств и чтение сигналов · без вызовов LLM</span><span class="sp"></span><span class="num muted">${clock(T)}</span></footer>`} />`;
+  return html`<${Frame} ctx=${ctx} screen=${screen} go=${go} acked=${acked} setAcked=${setAcked} theme=${theme} silence=${0}
+    footer=${html`<footer class="player livebar"><span class="badge live">LOCAL</span><span>EdgeLab · исследовательская среда</span><span class="muted">Оборудование MCP · локальные эксперименты · без платных запросов</span><span class="sp"></span><span class="num muted">${clock(T)}</span></footer>`} />`;
 }
 
 function ModeSwitch({ modes, mode, setMode }) {
@@ -199,6 +208,7 @@ function ReplayApp({ bundle, meta, modes, mode, setMode, p0, theme }) {
   useEffect(() => {
     const onKey = (e) => {
       if (typing(e) || screenKey(e, go)) return;
+      if (document.querySelector('main[data-screen="lab"]') && [' ', 'ArrowLeft', 'ArrowRight'].includes(e.key)) return;
       const tag = e.target && e.target.tagName;
       if (e.key === ' ') {
         if (tag === 'BUTTON') return;            // кнопка в фокусе с клавиатуры — её собственное нажатие
@@ -314,17 +324,17 @@ function Frame({ ctx, screen, go, acked, setAcked, theme, silence, silenceText, 
   const cur = SCREENS.find((s) => s.id === screen) || SCREENS[0];
   const stale = silence > limit;
   const [help, setHelp] = useState(false);
-  return html`<div class="frame">
+  return html`<div class=${'frame'+(screen==='lab'?' lab-frame':'')+(ctx.run.catalog?' catalog-frame':'')}>
     <${StatusBar} ...${ctx} />
     <${Nav} ...${ctx} screen=${screen} go=${go} acked=${acked} setAcked=${setAcked} themeMode=${theme.themeMode} setThemeMode=${theme.setThemeMode} showHelp=${() => setHelp(true)} />
     <main class=${'main' + (stale ? ' nolink' : '')} id="main" aria-label=${cur.title} data-screen=${cur.id}>
       ${stale ? html`<div class="nolinkbar" role="status" data-testid="nolink">${silenceText} ${Number.isFinite(silence) ? fmtAge(silence) : ''} — показанное больше не правда</div>` : ''}
-      <div class="pagehead"><div><div class="eyebrow">ЦЕНТР НАБЛЮДЕНИЯ <span>/ ${cur.key.padStart(2, '0')}</span></div>
+      ${screen!=='lab'?html`<div class="pagehead"><div><div class="eyebrow">ЦЕНТР НАБЛЮДЕНИЯ <span>/ ${cur.key.padStart(2, '0')}</span></div>
         <h1>${cur.title}</h1><p>${cur.desc}</p></div>
         <div class="session-label"><span class=${'signal-dot' + (stale ? ' offline' : '')}></span>
-          ${ctx.run.catalog ? 'Оборудование' : ctx.live ? 'Живой поток' : 'Просмотр записи'}<span class="session-detail">${ctx.run.catalog ? 'MCP' : ctx.live ? ctx.run.origin : ctx.run.system.toUpperCase() + ' · ' + ctx.run.date}</span></div></div>
+          ${ctx.run.catalog ? 'Оборудование' : ctx.live ? 'Живой поток' : 'Просмотр записи'}<span class="session-detail">${ctx.run.catalog ? 'MCP' : ctx.live ? ctx.run.origin : ctx.run.system.toUpperCase() + ' · ' + ctx.run.date}</span></div></div>`:''}
       <${cur.C} ...${ctx} />
-      <div class="main-footnote">${ctx.run.demo ? 'Симулятор sysfs · физическое оборудование не подключено' : ctx.run.catalog ? 'Edge Atlas · каталог оборудования и сигналы подключённых MCP-серверов' : ctx.live ? (ctx.run.run.includes('подставной') ? 'Синтетический стенд · данные для проверки интерфейса' : 'Источник: ' + ctx.run.origin + ' · наблюдение в реальном времени') : 'Цифровой двойник · данные записи · ориентир стенда, не результат на роботе'}<span>EDGE ATLAS / RESEARCH</span></div>
+      <div class="main-footnote">${ctx.run.demo ? 'Симулятор sysfs · физическое оборудование не подключено' : ctx.run.catalog ? 'EdgeLab · локальные трассы агента и подключённое оборудование' : ctx.live ? (ctx.run.run.includes('подставной') ? 'Синтетический стенд · данные для проверки интерфейса' : 'Источник: ' + ctx.run.origin + ' · наблюдение в реальном времени') : 'Цифровой двойник · данные записи · ориентир стенда, не результат на роботе'}<span>EDGE LAB / RESEARCH</span></div>
     </main>
     ${footer}
     ${help ? html`<${Shortcuts} close=${() => setHelp(false)} />` : ''}
@@ -337,7 +347,7 @@ function Shortcuts({ close }) {
   return html`<dialog class="shortcuts" ref=${ref} onCancel=${close} aria-labelledby="help-title">
     <div class="dialog-head"><div><div class="eyebrow">БЫСТРЫЙ ДОСТУП</div><h2 id="help-title">Горячие клавиши</h2></div>
       <button class="icon-button" onClick=${close} aria-label="Закрыть"><${Icon} name="close" /></button></div>
-    <dl><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Переключить экран</dd>
+    <dl><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd> <kbd>5</kbd></dt><dd>Переключить экран</dd>
       <dt><kbd>Esc</kbd></dt><dd>Вернуться к обзору</dd><dt><kbd>Пробел</kbd></dt><dd>Проиграть / пауза записи</dd>
       <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Перемотать на 10 секунд</dd><dt><kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd></dt><dd>Перемотать на минуту</dd></dl>
     <p class="muted">Клавиши проигрывателя действуют в режиме записи. Команды роботу доступны только через кнопки пульта.</p>
@@ -361,7 +371,7 @@ function alarmRows(tl, T) {
 }
 
 function StatusBar({ run, tl, T, t0, live, meta }) {
-  if (run.catalog) return html`<header class="status" role="banner"><div class="status-top"><div class="workspace-crumb"><span class="mobile-brand"><${Icon} name="network" /></span><b>Edge Atlas</b><span>/</span><span>Лаборатория оборудования</span></div><div class="source-block" data-testid="source"><span class="badge">${run.demo ? 'СИМУЛЯТОР' : 'MCP'}</span><span class="srcrun">${run.demo ? 'Живое sysfs через hw-mcp' : 'Подключаемые источники'}<small>${run.demo ? 'Тестовые датчики · без платы' : 'Каталог и живые сигналы'}</small></span></div></div><div class="status-telemetry"><div class="cell"><span class="k">РАБОЧЕЕ ПРОСТРАНСТВО</span><span class="v">Обнаружение → исследование → наблюдение</span></div><span class="observation"><span class="signal-dot"></span> LOCAL WORKSPACE</span></div></header>`;
+  if (run.catalog) return html`<header class="status" role="banner"><div class="status-top"><div class="workspace-crumb"><span class="mobile-brand"><${Icon} name="network" /></span><b>EdgeLab</b><span>/</span><span>Среда исследования агента</span></div><div class="source-block" data-testid="source"><span class="badge">${run.demo ? 'СИМУЛЯТОР' : 'MCP'}</span><span class="srcrun">${run.demo ? 'Живое sysfs через hw-mcp' : 'Подключаемые источники'}<small>${run.demo ? 'Тестовые датчики · без платы' : 'Каталог и живые сигналы'}</small></span></div></div><div class="status-telemetry"><div class="cell"><span class="k">РАБОЧЕЕ ПРОСТРАНСТВО</span><span class="v">Наблюдение → решение → эксперимент</span></div><span class="observation"><span class="signal-dot"></span> LOCAL WORKSPACE</span></div></header>`;
   const s = tl.at('safety', T);
   const outM = tl.atWhere('cmd', T, (m) => m.topic === 'out');
   const out = outM && T - outM.t <= NO_DATA_S ? outM : null;
@@ -447,14 +457,14 @@ function Nav({ tl, T, t0, run, screen, go, acked, setAcked, themeMode, setThemeM
   const themeName = { auto: 'Системная тема', light: 'Светлая тема', dark: 'Тёмная тема' };
   const shownOff = more ? off : off.slice(0, CLEARED_SHOWN);
   return html`<nav class="nav" aria-label="экраны и тревоги">
-    <div class="nav-brand"><div class="brand-mark"><${Icon} name="network" size=${27} /></div><div><b>edge<span>/</span>atlas</b><small>EQUIPMENT OBSERVATORY</small></div></div>
+    <div class="nav-brand"><div class="brand-mark"><${Icon} name="lab" size=${27} /></div><div><b>edge<span>/</span>lab</b><small>EXPERIMENTAL OBSERVATORY</small></div></div>
     <div class="nav-section-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
-    <div class="nav-links">${SCREENS.filter(s => !run.catalog || s.id === 'equipment').map((s) => html`<a href=${'#/' + s.id} aria-label=${s.title} title=${s.title} aria-current=${screen === s.id ? 'page' : undefined}
+    <div class="nav-links">${SCREENS.filter(s => !run.catalog || ['equipment','lab'].includes(s.id)).map((s) => html`<a href=${'#/' + s.id} aria-label=${s.title} title=${s.title} aria-current=${screen === s.id ? 'page' : undefined}
         onClick=${(e) => { e.preventDefault(); go(s.id); }}>
       <${Icon} name=${s.id} /><span>${s.title}</span><kbd>${s.key}</kbd></a>`)}</div>
     <div class="alarmlist" data-testid="alarms">
       <h3>ЦЕНТР СОБЫТИЙ <span class="alarm-total num">${int(on.length)}</span></h3>
-      ${on.length === 0 ? html`<div class="alarm-empty"><${Icon} name="safety" size=${22} /><span>Всё спокойно<small>Активных тревог нет</small></span></div>` : on.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
+      ${on.length === 0 ? html`<div class="alarm-empty"><${Icon} name=${run.catalog?'lab':'safety'} size=${22} /><span>${run.catalog?'Локальная лаборатория':'Всё спокойно'}<small>${run.catalog?'Трассы, эксперименты и источники':'Активных тревог нет'}</small></span></div>` : on.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
       ${off.length ? html`<h3 class="sep">Снятые за 10 мин <span class="num">${int(off.length)}</span></h3>
         ${shownOff.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
         ${off.length > CLEARED_SHOWN ? html`<button class="more" onClick=${() => setMore(!more)}>${more ? 'свернуть' : `ещё ${off.length - CLEARED_SHOWN}`}</button>` : ''}` : ''}

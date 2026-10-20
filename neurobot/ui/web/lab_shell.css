@@ -1,0 +1,20 @@
+/* The laboratory owns its heading and time transport. Keep the outer shell
+   compact on the laptop; robot safety/status rows retain their full layout. */
+.lab-frame.catalog-frame { grid-template-rows:68px minmax(0,1fr)44px; }
+.lab-frame.catalog-frame .status-telemetry { display:none; }
+.lab-frame.catalog-frame .status-top { border-bottom:0; }
+.lab-frame.catalog-frame .livebar { min-height:44px; padding-top:8px; padding-bottom:8px; }
+main[data-screen='lab'] { padding-top:25px; }
+.equipment .eq-toolbar-actions { flex-wrap:wrap; }
+@media(max-width:600px) {
+  .equipment .eq-toolbar-actions { justify-content:flex-start;gap:7px; }
+  .equipment .eq-toolbar-actions > button { flex:1 1 auto; }
+}
+.lab-screen .lab-transport > select, .lab-screen .lab-transport > button { background:var(--lab-plane); border:1px solid var(--lab-line); color:var(--lab-muted); font:9px var(--mono); padding:5px 8px; border-radius:4px; }
+.lab-screen .lab-transport > button[aria-pressed='true'] { color:var(--lab-lime);border-color:var(--lab-lime); }
+@media(max-width:600px) {
+  .lab-frame.catalog-frame { grid-template-rows:65px 57px minmax(0,1fr)44px; }
+  .lab-frame.catalog-frame .livebar > .muted { display:none; }
+}
+
+.lab-live-source{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;margin:12px 0;border:1px solid var(--line);border-radius:5px;background:var(--panel2)}.lab-live-source>div{display:flex;align-items:center;flex-wrap:wrap;gap:10px;min-width:0}.lab-live-source>div>span:last-child{font-size:10px;color:var(--muted)}.lab-live-source.has-error{border-color:var(--p2)}.lab-live-source.has-error .badge{color:var(--p2)}.lab-live-source button{white-space:nowrap}@media(max-width:600px){.lab-live-source{flex-wrap:wrap}.lab-live-source button{width:100%}}

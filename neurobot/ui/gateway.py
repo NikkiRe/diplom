@@ -40,10 +40,10 @@ import threading
 import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Callable, Dict, List, Optional, Sequence, Tuple
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 from neurobot.ui import alarms as A
-from neurobot.ui import catalog, live, robot, server, stream
+from neurobot.ui import cam_snapshot, catalog, lab, live, robot, server, stream
 
 log = logging.getLogger("neurobot-ui")
 
@@ -319,6 +319,7 @@ class Gateway(server.Static):
         self.started = clock()
         self.stopping = threading.Event()
         self.catalog = catalog.Registry()
+        self.lab = lab.LabStore(allow_experiments=False)
 
     def head(self) -> dict:
         """Поля hello живого потока (Hub добавит k, t, format, active, boot)."""
@@ -481,6 +482,17 @@ def handler(gw: Gateway):
                     return self.json(401, {"error": "нужен вход: на роботе — sudo neurobot ui-url"})
                 if path == "/api/catalog":
                     return self.json(200, gw.catalog.snapshot())
+                if path == "/api/lab":
+                    return self.json(200, gw.lab.snapshot())
+                if path.startswith("/api/lab/export/"):
+                    raw = gw.lab.export(unquote(path[len("/api/lab/export/"):]))
+                    if raw is None:
+                        return self.json(404, {"error": "Прогон не найден"})
+                    return self.send(200, raw, "application/x-ndjson; charset=utf-8",
+                                     {"Content-Disposition": 'attachment; filename="edgelab-trace.jsonl"'})
+                if path.startswith("/api/lab/runs/"):
+                    doc = gw.lab.run(unquote(path[len("/api/lab/runs/"):]))
+                    return self.json(200 if doc is not None else 404, doc if doc is not None else {"error": "Прогон не найден"})
                 if path == "/api/meta":
                     return self.json(200, gw.meta(self.sid))
                 if path == "/api/stream" and self.command == "GET":     # ?last= — номер события для resume
@@ -500,13 +512,15 @@ def handler(gw: Gateway):
         do_HEAD = do_GET    # noqa: N815
 
         def do_POST(self):   # noqa: N802
+            path = urlsplit(self.path).path
+            body_limit = 8 * 1024 * 1024 if path == "/api/lab/import" else MAX_BODY
             try:
                 length = int(self.headers.get("Content-Length") or 0)
             except ValueError:
                 length = -1
-            if not 0 <= length <= MAX_BODY:
+            if not 0 <= length <= body_limit:
                 self.close_connection = True        # тело не читаем: соединение дальше не годится
-                return self.json(413, {"error": "тело запроса больше %d байт" % MAX_BODY})
+                return self.json(413, {"error": "тело запроса больше %d байт" % body_limit})
             raw = self.rfile.read(length) if length else b""
             if not server.host_ok(self.headers.get("Host")) or not _same_origin(self.headers, True):
                 return self.deny(403, "запрещено: команда только со страницы пульта")
@@ -521,6 +535,13 @@ def handler(gw: Gateway):
             if not isinstance(body, dict):
                 return self.json(400, {"error": "тело — объект JSON"})
             path = urlsplit(self.path).path
+            if path in ("/api/lab/import", "/api/lab/experiments", "/api/lab/cancel"):
+                return self.json(*lab.mutate(gw.lab, path, body))
+            if path == "/api/catalog/frame":
+                try:
+                    return self.json(200, cam_snapshot.snapshot(gw.catalog, body.get("source_id")))
+                except lab.LabError as exc:
+                    return self.json(exc.status, {"error": str(exc)})
             if path in ("/api/catalog/sources", "/api/catalog/disconnect"):
                 return self.json(*catalog.mutate(gw.catalog, path, body))
             if path == "/api/stop":
@@ -603,11 +624,15 @@ class Server(ThreadingHTTPServer):
     def shutdown(self):
         if hasattr(self, "catalog"):
             self.catalog.close()
+        if hasattr(self, "lab"):
+            self.lab.close()
         super().shutdown()
 
     def server_close(self):
         if hasattr(self, "catalog"):
             self.catalog.close()
+        if hasattr(self, "lab"):
+            self.lab.close()
         super().server_close()
 
 
@@ -622,6 +647,7 @@ def make_server(gw: Gateway, port: int, host: str = "127.0.0.1") -> ThreadingHTT
     srv = cls((host, port), handler(gw))
     srv.daemon_threads = True
     srv.catalog = gw.catalog
+    srv.lab = gw.lab
     return srv
 
 

@@ -66,6 +66,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     c.add_argument("--port", type=int, default=18126, help="порт (по умолчанию 18126)")
     c.add_argument("--host", default="127.0.0.1", help="127.0.0.1 или ::1")
     c.add_argument("--source", action="append", default=[], metavar="URL", help="локальный MCP URL; можно повторить")
+    c.add_argument("--trace", action="append", default=[], metavar="FILE", help="живая JSONL-трасса EdgeCtx; путь задаётся только при запуске")
     sub.add_parser("live", help="живой шлюз: узел rclpy и HTTP на 127.0.0.1 (юнит neurobot-ui)")
     a = p.parse_args(argv)
     if a.cmd == "replay":
@@ -78,7 +79,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         return 0
     if a.cmd == "catalog":
         from neurobot.ui import server
-        return server.serve(None, a.port, a.host, sources=a.source)
+        return server.serve(None, a.port, a.host, sources=a.source, traces=a.trace)
     if a.cmd == "serve":
         from neurobot.ui import server
         return server.serve(a.bundle, a.port, a.host)
