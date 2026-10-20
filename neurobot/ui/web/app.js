@@ -11,11 +11,14 @@ import { dur, clock, num, unit, age as fmtAge, int, DASH } from './lib/fmt.js';
 import { Overview } from './screens/overview.js';
 import { SafetyScreen } from './screens/safety.js';
 import { TrendsScreen } from './screens/trends.js';
+import { Icon } from './lib/icons.js';
+import { Equipment } from './screens/equipment.js';
 
 const SCREENS = [
-  { id: 'overview', key: '1', title: 'Обзор', lvl: 'L1', C: Overview },
-  { id: 'safety', key: '2', title: 'Безопасность и жесты', lvl: 'L2', C: SafetyScreen },
-  { id: 'trends', key: '3', title: 'Агент и тренды', lvl: 'L4', C: TrendsScreen },
+  { id: 'equipment', key: '4', title: 'Атлас сигналов', desc: 'Оборудование, контекст и каждый сигнал между ними.', C: Equipment },
+  { id: 'overview', key: '1', title: 'Обзор', desc: 'Вся система. В одном поле зрения.', C: Overview },
+  { id: 'safety', key: '2', title: 'Безопасность и жесты', desc: 'Контроль движения, защитные ограничения и распознавание.', C: SafetyScreen },
+  { id: 'trends', key: '3', title: 'Агент и тренды', desc: 'Ресурсы, задержки и работа ИИ-агента во времени.', C: TrendsScreen },
 ];
 const SPEEDS = [1, 10, 60];
 const TICK_MS = 100;
@@ -33,8 +36,8 @@ function params() {
   const hash = location.hash.replace(/^#\/?/, '');
   return {
     run: q.get('run'), t: q.has('t') ? Number(q.get('t')) : null, speed: Number(q.get('speed')) || 10,
-    play: q.get('play') === '1', screen: SCREENS.some((s) => s.id === hash) ? hash : (q.get('screen') || 'overview'),
-    theme: q.get('theme'), mode: q.get('mode'),
+    play: q.get('play') === '1', screen: SCREENS.some((s) => s.id === hash) ? hash : (q.get('screen') || 'equipment'),
+    theme: q.get('theme'), mode: q.get('mode'), demo: q.get('demo') === '1',
   };
 }
 
@@ -50,7 +53,7 @@ function applyTheme(mode) {
 
 // тема: из ?theme=, сохранённой или системной; key — чтобы холсты перерисовались
 function useTheme(p0) {
-  const [themeMode, setThemeMode] = useState(() => p0.theme || storedTheme() || 'auto');
+  const [themeMode, setThemeMode] = useState(() => p0.theme || storedTheme() || 'dark');
   const [themeKey, setThemeKey] = useState(0);
   useEffect(() => { applyTheme(themeMode === 'auto' ? null : themeMode); setThemeKey((k) => k + 1); }, [themeMode]);
   useEffect(() => {
@@ -76,7 +79,7 @@ function useScreen(p0) {
 
 function typing(e) {
   const tag = e.target && e.target.tagName;
-  return tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range') || e.ctrlKey || e.metaKey || e.altKey;
+  return (e.target && e.target.closest && e.target.closest('dialog[open]')) || tag === 'SELECT' || tag === 'TEXTAREA' || (tag === 'INPUT' && e.target.type !== 'range') || e.ctrlKey || e.metaKey || e.altKey;
 }
 
 function screenKey(e, go) {
@@ -118,9 +121,23 @@ function Root({ meta }) {
     setMode(m);
   };
   const common = { meta, modes, mode, setMode: pick, p0, theme };
+  if (mode === 'catalog') return html`<${CatalogApp} ...${common} />`;
   if (mode === 'live') return html`<${LiveApp} ...${common} />`;
   if (!bundle) return html`<p class="loading">${err ? 'Запись не загрузилась: ' + err : 'Загрузка записи…'}</p>`;
   return html`<${ReplayApp} ...${common} bundle=${bundle} />`;
+}
+
+// Standalone MCP observatory: no simulated robot and no recording are required.
+function CatalogApp({ meta, p0, theme }) {
+  const tl = useMemo(() => new Timeline(), []);
+  const [T, setT] = useState(() => Date.now() / 1000);
+  const [acked, setAcked] = useState(() => new Set());
+  const started = useRef(T);
+  useEffect(() => { const id = setInterval(() => setT(Date.now() / 1000), 1000); return () => clearInterval(id); }, []);
+  const run = { catalog: true, demo: p0.demo, id: 'catalog', system: 'mcp', run: 'MCP', origin: 'MCP', has_safety: false, date: '' };
+  const ctx = { meta, run, tl, T, t0: started.current, live: null, theme: theme.themeKey };
+  return html`<${Frame} ctx=${ctx} screen="equipment" go=${() => {}} acked=${acked} setAcked=${setAcked} theme=${theme} silence=${0}
+    footer=${html`<footer class="player livebar"><span class="badge live">MCP</span><span>Локальная обсерватория оборудования</span><span class="muted">Обнаружение устройств и чтение сигналов · без вызовов LLM</span><span class="sp"></span><span class="num muted">${clock(T)}</span></footer>`} />`;
 }
 
 function ModeSwitch({ modes, mode, setMode }) {
@@ -296,15 +313,35 @@ function Login() {
 function Frame({ ctx, screen, go, acked, setAcked, theme, silence, silenceText, footer, limit = NO_DATA_S }) {
   const cur = SCREENS.find((s) => s.id === screen) || SCREENS[0];
   const stale = silence > limit;
+  const [help, setHelp] = useState(false);
   return html`<div class="frame">
     <${StatusBar} ...${ctx} />
-    <${Nav} ...${ctx} screen=${screen} go=${go} acked=${acked} setAcked=${setAcked} themeMode=${theme.themeMode} setThemeMode=${theme.setThemeMode} />
+    <${Nav} ...${ctx} screen=${screen} go=${go} acked=${acked} setAcked=${setAcked} themeMode=${theme.themeMode} setThemeMode=${theme.setThemeMode} showHelp=${() => setHelp(true)} />
     <main class=${'main' + (stale ? ' nolink' : '')} id="main" aria-label=${cur.title} data-screen=${cur.id}>
       ${stale ? html`<div class="nolinkbar" role="status" data-testid="nolink">${silenceText} ${Number.isFinite(silence) ? fmtAge(silence) : ''} — показанное больше не правда</div>` : ''}
+      <div class="pagehead"><div><div class="eyebrow">ЦЕНТР НАБЛЮДЕНИЯ <span>/ ${cur.key.padStart(2, '0')}</span></div>
+        <h1>${cur.title}</h1><p>${cur.desc}</p></div>
+        <div class="session-label"><span class=${'signal-dot' + (stale ? ' offline' : '')}></span>
+          ${ctx.run.catalog ? 'Оборудование' : ctx.live ? 'Живой поток' : 'Просмотр записи'}<span class="session-detail">${ctx.run.catalog ? 'MCP' : ctx.live ? ctx.run.origin : ctx.run.system.toUpperCase() + ' · ' + ctx.run.date}</span></div></div>
       <${cur.C} ...${ctx} />
+      <div class="main-footnote">${ctx.run.demo ? 'Симулятор sysfs · физическое оборудование не подключено' : ctx.run.catalog ? 'Edge Atlas · каталог оборудования и сигналы подключённых MCP-серверов' : ctx.live ? (ctx.run.run.includes('подставной') ? 'Синтетический стенд · данные для проверки интерфейса' : 'Источник: ' + ctx.run.origin + ' · наблюдение в реальном времени') : 'Цифровой двойник · данные записи · ориентир стенда, не результат на роботе'}<span>EDGE ATLAS / RESEARCH</span></div>
     </main>
     ${footer}
+    ${help ? html`<${Shortcuts} close=${() => setHelp(false)} />` : ''}
   </div>`;
+}
+
+function Shortcuts({ close }) {
+  const ref = useRef(null);
+  useEffect(() => { ref.current.showModal(); }, []);
+  return html`<dialog class="shortcuts" ref=${ref} onCancel=${close} aria-labelledby="help-title">
+    <div class="dialog-head"><div><div class="eyebrow">БЫСТРЫЙ ДОСТУП</div><h2 id="help-title">Горячие клавиши</h2></div>
+      <button class="icon-button" onClick=${close} aria-label="Закрыть"><${Icon} name="close" /></button></div>
+    <dl><dt><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></dt><dd>Переключить экран</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Вернуться к обзору</dd><dt><kbd>Пробел</kbd></dt><dd>Проиграть / пауза записи</dd>
+      <dt><kbd>←</kbd> <kbd>→</kbd></dt><dd>Перемотать на 10 секунд</dd><dt><kbd>Shift</kbd> + <kbd>←</kbd> <kbd>→</kbd></dt><dd>Перемотать на минуту</dd></dl>
+    <p class="muted">Клавиши проигрывателя действуют в режиме записи. Команды роботу доступны только через кнопки пульта.</p>
+  </dialog>`;
 }
 
 const WORLDS = { hall: 'зал', lab: 'комната lab' };
@@ -324,39 +361,35 @@ function alarmRows(tl, T) {
 }
 
 function StatusBar({ run, tl, T, t0, live, meta }) {
+  if (run.catalog) return html`<header class="status" role="banner"><div class="status-top"><div class="workspace-crumb"><span class="mobile-brand"><${Icon} name="network" /></span><b>Edge Atlas</b><span>/</span><span>Лаборатория оборудования</span></div><div class="source-block" data-testid="source"><span class="badge">${run.demo ? 'СИМУЛЯТОР' : 'MCP'}</span><span class="srcrun">${run.demo ? 'Живое sysfs через hw-mcp' : 'Подключаемые источники'}<small>${run.demo ? 'Тестовые датчики · без платы' : 'Каталог и живые сигналы'}</small></span></div></div><div class="status-telemetry"><div class="cell"><span class="k">РАБОЧЕЕ ПРОСТРАНСТВО</span><span class="v">Обнаружение → исследование → наблюдение</span></div><span class="observation"><span class="signal-dot"></span> LOCAL WORKSPACE</span></div></header>`;
   const s = tl.at('safety', T);
   const outM = tl.atWhere('cmd', T, (m) => m.topic === 'out');
   const out = outM && T - outM.t <= NO_DATA_S ? outM : null;
   const { on, off } = alarmRows(tl, T);
-  const llmHour = tl.range('llm', T - 3600, T).length;
   const level = s ? s.level : 0;
   const limit = s && s.limits ? s.limits.v_max : null;
   const world = WORLDS[run.world] || run.world;
   const dataAge = live ? live.age : T - lastData(tl, T);
   return html`<header class="status" role="banner">
-    <div class="cell opt"><span class="k">NeuroChip</span><span class="v brand">ПУЛЬТ</span></div>
-    <div class="cell" title="состояние safety_gate и первая причина">
-      <span class="k">безопасность</span>
-      <span class="v" data-testid="status-safety">${run.has_safety ? html`${level ? html`<${Sign} prio=${level} /> ` : ''}<b>${s ? stateWord(s.state) : DASH}</b>
-        <span class="muted"> ${firstNotable(s) || ''}</span>` : html`<span class="muted">safety_gate нет</span>`}</span>
+    <div class="status-top">
+      <div class="workspace-crumb"><span class="mobile-brand"><${Icon} name="chip" /></span><b>Пульт оператора</b><span class="crumb-divider">/</span><span>NeuroChip</span></div>
+      <div class="source-block" data-testid="source" title=${live ? 'источник: живой поток шлюза · ' + run.origin + ' · ' + run.run : 'источник: запись прогона на цифровом двойнике'}>
+        <span class=${'badge' + (live ? ' live' : '')}>${live ? 'ЖИВОЙ' : 'ЗАПИСЬ'}</span>
+        <span class="srcrun">${live ? html`источник: ${run.origin}<small>${run.run}</small>` : html`источник: запись · ${run.system.toUpperCase()}<small>${run.origin} · ${world} · ${run.date}</small>`}</span>
+      </div>
+      <${StopButton} meta=${meta} live=${live} />
     </div>
-    <div class="cell" title=${limit == null ? 'предел скорости (limits) в записи не сохранялся — только в живом режиме' : 'выдано / предел'}>
-      <span class="k">v out${limit != null ? ' / предел' : ''}</span>
-      <span class="v num">${out ? (limit != null ? `${num(out.v, 2)} / ${unit(limit, 2, 'м/с')}` : unit(out.v, 2, 'м/с')) : DASH}</span></div>
-    <div class="cell" data-testid="alarm-count" title="стоящие тревоги и все, что вставали за 10 мин (строк в ленте)"><span class="k">тревоги</span>
-      <span class="v num">активных ${int(on.length)} · за 10 мин ${int(on.length + off.length)}</span></div>
-    <div class="cell" title=${live ? 'возраст последнего сообщения шлюза (hb — раз в 0,5 с; тишина дольше 1,5 с — «нет связи»)' : 'возраст последних данных записи на момент проигрывания'}>
-      <span class="k">${live ? 'связь' : 'данные'}</span>
-      <span class="v num">${Number.isFinite(dataAge) ? fmtAge(dataAge) : DASH}</span></div>
-    <div class="cell opt"><span class="k">LLM за час</span><span class="v num">${live ? DASH : int(llmHour)}</span></div>
-    <div class="cell"><span class="k">${live ? 'время робота' : 'время записи'}</span>
-      <span class="v num">${clock(T)} <span class="muted">T${dur(T - t0, true)}</span></span></div>
-    <div class="cell opt"><span class="k">режим</span><span class="v">НАБЛЮДЕНИЕ</span></div>
-    ${live ? html`<div class="cell grow src" data-testid="source" title=${'источник данных: живой поток шлюза — ' + run.origin}>
-        <span class="badge live">ЖИВОЙ</span><span class="srcrun">источник: ${run.origin} · ${run.run}</span></div>`
-      : html`<div class="cell grow src" data-testid="source" title="источник данных: запись прогона на цифровом двойнике — не робот">
-        <span class="badge">ЗАПИСЬ</span><span class="srcrun">источник: запись · ${run.system.toUpperCase()} ${run.run} · ${run.date} <span class="muted">(${run.origin}, ${world})</span></span></div>`}
-    <${StopButton} meta=${meta} live=${live} />
+    <div class="status-telemetry">
+      <div class=${'cell state-cell level-' + level} title="состояние safety_gate и первая причина"><span class="k">Safety gate</span>
+        <span class="v" data-testid="status-safety">${run.has_safety ? html`<${Sign} prio=${level} /><b>${s ? stateWord(s.state) : DASH}</b><span class="muted reason-code">${firstNotable(s) || ''}</span>` : html`<span class="muted">safety_gate нет</span>`}</span></div>
+      <div class="cell speed-cell" title=${limit == null ? 'выданная скорость' : 'выданная скорость / предел'}><span class="k">Скорость ${limit != null ? '/ предел' : ''}</span>
+        <span class="v num">${out ? (limit != null ? `${num(out.v, 2)} / ${unit(limit, 2, 'м/с')}` : unit(out.v, 2, 'м/с')) : DASH}</span></div>
+      <div class="cell alarm-cell" data-testid="alarm-count"><span class="k">Тревоги</span><span class="v">активных ${int(on.length)} <span class="muted">· за 10 мин ${int(on.length + off.length)}</span></span></div>
+      <div class="cell data-cell" title=${live ? 'возраст последнего сообщения шлюза' : 'возраст данных записи'}><span class="k">${live ? 'Связь' : 'Данные'}</span>
+        <span class="v num"><i class=${'signal-dot' + (dataAge > NO_LINK_S ? ' offline' : '')}></i>${Number.isFinite(dataAge) ? fmtAge(dataAge) : DASH}</span></div>
+      <div class="cell clock-cell"><span class="k">${live ? 'Время робота' : 'Время записи'}</span><span class="v num">${clock(T)} <span class="muted elapsed">T${dur(T - t0, true)}</span></span></div>
+      <span class="observation"><span class="signal-dot"></span> НАБЛЮДЕНИЕ</span>
+    </div>
   </header>`;
 }
 
@@ -406,25 +439,29 @@ function AlarmRow({ a, t0, T, acked, ack }) {
   </div>`;
 }
 
-function Nav({ tl, T, t0, screen, go, acked, setAcked, themeMode, setThemeMode }) {
+function Nav({ tl, T, t0, run, screen, go, acked, setAcked, themeMode, setThemeMode, showHelp }) {
   const { on, off } = alarmRows(tl, T);
   const [more, setMore] = useState(false);
   const ack = (k) => setAcked((s) => new Set(s).add(k));
-  const nextTheme = { auto: 'light', light: 'dark', dark: 'auto' };
-  const themeName = { auto: 'как в системе', light: 'светлая', dark: 'тёмная' };
+  const nextTheme = { auto: 'light', light: 'dark', dark: 'light' };
+  const themeName = { auto: 'Системная тема', light: 'Светлая тема', dark: 'Тёмная тема' };
   const shownOff = more ? off : off.slice(0, CLEARED_SHOWN);
   return html`<nav class="nav" aria-label="экраны и тревоги">
-    ${SCREENS.map((s) => html`<a href=${'#/' + s.id} aria-current=${screen === s.id ? 'page' : undefined}
+    <div class="nav-brand"><div class="brand-mark"><${Icon} name="network" size=${27} /></div><div><b>edge<span>/</span>atlas</b><small>EQUIPMENT OBSERVATORY</small></div></div>
+    <div class="nav-section-label">РАБОЧЕЕ ПРОСТРАНСТВО</div>
+    <div class="nav-links">${SCREENS.filter(s => !run.catalog || s.id === 'equipment').map((s) => html`<a href=${'#/' + s.id} aria-label=${s.title} title=${s.title} aria-current=${screen === s.id ? 'page' : undefined}
         onClick=${(e) => { e.preventDefault(); go(s.id); }}>
-      <span class="key">${s.key}</span><span>${s.title}</span><span class="lvl">${s.lvl}</span></a>`)}
+      <${Icon} name=${s.id} /><span>${s.title}</span><kbd>${s.key}</kbd></a>`)}</div>
     <div class="alarmlist" data-testid="alarms">
-      <h3>Тревоги · активные <span class="num">${int(on.length)}</span></h3>
-      ${on.length === 0 ? html`<div class="empty">нет</div>` : on.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
+      <h3>ЦЕНТР СОБЫТИЙ <span class="alarm-total num">${int(on.length)}</span></h3>
+      ${on.length === 0 ? html`<div class="alarm-empty"><${Icon} name="safety" size=${22} /><span>Всё спокойно<small>Активных тревог нет</small></span></div>` : on.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
       ${off.length ? html`<h3 class="sep">Снятые за 10 мин <span class="num">${int(off.length)}</span></h3>
         ${shownOff.map((a) => html`<${AlarmRow} a=${a} t0=${t0} T=${T} acked=${acked} ack=${ack} />`)}
         ${off.length > CLEARED_SHOWN ? html`<button class="more" onClick=${() => setMore(!more)}>${more ? 'свернуть' : `ещё ${off.length - CLEARED_SHOWN}`}</button>` : ''}` : ''}
     </div>
-    <div class="navfoot">тема: <button onClick=${() => setThemeMode(nextTheme[themeMode] || 'auto')}>${themeName[themeMode] || themeName.auto}</button></div>
+    <div class="navfoot"><button class="theme-toggle" onClick=${() => setThemeMode(nextTheme[themeMode] || 'dark')} aria-label="Переключить тему"><${Icon} name=${themeMode === 'light' ? 'sun' : 'moon'} size=${17} /><span>${themeName[themeMode]}</span></button>
+      <button class="help-toggle" onClick=${showHelp} aria-label="Горячие клавиши"><${Icon} name="keyboard" size=${18} /></button></div>
+    <div class="nav-project"><span class="signal-dot"></span><div>Edge AI Research<small>ИТМО · Дипломный проект</small></div><span class="version">01</span></div>
   </nav>`;
 }
 

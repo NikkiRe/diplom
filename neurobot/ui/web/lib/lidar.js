@@ -40,6 +40,7 @@ export function drawLidar(canvas, { geo, safety, out, scan, pal, hasSafety, leve
     canvas.width = Math.round(w * dpr); canvas.height = Math.round(hgt * dpr);
   }
   const ctx = canvas.getContext('2d');
+  if (!ctx) return;
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, hgt);
   const cx = w / 2, cy = hgt * 0.66;
@@ -66,41 +67,61 @@ export function drawLidar(canvas, { geo, safety, out, scan, pal, hasSafety, leve
     for (let x = -hgt; x < w + hgt; x += 7) { ctx.moveTo(x, hgt); ctx.lineTo(x + hgt, 0); }
     ctx.stroke(); ctx.restore();
   };
-  ctx.font = pal.font;
+  ctx.font = "9px 'JetBrains Mono', ui-monospace, Menlo, monospace";
   ctx.lineWidth = 1;
 
-  // кольца шкалы; подпись — только если целиком на холсте
-  ctx.strokeStyle = pal.line; ctx.globalAlpha = 0.6;
+  // Координатная сетка и мягкий свет — подложка шкалы, без синтетических отражений или анимированного «скана».
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(w, hgt) * 0.7);
+  glow.addColorStop(0, pal.panel);
+  glow.addColorStop(1, pal.panel2);
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, w, hgt);
+  const grid = k * 0.25;
+  ctx.strokeStyle = pal.faint; ctx.globalAlpha = 0.32;
+  ctx.beginPath();
+  for (let x = cx % grid; x < w; x += grid) { ctx.moveTo(x, 0); ctx.lineTo(x, hgt); }
+  for (let y = cy % grid; y < hgt; y += grid) { ctx.moveTo(0, y); ctx.lineTo(w, y); }
+  ctx.stroke();
+  ctx.strokeStyle = pal.line; ctx.globalAlpha = 0.65;
   for (const r of RINGS) { ctx.beginPath(); ctx.arc(cx, cy, r * k, 0, 2 * Math.PI); ctx.stroke(); }
+  ctx.setLineDash([2, 5]); ctx.strokeStyle = pal.muted; ctx.globalAlpha = 0.3;
+  ctx.beginPath(); ctx.moveTo(cx, 0); ctx.lineTo(cx, hgt); ctx.moveTo(0, cy); ctx.lineTo(w, cy); ctx.stroke();
+  ctx.setLineDash([]);
   ctx.globalAlpha = 1;
   ctx.fillStyle = pal.muted;
   for (const r of RINGS) {
     const label = num(r, 1) + ' м';
     const [x, y] = pt(r, 30);
     const lw = ctx.measureText(label).width;
-    if (x - lw - 4 >= 2 && y - 10 >= 2) ctx.fillText(label, x - lw - 4, y - 2);
+    if (x - lw - 4 >= 8 && y - 10 >= 8) ctx.fillText(label, x - lw - 4, y - 2);
   }
+  ctx.textAlign = 'center'; ctx.font = "8px 'JetBrains Mono', ui-monospace, Menlo, monospace";
+  ctx.fillText('ВПЕРЁД', cx, 15); ctx.textAlign = 'left';
 
   if (hasSafety) {
     // сзади датчика нет: ±119,9° — поле URG-04LX; маска корпуса камеры D435i перед лидаром: там видит только глубина
     const half = geo.lidar_half_fov_deg;
-    wedge(half, 360 - half, R, VIEW_M); hatch(pal.faint);
+    ctx.globalAlpha = 0.6;
+    wedge(half, 360 - half, R, VIEW_M); hatch(pal.line);
     const [ma, mb] = geo.mask_robot_deg;
-    wedge(ma, mb, R, VIEW_M); hatch(pal.faint);
+    wedge(ma, mb, R, VIEW_M); hatch(pal.line);
+    ctx.globalAlpha = 1;
 
     // клин камеры глубины 87° до 2,5 м (depth_max_m safety_gate)
-    ctx.setLineDash([2, 3]); ctx.strokeStyle = pal.muted;
+    ctx.setLineDash([3, 5]); ctx.strokeStyle = pal.muted; ctx.globalAlpha = 0.6;
     for (const s of [-1, 1]) { const [x, y] = pt(2.5, (s * geo.depth_fov_deg) / 2); ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(x, y); ctx.stroke(); }
-    ctx.setLineDash([]);
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
   }
   // коридор корпуса: ширина 2·(R + lateral_margin) вперёд
   const halfW = (R + geo.lateral_margin) * k;
   if (hasSafety) {
-    ctx.strokeStyle = pal.muted;
+    ctx.strokeStyle = pal.accent; ctx.globalAlpha = 0.22;
+    ctx.fillStyle = pal.accent; ctx.globalAlpha = 0.025;
+    ctx.fillRect(cx - halfW, 0, halfW * 2, cy);
+    ctx.globalAlpha = 0.3;
     ctx.beginPath();
     ctx.moveTo(cx - halfW, cy); ctx.lineTo(cx - halfW, 0);
     ctx.moveTo(cx + halfW, cy); ctx.lineTo(cx + halfW, 0);
-    ctx.stroke();
+    ctx.stroke(); ctx.globalAlpha = 1;
 
     // участки «нет данных лидара» из причин (lidar_unseen — норма, lidar_nodata при blocked — тревога)
     const st = safety ? safety.state : null;
@@ -112,14 +133,28 @@ export function drawLidar(canvas, { geo, safety, out, scan, pal, hasSafety, leve
   }
 
   // скан: попадания — точками; где попаданий нет («нет данных», «свободно»), точек нет
-  ctx.fillStyle = pal.text;
-  for (const [x, y] of scanPoints(scan, pt)) ctx.fillRect(x - 1.5, y - 1.5, 3, 3);
+  ctx.fillStyle = pal.accent; ctx.shadowColor = pal.accent; ctx.shadowBlur = 5;
+  ctx.beginPath();
+  for (const [x, y] of scanPoints(scan, pt)) { ctx.moveTo(x + 1.5, y); ctx.arc(x, y, 1.5, 0, 2 * Math.PI); }
+  ctx.fill(); ctx.shadowBlur = 0;
 
-  // корпус и курс
-  ctx.fillStyle = pal.panel2; ctx.strokeStyle = pal.text; ctx.lineWidth = 1.5;
+  // Внешняя окружность — реальный габарит корпуса; внутренний рисунок помогает прочитать курс.
+  const bodyR = R * k;
+  ctx.shadowColor = pal.bg; ctx.shadowBlur = 12;
+  ctx.fillStyle = pal.panel; ctx.strokeStyle = pal.text; ctx.lineWidth = 1.5;
   ctx.beginPath(); ctx.arc(cx, cy, R * k, 0, 2 * Math.PI); ctx.fill(); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(cx, cy - R * k + 4); ctx.lineTo(cx - 6, cy - R * k + 14); ctx.lineTo(cx + 6, cy - R * k + 14); ctx.closePath();
-  ctx.fillStyle = pal.text; ctx.fill();
+  ctx.shadowBlur = 0;
+  ctx.strokeStyle = pal.line; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.arc(cx, cy, bodyR * 0.76, 0, 2 * Math.PI); ctx.stroke();
+  ctx.fillStyle = pal.line;
+  ctx.fillRect(cx - bodyR * 0.87, cy - bodyR * 0.36, bodyR * 0.16, bodyR * 0.72);
+  ctx.fillRect(cx + bodyR * 0.71, cy - bodyR * 0.36, bodyR * 0.16, bodyR * 0.72);
+  ctx.beginPath(); ctx.moveTo(cx, cy - bodyR * 0.72); ctx.lineTo(cx - bodyR * 0.22, cy - bodyR * 0.27); ctx.lineTo(cx + bodyR * 0.22, cy - bodyR * 0.27); ctx.closePath();
+  ctx.fillStyle = pal.accent; ctx.fill();
+  ctx.strokeStyle = pal.muted;
+  ctx.beginPath(); ctx.arc(cx, cy + bodyR * 0.19, bodyR * 0.2, 0, 2 * Math.PI); ctx.stroke();
+  ctx.fillStyle = pal.muted;
+  ctx.beginPath(); ctx.arc(cx, cy + bodyR * 0.19, 1.5, 0, 2 * Math.PI); ctx.fill();
   ctx.lineWidth = 1;
 
   if (!hasSafety) {

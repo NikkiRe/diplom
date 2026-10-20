@@ -2,6 +2,7 @@
 
   python -m neurobot.ui replay --runs DIR [ID=DIR …] --out bundle.json.gz
   python -m neurobot.ui serve --bundle FILE [--port 18120]
+  python -m neurobot.ui catalog [--port 18126] [--source http://127.0.0.1:PORT/mcp …]
   python -m neurobot.ui live [--env FILE] [--port N] [--state-dir DIR]     живой шлюз (юнит neurobot-ui, ROS 2)
 """
 from __future__ import annotations
@@ -61,6 +62,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     s.add_argument("--bundle", required=True, help="файл бандла")
     s.add_argument("--port", type=int, default=PORT, help="порт (по умолчанию %d)" % PORT)
     s.add_argument("--host", default="127.0.0.1", help="127.0.0.1 или ::1 — другого нет")
+    c = sub.add_parser("catalog", help="универсальный каталог MCP-оборудования без ROS и записей")
+    c.add_argument("--port", type=int, default=18126, help="порт (по умолчанию 18126)")
+    c.add_argument("--host", default="127.0.0.1", help="127.0.0.1 или ::1")
+    c.add_argument("--source", action="append", default=[], metavar="URL", help="локальный MCP URL; можно повторить")
     sub.add_parser("live", help="живой шлюз: узел rclpy и HTTP на 127.0.0.1 (юнит neurobot-ui)")
     a = p.parse_args(argv)
     if a.cmd == "replay":
@@ -71,6 +76,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         msgs = sum(len(x["stream"]) for x in bundle["runs"])
         print("бандл %s: прогонов %d (%s), сообщений %d, %d КиБ" % (a.out, len(n), ", ".join(n), msgs, size // 1024))
         return 0
+    if a.cmd == "catalog":
+        from neurobot.ui import server
+        return server.serve(None, a.port, a.host, sources=a.source)
     if a.cmd == "serve":
         from neurobot.ui import server
         return server.serve(a.bundle, a.port, a.host)

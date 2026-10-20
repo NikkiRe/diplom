@@ -1,11 +1,7 @@
-// «Обзор» (L1): всё ли в порядке и куда смотреть. Слева — безопасность: состояние и первая причина, мини-лидар по
-// safety_state (в живом режиме — и точки скана), полоса 15 мин; под ней — события стенда и человека; справа — плитки
-// 3×2 (заголовок, значение с
-// единицей, одна строка контекста, спарклайн 15 мин), лента и список последних жестов. На 1366×768 события — рядом
-// с жестами, и экран целиком в окне. Цвет — только у панели с активной тревогой (рамка и знак). Пояснения — в
-// подсказках «i», а не текстом на экране.
+// «Обзор»: пространственная обстановка, шесть живых показателей и журнал наблюдений.
+// Все числа и отметки берутся из текущей временной линии; скан не подменяется иллюстрацией в записях.
 import { useEffect, useRef } from 'preact/hooks';
-import { html, Sign, V, Age, Info, fresh, inK1, palette, safetySegments, stateWord, useMedia, OUTCOMES } from '../lib/ui.js';
+import { html, Sign, V, Age, Info, fresh, inK1, palette, safetySegments, stateWord, OUTCOMES } from '../lib/ui.js';
 import { Spark } from '../lib/spark.js';
 import { drawLidar } from '../lib/lidar.js';
 import { num, unit, int, dur, pct, plural, DASH } from '../lib/fmt.js';
@@ -15,17 +11,37 @@ const WIN = 900;   // 15 мин
 const STALE = { safety: 2.5, out: 2, mem: 25, units: 25, scan: 1 };
 const SHARE = ['ok', 'slow', 'blocked', 'estop'];
 
-function Tile({ title, info, level = 0, ageSec, stale, children, testid }) {
+function MetricIcon({ kind }) {
+  const paths = {
+    'tile-k1': 'M4 13h4l3-8 3 14 3-9h3',
+    'tile-speed': 'M5 17a8 8 0 1 1 14 0M12 12l4-4M8 17h8',
+    'tile-camera': 'M4 7h4l2-3h4l2 3h4v12H4ZM16 12a4 4 0 1 1-8 0 4 4 0 0 1 8 0',
+    'tile-k4': 'M8 4H5v6H2l6 10v-6h4M13 4h6v6h3l-6 10v-6h-3',
+    'tile-llm': 'M5 4h14v12h-8l-6 4ZM8 8h8M8 12h5',
+    'tile-mem': 'M7 7h10v10H7ZM4 8h3M4 12h3M4 16h3M17 8h3M17 12h3M17 16h3M8 4v3M12 4v3M16 4v3M8 17v3M12 17v3M16 17v3',
+    'tile-units': 'M4 4h6v6H4ZM14 4h6v6h-6ZM4 14h6v6H4ZM14 14h6v6h-6Z',
+    'tile-touch': 'M12 3v4M3 12h4M17 12h4M12 17v4M6 6l2 2M16 16l2 2M6 18l2-2M16 8l2-2M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0',
+  };
+  return html`<svg class="ov-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d=${paths[kind] || paths['tile-units']} /></svg>`;
+}
+
+function Tile({ title, info, level = 0, ageSec, stale, children, testid, disconnected = false }) {
   return html`<section class=${'panel tile' + (level ? ' a' + level : '') + (stale ? ' stale' : '')} data-testid=${testid}>
-    <h2>${level ? html`<${Sign} prio=${level} />` : ''}<span>${title}</span>${info ? html`<${Info} text=${info} />` : ''}<span class="r">${ageSec != null ? html`<${Age} sec=${ageSec} stale=${stale} />` : ''}</span></h2>
+    <h2><span class="ov-iconbox"><${MetricIcon} kind=${testid} /></span><span class="ov-tile-title">${title}</span>${level ? html`<${Sign} prio=${level} />` : ''}${info ? html`<${Info} text=${info} />` : ''}</h2>
     ${children}
+    <div class="ov-tile-foot"><span>${disconnected ? 'Источник не подключён' : 'Последние 15 минут'}</span><span>${ageSec != null ? html`<${Age} sec=${ageSec} stale=${stale} />` : disconnected ? '' : 'телеметрия'}</span></div>
   </section>`;
 }
 
 function Lidar({ geo, safety, out, scan, hasSafety, theme }) {
   const ref = useRef(null);
   useEffect(() => {
-    if (ref.current) drawLidar(ref.current, { geo, safety, out, scan, pal: palette(), hasSafety, level: safety ? safety.level : 0 });
+    if (!ref.current) return undefined;
+    const draw = () => drawLidar(ref.current, { geo, safety, out, scan, pal: palette(), hasSafety, level: safety ? safety.level : 0 });
+    draw();
+    const observer = new ResizeObserver(draw);
+    observer.observe(ref.current);
+    return () => observer.disconnect();
   });
   return html`<canvas class="lidar" ref=${ref} role="img" data-testid="lidar" data-scan=${scan ? scan.r.filter((r) => r != null).length : 0}
     aria-label="мини-лидар: корпус, коридор, слепые секторы, зазор и тормозной путь"></canvas>`;
@@ -52,18 +68,22 @@ function SafetyPanel({ run, tl, T, t0, geo, theme, dict, stats }) {
   const code = first ? String(first).split(':')[0].trim() : null;
   const share = stats && stats.safety_share;
   return html`<section class=${'panel safetybox' + (level ? ' a' + level : '') + (stale ? ' stale' : '')} data-testid="tile-safety">
-    <h2>${level ? html`<${Sign} prio=${level} />` : ''}<span>Безопасность</span><${Info} text=${run.live ? SAFETY_INFO_LIVE : SAFETY_INFO} /><span class="r">${sAge != null ? html`<${Age} sec=${sAge} stale=${stale} />` : ''}</span></h2>
+    <h2><span class="ov-panel-dot"></span><span>Безопасность</span><${Info} text=${run.live ? SAFETY_INFO_LIVE : SAFETY_INFO} /><span class="r">${sAge != null ? html`<${Age} sec=${sAge} stale=${stale} />` : ''}</span></h2>
     ${run.has_safety ? html`
-      <div class="row"><div class="big" data-testid="state-word">${safety ? stateWord(safety.state) : DASH}</div>
-        <div class="sub">${safety ? (level ? 'тревога P' + level : 'норма') : ''}</div></div>
-      <div class="reason">${code ? html`<b>${code}</b> — ${(dict[code] || {}).text || ''}${safety.reasons.length > 1 ? html` <span class="muted">и ещё ${safety.reasons.length - 1}</span>` : ''}` : html`<span class="muted">причин нет</span>`}</div>
-      <div class="sub">зазор ${unit(safety ? safety.min_clearance_m : null, 2, 'м')} · d_stop ${unit(out ? out.d_stop_m : null, 2, 'м')}${out ? ` при ${unit(Math.max(0, out.v), 2, 'м/с')}` : ''}</div>`
-      : html`<div class="big muted">${DASH}</div><div class="reason muted">стек лаборатории пишет /cmd_vel прямо в twist_mux</div>`}
-    <${Lidar} geo=${geo} safety=${safety} out=${out} scan=${scan} hasSafety=${run.has_safety} theme=${theme} />
-    ${run.has_safety ? html`<div class="legend items">${run.live ? html`<span>точки — скан</span>` : ''}<span>штриховка — нет датчика</span><span>пунктир — зазор</span><span>черта — d_stop</span></div>` : ''}
-    ${run.has_safety ? html`<div class="bandcap">состояния за 15 мин</div>
-      <${Spark} kind="band" segs=${segs} x0=${x0} x1=${x1} theme=${theme} title="состояния safety_gate за 15 мин" />` : ''}
-    ${run.has_safety ? html`<div class="sub items" data-testid="safety-share">${run.live ? 'с запуска шлюза' : 'за прогон'}: ${share ? SHARE.map((k, i) => html`<span>${k} ${pct(share[k] || 0)}${i < SHARE.length - 1 ? ' · ' : ''}</span> `) : DASH}</div>` : ''}
+      <div class="ov-state"><div class="big" data-testid="state-word">${safety ? stateWord(safety.state) : DASH}</div>
+        <span class=${'ov-state-pill' + (level ? ' priority' : '')}>${safety ? (stale ? 'Данные устарели' : level ? 'Тревога P' + level : 'Штатный режим') : 'Нет данных'}</span></div>
+      <div class="reason">${code ? html`<span class="ov-reason-code">${code}</span><span>${(dict[code] || {}).text || String(first).split(':').slice(1).join(':').trim()}${safety.reasons.length > 1 ? html` <span class="muted">· ещё ${safety.reasons.length - 1}</span>` : ''}</span>` : html`<span class="muted">${safety ? 'Ограничений нет' : 'Ожидание safety_state'}</span>`}</div>`
+      : html`<div class="ov-state"><div class="big muted">${DASH}</div><span class="ov-state-pill">Без safety_gate</span></div><div class="reason muted">Стек лаборатории пишет /cmd_vel прямо в twist_mux</div>`}
+    <div class="ov-lidar-frame">
+      <div class="ov-scope-meta"><span>Окружение · вид сверху</span><span class=${scan ? 'ov-scan-state active' : 'ov-scan-state'}>${run.live ? (scan ? 'СКАН / LIVE' : 'НЕТ СКАНА') : 'СВОДКА ЗАПИСИ'}</span></div>
+      <${Lidar} geo=${geo} safety=${safety} out=${out} scan=${scan} hasSafety=${run.has_safety} theme=${theme} />
+      <div class="ov-scope-caption"><span>Корпус Ø${num(2 * geo.robot_radius, 2)} м</span><span>${run.live ? (scan ? `${int(scan.r.filter((r) => r != null).length)} точек` : 'ожидание /scan') : 'скан в записи отсутствует'}</span></div>
+    </div>
+    ${run.has_safety ? html`<div class="ov-clearances"><div><span>Зазор до опасности</span><strong>${unit(safety ? safety.min_clearance_m : null, 2, 'м')}</strong></div><div><span>Тормозной путь <span class="num">d_stop</span></span><strong>${unit(out ? out.d_stop_m : null, 2, 'м')}</strong></div></div>
+      <div class="legend ov-scope-legend"><span><i class="ov-key-gap"></i>зазор</span><span><i class="ov-key-stop"></i>d_stop</span><span><i class="ov-key-blind"></i>нет датчика</span></div>
+      <div class="bandcap"><span>История безопасности</span><span>15 мин</span></div>
+      <${Spark} kind="band" segs=${segs} x0=${x0} x1=${x1} theme=${theme} title="состояния safety_gate за 15 мин" />
+      <div class="sub items ov-safety-share" data-testid="safety-share"><span class="ov-share-label">${run.live ? 'С запуска шлюза' : 'За прогон'}</span>${share ? SHARE.map((k) => html`<span>${k} <b>${pct(share[k] || 0)}</b></span>`) : DASH}</div>` : ''}
   </section>`;
 }
 
@@ -89,23 +109,25 @@ function Events({ tl, T, t0, live }) {
     ...tl.until('touch', T).map((m) => ({ ...m, text: 'касание (истина стенда)', tail: (m.models || []).join(', ') }))]
     .sort((a, b) => b.t - a.t).slice(0, 30);
   return html`<section class="panel events" data-testid="events">
-    <h2><span>${live ? 'События: действия оператора' : 'События стенда и человека'}</span><span class="r muted num">${int(events.length)}</span></h2>
-    <div class="scroll">${events.length === 0 ? html`<div class="empty">событий нет</div>` : events.map((e) => html`
-      <div class="ev"><span class="muted num">T${dur(e.t - t0, true)}</span><span>${e.text}${e.tail ? html`<span class="muted"> · ${e.tail}</span>` : ''}</span></div>`)}</div>
+    <h2><span>${live ? 'Действия оператора' : 'Журнал событий'}</span><span class="r ov-count num">${int(events.length)}</span></h2>
+    <div class="ov-panel-caption">${live ? 'События текущего подключения' : 'Стенд и действия человека'}</div>
+    <div class="scroll">${events.length === 0 ? html`<div class="empty ov-empty"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" aria-hidden="true"><rect x="10" y="7" width="20" height="26" rx="4"/><path d="M15 15h10M15 20h10M15 25h6"/></svg><span>Событий пока нет</span><small>Здесь появятся действия и события стенда</small></div>` : events.map((e) => html`
+      <div class="ev"><span class="ov-event-dot"></span><span class="muted num">T${dur(e.t - t0, true)}</span><span>${e.text}${e.tail ? html`<span class="ov-event-tail">${e.tail}</span>` : ''}</span></div>`)}</div>
   </section>`;
 }
 
 function LastGestures({ gest, t0, live }) {
   const last = gest.slice(-14).reverse();
   return html`<section class="panel glist" data-testid="last-gestures">
-    <h2><span>Жесты · последние</span><${Info} text=${live ? 'Δ — от конца жеста по perception (t_end) до первой ненулевой /cmd_vel; меряется, только если в t_end робот стоял. «защита» — исход оборвал safety_gate.' : 'Δ — задержка t0 → первая ненулевая /cmd_vel; «защита» — исход оборвал safety_gate.'} /></h2>
-    <div class="scroll">${last.length === 0 ? html`<div class="empty">жестов ещё не было</div>` : html`<table class="gtab">
+    <h2><span>Последние жесты</span><${Info} text=${live ? 'Δ — от конца жеста по perception (t_end) до первой ненулевой /cmd_vel; меряется, только если в t_end робот стоял. «защита» — исход оборвал safety_gate.' : 'Δ — задержка t0 → первая ненулевая /cmd_vel; «защита» — исход оборвал safety_gate.'} /><span class="r ov-count num">${int(gest.length)}</span></h2>
+    <div class="ov-panel-caption">Распознавание и результат исполнения</div>
+    <div class="scroll">${last.length === 0 ? html`<div class="empty ov-empty"><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" aria-hidden="true"><path d="M13 25V13a3 3 0 0 1 6 0v8-13a3 3 0 0 1 6 0v13-8a3 3 0 0 1 6 0v12c0 7-4 11-11 11-5 0-8-3-11-7l-5-7a3 3 0 0 1 5-3l4 4"/></svg><span>Жестов ещё не было</span><small>Новые распознавания появятся здесь</small></div>` : html`<table class="gtab">
       <thead><tr><th>T</th><th></th><th>жест</th><th class="n">conf</th><th>исход</th><th class="n">Δ, с</th></tr></thead>
       <tbody>${last.map((g) => html`<tr>
         <td class="num muted">T${dur(g.first - t0, true)}</td><td><${GMark} outcome=${g.outcome} /></td>
         <td>${g.kind === 'negative' ? html`<span class="muted">без жеста: ${g.neg || ''}</span>` : (g.name || g.maneuver || DASH)}</td>
         <td class="n num">${num(g.conf, 2)}</td>
-        <td>${g.outcome ? OUTCOMES[g.outcome].text : html`<span class="muted">ждём</span>`}${g.stopped_by ? html`<span class="muted"> · защита</span>` : ''}</td>
+        <td><span class=${'ov-outcome outcome-' + (g.outcome || 'pending')}>${g.outcome ? OUTCOMES[g.outcome].text : 'ждём'}</span>${g.stopped_by ? html`<span class="muted"> · защита</span>` : ''}</td>
         <td class="n num">${num(g.d_cmd_s, 2)}</td></tr>`)}</tbody></table>`}</div>
   </section>`;
 }
@@ -137,7 +159,6 @@ export function Overview({ run, tl, T, t0, geo, theme, bundle }) {
   const unitLevel = units && units.down && units.down.length ? 2 : 0;
   const nCalls = llmHour.length;
   const faults = tl.until('fault', T).length;
-  const narrow = useMedia('(max-width: 1600px)');
   // у живого шлюза «с запуска» — по последним run_window жестам (кольцо): дальше подпись говорит, сколько их
   const runWord = !live ? 'прогон' : k1 && k1.run_window && k1.run.n >= k1.run_window ? `последних ${int(k1.run_window)}` : 'с запуска';
 
@@ -158,7 +179,7 @@ export function Overview({ run, tl, T, t0, geo, theme, bundle }) {
         <div class="sub">${mem ? pct(mem.total_mib / budget.gnome) : DASH} из ${num(budget.gnome, 0)} МиБ · CPU ${mem && mem.cpu_pct != null ? unit(mem.cpu_pct, 0, '%') : DASH}</div>
         <${Spark} kind="line" xs=${memWin.map((m) => m.t - t0)} ys=${memWin.map((m) => m.total_mib)} x0=${x0} x1=${x1} y0=${mem ? Math.max(0, mem.total_mib - 100) : 0} y1=${mem ? mem.total_mib + 50 : 1} theme=${theme} title="память стека за 15 мин" />
       <//>`;
-  const unitsTile = html`<${Tile} title=${run.system === 'a0' ? 'Процессы' : 'Юниты'} level=${unitLevel} ageSec=${units ? T - units.t : null} testid="tile-units" info=${run.system === 'a0' ? 'Процессы стека лаборатории (демо, PicoClaw, драйверы двойника). Супервизии нет: упавшее поднимает человек.' : live ? 'Юниты systemd neurobot-* (systemctl show раз в 5 с), без самого пульта. Рестарты — NRestarts с запуска юнита.' : 'Юниты systemd neurobot-*, драйверы двойника — в счёте. Отказы — по расписанию стенда.'}>
+  const unitsTile = html`<${Tile} title=${run.system === 'a0' ? 'Процессы' : 'Системные юниты'} level=${unitLevel} ageSec=${units ? T - units.t : null} stale=${units && T - units.t > STALE.units} testid="tile-units" info=${run.system === 'a0' ? 'Процессы стека лаборатории (демо, PicoClaw, драйверы двойника). Супервизии нет: упавшее поднимает человек.' : live ? 'Юниты systemd neurobot-* (systemctl show раз в 5 с), без самого пульта. Рестарты — NRestarts с запуска юнита.' : 'Юниты systemd neurobot-*, драйверы двойника — в счёте. Отказы — по расписанию стенда.'}>
         <div class="big"><${V} v=${units ? `${units.up} из ${units.total}` : DASH} /></div>
         <div class="sub">${!units ? 'нет данных' : units.down && units.down.length ? 'не работает: ' + units.down.join(', ') : 'все в работе'}${live ? (units && units.restarts ? ` · рестартов ${int(Object.values(units.restarts).reduce((a, b) => a + b, 0))}` : '') : ` · отказов стенда ${int(faults)}`}</div>
         <${Spark} kind="step" xs=${unitsWin.map((m) => m.t - t0)} ys=${unitsWin.map((m) => m.up)} x0=${x0} x1=${x1} y0=${0} y1=${units ? units.total : 1} theme=${theme} title="в работе за 15 мин" />
@@ -185,9 +206,10 @@ export function Overview({ run, tl, T, t0, geo, theme, bundle }) {
         <div class="sub">${health ? `${health.state} · кадр ${unit(health.frame_age_s, 2, 'с')} · восстановлений ${int(health.recoveries)}` : 'нет данных'}</div>
         <${Spark} kind="line" xs=${healthWin.map((m) => m.t - t0)} ys=${healthWin.map((m) => m.fps || 0)} x0=${x0} x1=${x1} y1=${15} theme=${theme} title="кадры в секунду за 15 мин" />
       <//>
-      <${Tile} title="LLM за час" testid="tile-llm" info="В живом режиме вызовы LLM пульт не читает: EdgeCtx к роботу ещё не подключён (Э3), у PicoClaw своего счёта нет — токены считает учётный прокси mockllm на стенде. Числа ВКР по LLM — в «Записи».">
+      <${Tile} title="LLM за час" testid="tile-llm" disconnected=${true} info="В живом режиме вызовы LLM пульт не читает: EdgeCtx к роботу ещё не подключён (Э3), у PicoClaw своего счёта нет — токены считает учётный прокси mockllm на стенде. Числа ВКР по LLM — в «Записи».">
         <div class="big"><${V} v=${DASH} /></div>
         <div class="sub">не подключено: EdgeCtx — после Э3</div>
+        <div class="ov-disconnected"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><path d="M8 3v4M16 3v4M6 7h12v4a6 6 0 0 1-12 0ZM12 17v4M3 3l18 18" /></svg><span>Данные будут доступны после подключения</span></div>
       <//>
       ${memTile}
       ${unitsTile}
@@ -216,10 +238,8 @@ export function Overview({ run, tl, T, t0, geo, theme, bundle }) {
     </div>`;
   }
   const tape = html`<section class="panel tapebox" data-testid="tape-15">
-      <h2><span>Жесты · 15 мин</span><span class="r legend">${['done', 'wrong', 'none', 'cut', 'false_action'].map((o) => html`<span><${GMark} outcome=${o} /> ${OUTCOMES[o].text}</span>`)}</span></h2>
+      <h2><span>Лента жестов</span><span class="ov-tape-period">15 минут</span><span class="r legend">${['done', 'wrong', 'none', 'cut', 'false_action'].map((o) => html`<span><${GMark} outcome=${o} /> ${OUTCOMES[o].text}</span>`)}</span></h2>
       <${Tape} gestures=${gest} t0=${t0} x0=${x0} x1=${x1} labels=${false} />
     </section>`;
-  return narrow
-    ? html`<div class="ov narrow"><div class="col">${safety}</div><div class="col">${tiles}${tape}<div class="pair2">${glist}${events}</div></div></div>`
-    : html`<div class="ov"><div class="col">${safety}${events}</div><div class="col">${tiles}${tape}${glist}</div></div>`;
+  return html`<div class="ov ov-dashboard"><div class="ov-hero">${safety}<div class="ov-telemetry"><div class="ov-section-label"><span>Показатели системы</span><span>Окно трендов · 15 мин</span></div>${tiles}</div></div>${tape}<div class="ov-activity">${glist}${events}</div></div>`;
 }

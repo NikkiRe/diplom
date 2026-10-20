@@ -7,10 +7,10 @@ import uPlot from 'uplot';
 import { html, palette, drawBand } from './ui.js';
 import { dur, num } from './fmt.js';
 
-export const AXIS_W = 64;
-const LABEL_W = 14;
+export const AXIS_W = 50;
+const LABEL_W = 12;
 const X_INCRS = [1, 5, 10, 30, 60, 120, 300, 600, 900, 1800, 3600];
-const FONT = "11px 'JetBrains Mono', ui-monospace, monospace";
+const FONT = "10px 'JetBrains Mono', ui-monospace, monospace";
 
 // горизонтальные целевые линии: [{y, label, color(pal)}]; подпись — в пустом правом поле на высоте линии
 export function targetsPlugin(getTargets, scale = 'y') {
@@ -22,7 +22,7 @@ export function targetsPlugin(getTargets, scale = 'y') {
         const dpr = devicePixelRatio;
         const { left, top, width, height } = u.bbox;
         ctx.save();
-        ctx.font = `${11 * dpr}px 'JetBrains Mono', ui-monospace, monospace`;
+        ctx.font = `${10 * dpr}px 'JetBrains Mono', ui-monospace, monospace`;
         ctx.textBaseline = 'middle';
         const shown = getTargets().map((t) => ({ ...t, py: Math.round(u.valToPos(t.y, scale, true)) }))
           .filter((t) => t.py >= top && t.py <= top + height).sort((a, b) => a.py - b.py);
@@ -30,8 +30,8 @@ export function targetsPlugin(getTargets, scale = 'y') {
         for (const t of shown) {
           const c = t.color ? t.color(pal) : pal.text;
           ctx.strokeStyle = c;
-          ctx.lineWidth = 1.5 * dpr;
-          ctx.setLineDash([6 * dpr, 4 * dpr]);
+          ctx.lineWidth = 1 * dpr;
+          ctx.setLineDash([4 * dpr, 5 * dpr]);
           ctx.beginPath(); ctx.moveTo(left, t.py); ctx.lineTo(left + width, t.py); ctx.stroke();
           ctx.setLineDash([]);
           ctx.fillStyle = c;
@@ -68,8 +68,9 @@ function tooltipPlugin(fmts) {
         tip.className = 'u-tip';
         tip.hidden = true;
         u.over.appendChild(tip);
-        u.over.addEventListener('mouseenter', () => { inside = true; });
-        u.over.addEventListener('mouseleave', () => { inside = false; tip.hidden = true; });
+        u.over.addEventListener('pointerenter', () => { inside = true; });
+        u.over.addEventListener('pointerdown', () => { inside = true; });
+        u.over.addEventListener('pointerleave', () => { inside = false; tip.hidden = true; });
       }],
       setCursor: [(u) => {
         const i = u.cursor.idx;
@@ -79,7 +80,12 @@ function tooltipPlugin(fmts) {
           const v = k > 0 ? u.data[k][i] : null;
           if (v != null) rows.push(`${s.label}: ${fmts[k - 1](v)}`);
         });
-        tip.replaceChildren(...rows.map((r) => { const d = document.createElement('div'); d.textContent = r; return d; }));
+        tip.replaceChildren(...rows.map((r, k) => {
+          const d = document.createElement('div');
+          d.className = k === 0 ? 'u-tip-time' : 'u-tip-value';
+          d.textContent = r;
+          return d;
+        }));
         tip.hidden = false;
         const x = u.cursor.left, w = u.over.clientWidth;
         tip.style.left = `${Math.min(x + 12, Math.max(0, w - tip.offsetWidth - 4))}px`;
@@ -91,9 +97,9 @@ function tooltipPlugin(fmts) {
 
 function axes(pal, s) {
   const { yLabel, yFmt, y2 } = s;
-  const base = { stroke: pal.muted, font: FONT, labelFont: FONT, ticks: { stroke: pal.line, width: 1, size: 4 },
-    grid: { stroke: pal.faint, width: 1 } };
-  const x = { ...base, size: 26, values: (u, splits) => splits.map((v) => dur(v, true)), space: 80, incrs: X_INCRS };
+  const base = { stroke: pal.muted, font: FONT, labelFont: FONT, ticks: { stroke: pal.faint, width: 1, size: 3 },
+    grid: { stroke: pal.faint, width: 1, dash: [2, 4] } };
+  const x = { ...base, size: 28, values: (u, splits) => splits.map((v) => dur(v, true)), space: 88, incrs: X_INCRS };
   const out = [
     // xAxis: false — подписи времени только у нижнего графика пары (сетка остаётся)
     s.xAxis === false ? { ...x, size: 4, values: () => [], ticks: { show: false } } : x,
@@ -145,7 +151,8 @@ export function Chart({ spec, data, theme, sync = 'nb', xRange, testid }) {
     else plugins.push(tooltipPlugin(fmts));
     const opts = {
       width: box.current.clientWidth || 600, height: s.height || 160, ...(s.padding ? { padding: s.padding } : {}),
-      cursor: { sync: { key: sync }, drag: { x: false, y: false }, points: { size: 6 } },
+      cursor: { sync: { key: sync }, drag: { x: false, y: false }, x: { stroke: pal.accent, width: 1, dash: [4, 4] }, y: { stroke: pal.line, width: 1, dash: [4, 4] },
+        points: { size: 7, fill: pal.panel, stroke: pal.accent, width: 2 } },
       legend: { show: false },
       scales: {
         x: { time: false, range: () => (xr.current ? xr.current() : [0, 1]) },
@@ -169,7 +176,11 @@ export function Chart({ spec, data, theme, sync = 'nb', xRange, testid }) {
     if (plot.current) plot.current.setData(data, true);
   }, [data]);
 
-  return html`<div class="chart" ref=${box} data-testid=${testid}></div>`;
+  const empty = !spec.band && !data.slice(1).some((row) => row.some((v) => typeof v === 'number' && Number.isFinite(v)));
+  return html`<div class=${'chart-shell' + (empty ? ' is-empty' : '')} role="img" aria-label=${spec.series.map((s) => s.label).join(', ') + (empty ? ': нет данных в этом интервале' : '')}>
+    <div class="chart" ref=${box} data-testid=${testid}></div>
+    ${empty ? html`<div class="chart-empty"><span class="chart-empty-mark" aria-hidden="true"></span><strong>Нет данных в этом интервале</strong><span>Выберите другой период или дождитесь новых событий.</span></div>` : ''}
+  </div>`;
 }
 
 // статичная легенда ряда: черта, пунктир, точка, квадрат-контур или столбец — тем же цветом токена, что на графике

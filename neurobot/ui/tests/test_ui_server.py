@@ -7,6 +7,7 @@ import gzip
 import http.client
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -21,6 +22,33 @@ sys.path.insert(0, str(ROOT))
 from neurobot.ui import server, stream  # noqa: E402
 
 WEB = ROOT / "neurobot" / "ui" / "web"
+
+
+def runtime_urls(text):
+    """Explicit network dependencies, rather than documentation or URL input examples.
+
+    Browser connections/assets stay same-origin (CSP enforces this too). A local
+    MCP URL entered into a form is configuration passed to the Python adapter;
+    it is not a frontend import, fetch or asset dependency.
+    """
+    remote = r"((?:https?:)?//[^\s\"'`<>\)]+)"
+    patterns = [
+        r"\bfrom\s*[\"'`]" + remote,
+        r"\bimport\s*(?:\(\s*)?[\"'`]" + remote,
+        r"\b(?:fetch|Request|WebSocket|EventSource|Worker)\s*\(\s*[\"'`]" + remote,
+        r"<(?:script|link|img|iframe|audio|video|source|object|embed)\b[^>]*?"
+        r"\b(?:src|href|data)\s*=\s*[\"']" + remote,
+        r"\burl\(\s*[\"']?" + remote,
+        r"@import\s*[\"']" + remote,
+        r"\.(?:src|href)\s*=\s*[\"'`]" + remote,
+    ]
+    found = [m.group(1) for pattern in patterns for m in re.finditer(pattern, text, re.I)]
+    for m in re.finditer(r'<script\b[^>]*type=[\"\']importmap[\"\'][^>]*>(.*?)</script>', text, re.S | re.I):
+        doc = json.loads(m.group(1))
+        maps = [doc.get("imports", {})] + list(doc.get("scopes", {}).values())
+        found.extend(value for items in maps for value in items.values()
+                     if isinstance(value, str) and re.match(r"(?:https?:)?//", value))
+    return found
 
 
 def tiny_bundle(path):
@@ -142,12 +170,27 @@ class VendorTest(unittest.TestCase):
             self.assertEqual(server.verify_vendor(web), ["не та сумма: ./htm/htm.module.js"])
 
     def test_no_cdn_at_runtime(self):
-        # во время работы — только свои файлы: ни одного внешнего адреса в странице, стилях и коде пульта
-        for p in [WEB / "index.html", WEB / "theme.css"] + list(WEB.glob("*.js")) + list(WEB.glob("*/*.js")):
+        for p in [WEB / "index.html"] + list(WEB.rglob("*.css")) + list(WEB.rglob("*.js")):
             if "vendor" in p.parts:
                 continue
             text = p.read_text(encoding="utf-8")
-            self.assertNotRegex(text, r"https?://", str(p))
+            self.assertEqual(runtime_urls(text), [], str(p))
+
+    def test_runtime_asset_filter_allows_local_mcp_examples(self):
+        example = ('<input placeholder="http://127.0.0.1:18130/mcp">'
+                   'const example="http://localhost:18130/mcp"; fetch("api/catalog");')
+        self.assertEqual(runtime_urls(example), [])
+        for text in ("import {h} from 'https://cdn.example/preact.js'",
+                     "import('https://cdn.example/module.js')",
+                     "fetch('https://outside.example/data')",
+                     "fetch('http://localhost:18130/mcp')",  # direct cross-origin fetch is still forbidden
+                     '<script src="//cdn.example/a.js"></script>',
+                     '<link rel="stylesheet" href="https://cdn.example/a.css">',
+                     'body{background:url(https://cdn.example/a.png)}',
+                     '@import "https://cdn.example/a.css";',
+                     '<script type="importmap">{"imports":{"x":"https://cdn.example/a.js"}}</script>'):
+            with self.subTest(text=text):
+                self.assertTrue(runtime_urls(text))
 
 
 NODE = shutil.which("node")

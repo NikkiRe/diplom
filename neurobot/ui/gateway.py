@@ -43,7 +43,7 @@ from typing import Callable, Dict, List, Optional, Sequence, Tuple
 from urllib.parse import parse_qs, urlsplit
 
 from neurobot.ui import alarms as A
-from neurobot.ui import live, robot, server, stream
+from neurobot.ui import catalog, live, robot, server, stream
 
 log = logging.getLogger("neurobot-ui")
 
@@ -318,6 +318,7 @@ class Gateway(server.Static):
         self.clock = clock
         self.started = clock()
         self.stopping = threading.Event()
+        self.catalog = catalog.Registry()
 
     def head(self) -> dict:
         """Поля hello живого потока (Hub добавит k, t, format, active, boot)."""
@@ -478,6 +479,8 @@ def handler(gw: Gateway):
             if path.startswith("/api/"):
                 if not self.authed():
                     return self.json(401, {"error": "нужен вход: на роботе — sudo neurobot ui-url"})
+                if path == "/api/catalog":
+                    return self.json(200, gw.catalog.snapshot())
                 if path == "/api/meta":
                     return self.json(200, gw.meta(self.sid))
                 if path == "/api/stream" and self.command == "GET":     # ?last= — номер события для resume
@@ -518,6 +521,8 @@ def handler(gw: Gateway):
             if not isinstance(body, dict):
                 return self.json(400, {"error": "тело — объект JSON"})
             path = urlsplit(self.path).path
+            if path in ("/api/catalog/sources", "/api/catalog/disconnect"):
+                return self.json(*catalog.mutate(gw.catalog, path, body))
             if path == "/api/stop":
                 return self.json(*gw.stop(body))
             if path == "/api/estop":
@@ -595,6 +600,16 @@ class Server(ThreadingHTTPServer):
     request_queue_size = 128
     daemon_threads = True
 
+    def shutdown(self):
+        if hasattr(self, "catalog"):
+            self.catalog.close()
+        super().shutdown()
+
+    def server_close(self):
+        if hasattr(self, "catalog"):
+            self.catalog.close()
+        super().server_close()
+
 
 def make_server(gw: Gateway, port: int, host: str = "127.0.0.1") -> ThreadingHTTPServer:
     if host not in server.LOOPBACK:
@@ -606,6 +621,7 @@ def make_server(gw: Gateway, port: int, host: str = "127.0.0.1") -> ThreadingHTT
         cls = V6
     srv = cls((host, port), handler(gw))
     srv.daemon_threads = True
+    srv.catalog = gw.catalog
     return srv
 
 

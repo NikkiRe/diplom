@@ -1,4 +1,5 @@
-"""Раздача пульта в режиме «Запись»: статика neurobot/ui/web и бандл. Только 127.0.0.1 (или ::1), только GET и HEAD.
+"""Статика пульта и необязательная «Запись»; POST — только настройка читаемых MCP-источников.
+Слушает только 127.0.0.1 или ::1.
 
   python -m neurobot.ui serve --bundle FILE [--port 18120]
 
@@ -19,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import Dict, List, Optional, Tuple
 from urllib.parse import unquote, urlsplit
 
-from neurobot.ui import stream
+from neurobot.ui import catalog, stream
 
 WEB = os.path.join(os.path.dirname(os.path.abspath(__file__)), "web")
 LOOPBACK = ("127.0.0.1", "::1")
@@ -118,11 +119,15 @@ class Bundle:
 class App(Static):
     """Раздача «Записи»: статика и бандл."""
 
-    def __init__(self, bundle_path: str, web: str = WEB):
+    def __init__(self, bundle_path: Optional[str], web: str = WEB):
         super().__init__(web)
-        self.bundle = Bundle(bundle_path)
+        self.bundle = Bundle(bundle_path) if bundle_path else None
+        self.catalog = catalog.Registry()
 
     def meta(self) -> bytes:
+        if self.bundle is None:
+            return json.dumps({"mode": "catalog", "modes": ["catalog"], "source": "MCP", "format": "edge-atlas/1"},
+                              ensure_ascii=False).encode("utf-8")
         return json.dumps({"mode": "replay", "modes": ["replay"], "source": "запись", "format": stream.FORMAT,
                            "bundle": self.bundle.name, "runs": self.bundle.runs}, ensure_ascii=False).encode("utf-8")
 
@@ -159,7 +164,10 @@ def handler(app: App):
             path = urlsplit(self.path).path
             if path == "/api/meta":
                 return self.send(200, app.meta(), "application/json")
-            if path == "/api/bundle":
+            if path == "/api/catalog":
+                raw = json.dumps(app.catalog.snapshot(), ensure_ascii=False).encode("utf-8")
+                return self.send(200, raw, "application/json")
+            if path == "/api/bundle" and app.bundle is not None:
                 if "gzip" in (self.headers.get("Accept-Encoding") or ""):
                     return self.send(200, app.bundle.gz, "application/json", {"Content-Encoding": "gzip"})
                 return self.send(200, app.bundle.raw, "application/json")
@@ -170,10 +178,35 @@ def handler(app: App):
 
         do_HEAD = do_GET    # noqa: N815
 
-        def do_POST(self):   # noqa: N802 — «Запись» ничем не управляет
-            self.deny(405, "режим «Запись»: команд нет")
+        def do_POST(self):   # noqa: N802 — configuration only; no equipment commands
+            path = urlsplit(self.path).path
+            if path not in ("/api/catalog/sources", "/api/catalog/disconnect"):
+                return self.deny(405, "пульт не отправляет команды оборудования")
+            host = (self.headers.get("Host") or "").lower()
+            if not host_ok(host) or (self.headers.get("Origin") or "").lower() != "http://" + host:
+                return self.deny(403, "источники подключаются только со страницы пульта")
+            if (self.headers.get("Content-Type") or "").split(";", 1)[0].strip().lower() != "application/json":
+                return self.deny(415, "ожидается application/json")
+            try:
+                length = int(self.headers.get("Content-Length") or 0)
+            except ValueError:
+                length = -1
+            if not 0 <= length <= catalog.MAX_BODY:
+                self.close_connection = True
+                return self.deny(413, "слишком большой запрос")
+            try:
+                body = json.loads(self.rfile.read(length).decode("utf-8"))
+            except (ValueError, UnicodeError):
+                body = None
+            if not isinstance(body, dict):
+                return self.send(400, b'{"ok":false,"error":"JSON object required"}', "application/json")
+            code, doc = catalog.mutate(app.catalog, path, body)
+            return self.send(code, json.dumps(doc, ensure_ascii=False).encode("utf-8"), "application/json")
 
-        do_PUT = do_DELETE = do_PATCH = do_OPTIONS = do_POST   # noqa: N815
+        def refuse(self):
+            self.deny(405, "метод не поддерживается")
+
+        do_PUT = do_DELETE = do_PATCH = do_OPTIONS = refuse   # noqa: N815
     return Handler
 
 
@@ -183,8 +216,18 @@ class Server(ThreadingHTTPServer):
     request_queue_size = 128
     daemon_threads = True
 
+    def shutdown(self):
+        if hasattr(self, "catalog"):
+            self.catalog.close()
+        super().shutdown()
 
-def make_server(bundle: str, port: int, host: str = "127.0.0.1", web: str = WEB) -> ThreadingHTTPServer:
+    def server_close(self):
+        if hasattr(self, "catalog"):
+            self.catalog.close()
+        super().server_close()
+
+
+def make_server(bundle: Optional[str], port: int, host: str = "127.0.0.1", web: str = WEB) -> ThreadingHTTPServer:
     if host not in LOOPBACK:
         raise ValueError("пульт слушает только 127.0.0.1 или ::1, не %r: доступ снаружи — через SSH-туннель" % host)
     app = App(bundle, web)
@@ -197,21 +240,30 @@ def make_server(bundle: str, port: int, host: str = "127.0.0.1", web: str = WEB)
         cls = V6
     srv = cls((host, port), handler(app))
     srv.daemon_threads = True
+    srv.catalog = app.catalog
     return srv
 
 
-def serve(bundle: str, port: int, host: str = "127.0.0.1") -> int:
+def serve(bundle: Optional[str], port: int, host: str = "127.0.0.1", sources: Optional[List[str]] = None) -> int:
     bad = verify_vendor()
     if bad:
         sys.stderr.write("neurobot-ui: vendor/ не совпадает с SHA256SUMS: %s\n" % "; ".join(bad))
         return 2
     try:
+        initial = [catalog.endpoint(url) for url in (sources or [])]
+        if len(set(initial)) > catalog.MAX_SOURCES:
+            raise ValueError("не больше %d MCP-источников" % catalog.MAX_SOURCES)
         srv = make_server(bundle, port, host)
+        for url in initial:
+            srv.catalog.connect(url)
     except (OSError, ValueError, stream.FormatError) as e:
         sys.stderr.write("neurobot-ui: %s\n" % e)
         return 2
     url = "http://%s:%d/" % ("127.0.0.1" if host == "127.0.0.1" else "[::1]", srv.server_address[1])
-    print("пульт (запись): %s — бандл %s; Ctrl+C — выход" % (url, bundle), flush=True)
+    if bundle is None:
+        print("Edge Atlas: %s — каталог MCP-оборудования; Ctrl+C — выход" % url, flush=True)
+    else:
+        print("пульт (запись): %s — бандл %s; Ctrl+C — выход" % (url, bundle), flush=True)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
